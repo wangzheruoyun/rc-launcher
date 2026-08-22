@@ -196,8 +196,6 @@ jobs:
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
 
       - name: Ensure Gradle wrapper is present
         run: |
@@ -279,8 +277,6 @@ jobs:
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
@@ -312,8 +308,6 @@ jobs:
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
           sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0" "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
