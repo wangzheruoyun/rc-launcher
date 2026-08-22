@@ -334,10 +334,18 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          # Run the emulator headless on CI: without -no-window the emulator
-          # waits for a display and never reaches sys.boot_completed, so the
-          # runner's `adb shell getprop sys.boot_completed` poll loops forever.
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # Run the emulator headless. The runner polls
+          # `adb shell getprop sys.boot_completed`; if the emulator process
+          # crashes on boot, adb returns exit code 1 and that poll loops until
+          # the boot timeout. Mitigate by: booting headless with software GL,
+          # disabling the (often corrupt/hanging) snapshot, forcing a fresh AVD,
+          # capping RAM/cores so it does not OOM on the runner, and giving a
+          # generous boot timeout so a slow first boot still completes.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
           disable-animations: true
-          boot-timeout: 600
+          force-avd-creation: true
+          ram-size: 2048
+          heap-size: 256
+          cores: 2
+          boot-timeout: 1200
           script: ./gradlew connectedDebugAndroidTest --continue
