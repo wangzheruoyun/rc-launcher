@@ -198,8 +198,6 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
 
       - name: Ensure Gradle wrapper is present
         run: |
@@ -283,8 +281,6 @@ jobs:
           sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
@@ -318,8 +314,6 @@ jobs:
           sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0" "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.9
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
