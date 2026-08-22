@@ -1,0 +1,9 @@
+# Clippy configuration for com.rc.launcher (enforced by stylecheck.yml).
+# The project tracks the stable toolchain (see rust-toolchain.toml), so no
+# explicit MSRV is pinned here — msrv-aware lints stay quiet and contributors
+# are free to use the current stable. A couple of thresholds are raised because
+# the Rust core is intentionally generic- and argument-heavy (command assembly,
+# download options, launch options).
+
+type-complexity-threshold = 500
+too-many-arguments-threshold = 16

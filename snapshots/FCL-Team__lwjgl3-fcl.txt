@@ -1,0 +1,1046 @@
+# Repository: FCL-Team/lwjgl3-fcl
+# Default branch: main
+# Total entries: 1040
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .gradle/
+│   ├── 7.4/
+│   │   ├── checksums/
+│   │   │   └── checksums.lock
+│   │   ├── dependencies-accessors/
+│   │   │   ├── dependencies-accessors.lock
+│   │   │   └── gc.properties
+│   │   ├── executionHistory/
+│   │   │   ├── executionHistory.bin
+│   │   │   └── executionHistory.lock
+│   │   ├── fileChanges/
+│   │   │   └── last-build.bin
+│   │   ├── fileHashes/
+│   │   │   ├── fileHashes.bin
+│   │   │   ├── fileHashes.lock
+│   │   │   └── resourceHashesCache.bin
+│   │   └── gc.properties
+│   ├── buildOutputCleanup/
+│   │   ├── buildOutputCleanup.lock
+│   │   ├── cache.properties
+│   │   └── outputFiles.bin
+│   ├── vcs-1/
+│   │   └── gc.properties
+│   └── file-system.probe
+├── .idea/
+│   ├── compiler.xml
+│   ├── gradle.xml
+│   ├── jarRepositories.xml
+│   ├── misc.xml
+│   ├── uiDesigner.xml
+│   ├── vcs.xml
+│   └── workspace.xml
+├── build/
+│   ├── generated/
+│   │   └── sources/
+│   │       └── headers/
+│   │           └── java/
+│   │               └── main/
+│   │                   ├── org_lwjgl_opengl_AMDDebugOutput.h
+│   │                   ├── org_lwjgl_opengl_AMDDrawBuffersBlend.h
+│   │                   ├── org_lwjgl_opengl_AMDFramebufferMultisampleAdvanced.h
+│   │                   ├── org_lwjgl_opengl_AMDInterleavedElements.h
+│   │                   ├── org_lwjgl_opengl_AMDOcclusionQueryEvent.h
+│   │                   ├── org_lwjgl_opengl_AMDPerformanceMonitor.h
+│   │                   ├── org_lwjgl_opengl_AMDSamplePositions.h
+│   │                   ├── org_lwjgl_opengl_AMDSparseTexture.h
+│   │                   ├── org_lwjgl_opengl_AMDStencilOperationExtended.h
+│   │                   ├── org_lwjgl_opengl_AMDVertexShaderTessellator.h
+│   │                   ├── org_lwjgl_opengl_ARBBindlessTexture.h
+│   │                   ├── org_lwjgl_opengl_ARBBufferStorage.h
+│   │                   ├── org_lwjgl_opengl_ARBClearBufferObject.h
+│   │                   ├── org_lwjgl_opengl_ARBColorBufferFloat.h
+│   │                   ├── org_lwjgl_opengl_ARBComputeVariableGroupSize.h
+│   │                   ├── org_lwjgl_opengl_ARBDebugOutput.h
+│   │                   ├── org_lwjgl_opengl_ARBDrawBuffers.h
+│   │                   ├── org_lwjgl_opengl_ARBDrawBuffersBlend.h
+│   │                   ├── org_lwjgl_opengl_ARBDrawInstanced.h
+│   │                   ├── org_lwjgl_opengl_ARBES32Compatibility.h
+│   │                   ├── org_lwjgl_opengl_ARBFramebufferNoAttachments.h
+│   │                   ├── org_lwjgl_opengl_ARBGLSPIRV.h
+│   │                   ├── org_lwjgl_opengl_ARBGPUShaderFP64.h
+│   │                   ├── org_lwjgl_opengl_ARBGPUShaderInt64.h
+│   │                   ├── org_lwjgl_opengl_ARBGeometryShader4.h
+│   │                   ├── org_lwjgl_opengl_ARBImaging.h
+│   │                   ├── org_lwjgl_opengl_ARBIndirectParameters.h
+│   │                   ├── org_lwjgl_opengl_ARBInstancedArrays.h
+│   │                   ├── org_lwjgl_opengl_ARBMatrixPalette.h
+│   │                   ├── org_lwjgl_opengl_ARBMultisample.h
+│   │                   ├── org_lwjgl_opengl_ARBMultitexture.h
+│   │                   ├── org_lwjgl_opengl_ARBOcclusionQuery.h
+│   │                   ├── org_lwjgl_opengl_ARBParallelShaderCompile.h
+│   │                   ├── org_lwjgl_opengl_ARBPointParameters.h
+│   │                   ├── org_lwjgl_opengl_ARBRobustness.h
+│   │                   ├── org_lwjgl_opengl_ARBSampleLocations.h
+│   │                   ├── org_lwjgl_opengl_ARBSampleShading.h
+│   │                   ├── org_lwjgl_opengl_ARBShaderObjects.h
+│   │                   ├── org_lwjgl_opengl_ARBShadingLanguageInclude.h
+│   │                   ├── org_lwjgl_opengl_ARBSparseBuffer.h
+│   │                   ├── org_lwjgl_opengl_ARBSparseTexture.h
+│   │                   ├── org_lwjgl_opengl_ARBTextureBufferObject.h
+│   │                   ├── org_lwjgl_opengl_ARBTextureBufferRange.h
+│   │                   ├── org_lwjgl_opengl_ARBTextureCompression.h
+│   │                   ├── org_lwjgl_opengl_ARBTextureStorage.h
+│   │                   ├── org_lwjgl_opengl_ARBTextureStorageMultisample.h
+│   │                   ├── org_lwjgl_opengl_ARBTransposeMatrix.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexAttrib64Bit.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexAttribBinding.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexBlend.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexBufferObject.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexProgram.h
+│   │                   ├── org_lwjgl_opengl_ARBVertexShader.h
+│   │                   ├── org_lwjgl_opengl_ARBWindowPos.h
+│   │                   ├── org_lwjgl_opengl_EXTBindableUniform.h
+│   │                   ├── org_lwjgl_opengl_EXTBlendColor.h
+│   │                   ├── org_lwjgl_opengl_EXTBlendEquationSeparate.h
+│   │                   ├── org_lwjgl_opengl_EXTBlendFuncSeparate.h
+│   │                   ├── org_lwjgl_opengl_EXTBlendMinmax.h
+│   │                   ├── org_lwjgl_opengl_EXTCompiledVertexArray.h
+│   │                   ├── org_lwjgl_opengl_EXTDebugLabel.h
+│   │                   ├── org_lwjgl_opengl_EXTDebugMarker.h
+│   │                   ├── org_lwjgl_opengl_EXTDepthBoundsTest.h
+│   │                   ├── org_lwjgl_opengl_EXTDirectStateAccess.h
+│   │                   ├── org_lwjgl_opengl_EXTDrawBuffers2.h
+│   │                   ├── org_lwjgl_opengl_EXTDrawInstanced.h
+│   │                   ├── org_lwjgl_opengl_EXTEGLImageStorage.h
+│   │                   ├── org_lwjgl_opengl_EXTExternalBuffer.h
+│   │                   ├── org_lwjgl_opengl_EXTFramebufferBlit.h
+│   │                   ├── org_lwjgl_opengl_EXTFramebufferMultisample.h
+│   │                   ├── org_lwjgl_opengl_EXTFramebufferObject.h
+│   │                   ├── org_lwjgl_opengl_EXTGPUProgramParameters.h
+│   │                   ├── org_lwjgl_opengl_EXTGPUShader4.h
+│   │                   ├── org_lwjgl_opengl_EXTGeometryShader4.h
+│   │                   ├── org_lwjgl_opengl_EXTMemoryObject.h
+│   │                   ├── org_lwjgl_opengl_EXTMemoryObjectFD.h
+│   │                   ├── org_lwjgl_opengl_EXTMemoryObjectWin32.h
+│   │                   ├── org_lwjgl_opengl_EXTPointParameters.h
+│   │                   ├── org_lwjgl_opengl_EXTPolygonOffsetClamp.h
+│   │                   ├── org_lwjgl_opengl_EXTProvokingVertex.h
+│   │                   ├── org_lwjgl_opengl_EXTRasterMultisample.h
+│   │                   ├── org_lwjgl_opengl_EXTSecondaryColor.h
+│   │                   ├── org_lwjgl_opengl_EXTSemaphore.h
+│   │                   ├── org_lwjgl_opengl_EXTSemaphoreFD.h
+│   │                   ├── org_lwjgl_opengl_EXTSemaphoreWin32.h
+│   │                   ├── org_lwjgl_opengl_EXTSeparateShaderObjects.h
+│   │                   ├── org_lwjgl_opengl_EXTShaderFramebufferFetchNonCoherent.h
+│   │                   ├── org_lwjgl_opengl_EXTShaderImageLoadStore.h
+│   │                   ├── org_lwjgl_opengl_EXTStencilClearTag.h
+│   │                   ├── org_lwjgl_opengl_EXTStencilTwoSide.h
+│   │                   ├── org_lwjgl_opengl_EXTTextureArray.h
+│   │                   ├── org_lwjgl_opengl_EXTTextureBufferObject.h
+│   │                   ├── org_lwjgl_opengl_EXTTextureInteger.h
+│   │                   ├── org_lwjgl_opengl_EXTTimerQuery.h
+│   │                   ├── org_lwjgl_opengl_EXTTransformFeedback.h
+│   │                   ├── org_lwjgl_opengl_EXTVertexAttrib64bit.h
+│   │                   ├── org_lwjgl_opengl_EXTWin32KeyedMutex.h
+│   │                   ├── org_lwjgl_opengl_EXTWindowRectangles.h
+│   │                   ├── org_lwjgl_opengl_EXTX11SyncObject.h
+│   │                   ├── org_lwjgl_opengl_GL11.h
+│   │                   ├── org_lwjgl_opengl_GL11C.h
+│   │                   ├── org_lwjgl_opengl_GL12C.h
+│   │                   ├── org_lwjgl_opengl_GL13.h
+│   │                   ├── org_lwjgl_opengl_GL13C.h
+│   │                   ├── org_lwjgl_opengl_GL14.h
+│   │                   ├── org_lwjgl_opengl_GL14C.h
+│   │                   ├── org_lwjgl_opengl_GL15C.h
+│   │                   ├── org_lwjgl_opengl_GL20C.h
+│   │                   ├── org_lwjgl_opengl_GL21C.h
+│   │                   ├── org_lwjgl_opengl_GL30C.h
+│   │                   ├── org_lwjgl_opengl_GL31C.h
+│   │                   ├── org_lwjgl_opengl_GL32C.h
+│   │                   ├── org_lwjgl_opengl_GL33.h
+│   │                   ├── org_lwjgl_opengl_GL33C.h
+│   │                   ├── org_lwjgl_opengl_GL40C.h
+│   │                   ├── org_lwjgl_opengl_GL41C.h
+│   │                   ├── org_lwjgl_opengl_GL42C.h
+│   │                   ├── org_lwjgl_opengl_GL43C.h
+│   │                   ├── org_lwjgl_opengl_GL44C.h
+│   │                   ├── org_lwjgl_opengl_GL45.h
+│   │                   ├── org_lwjgl_opengl_GL45C.h
+│   │                   ├── org_lwjgl_opengl_GL46C.h
+│   │                   ├── org_lwjgl_opengl_GREMEDYFrameTerminator.h
+│   │                   ├── org_lwjgl_opengl_GREMEDYStringMarker.h
+│   │                   ├── org_lwjgl_opengl_INTELFramebufferCMAA.h
+│   │                   ├── org_lwjgl_opengl_INTELMapTexture.h
+│   │                   ├── org_lwjgl_opengl_INTELPerformanceQuery.h
+│   │                   ├── org_lwjgl_opengl_KHRBlendEquationAdvanced.h
+│   │                   ├── org_lwjgl_opengl_KHRParallelShaderCompile.h
+│   │                   ├── org_lwjgl_opengl_NVAlphaToCoverageDitherControl.h
+│   │                   ├── org_lwjgl_opengl_NVBindlessMultiDrawIndirect.h
+│   │                   ├── org_lwjgl_opengl_NVBindlessMultiDrawIndirectCount.h
+│   │                   ├── org_lwjgl_opengl_NVBindlessTexture.h
+│   │                   ├── org_lwjgl_opengl_NVBlendEquationAdvanced.h
+│   │                   ├── org_lwjgl_opengl_NVClipSpaceWScaling.h
+│   │                   ├── org_lwjgl_opengl_NVCommandList.h
+│   │                   ├── org_lwjgl_opengl_NVConditionalRender.h
+│   │                   ├── org_lwjgl_opengl_NVConservativeRaster.h
+│   │                   ├── org_lwjgl_opengl_NVConservativeRasterDilate.h
+│   │                   ├── org_lwjgl_opengl_NVConservativeRasterPreSnapTriangles.h
+│   │                   ├── org_lwjgl_opengl_NVCopyImage.h
+│   │                   ├── org_lwjgl_opengl_NVDepthBufferFloat.h
+│   │                   ├── org_lwjgl_opengl_NVDrawTexture.h
+│   │                   ├── org_lwjgl_opengl_NVDrawVulkanImage.h
+│   │                   ├── org_lwjgl_opengl_NVExplicitMultisample.h
+│   │                   ├── org_lwjgl_opengl_NVFence.h
+│   │                   ├── org_lwjgl_opengl_NVFragmentCoverageToColor.h
+│   │                   ├── org_lwjgl_opengl_NVFramebufferMixedSamples.h
+│   │                   ├── org_lwjgl_opengl_NVFramebufferMultisampleCoverage.h
+│   │                   ├── org_lwjgl_opengl_NVGPUMulticast.h
+│   │                   ├── org_lwjgl_opengl_NVGPUShader5.h
+│   │                   ├── org_lwjgl_opengl_NVHalfFloat.h
+│   │                   ├── org_lwjgl_opengl_NVInternalformatSampleQuery.h
+│   │                   ├── org_lwjgl_opengl_NVMemoryAttachment.h
+│   │                   ├── org_lwjgl_opengl_NVMeshShader.h
+│   │                   ├── org_lwjgl_opengl_NVPathRendering.h
+│   │                   ├── org_lwjgl_opengl_NVPixelDataRange.h
+│   │                   ├── org_lwjgl_opengl_NVPointSprite.h
+│   │                   ├── org_lwjgl_opengl_NVPrimitiveRestart.h
+│   │                   ├── org_lwjgl_opengl_NVQueryResource.h
+│   │                   ├── org_lwjgl_opengl_NVQueryResourceTag.h
+│   │                   ├── org_lwjgl_opengl_NVSampleLocations.h
+│   │                   ├── org_lwjgl_opengl_NVScissorExclusive.h
+│   │                   ├── org_lwjgl_opengl_NVShaderBufferLoad.h
+│   │                   ├── org_lwjgl_opengl_NVShadingRateImage.h
+│   │                   ├── org_lwjgl_opengl_NVTextureBarrier.h
+│   │                   ├── org_lwjgl_opengl_NVTextureMultisample.h
+│   │                   ├── org_lwjgl_opengl_NVTransformFeedback.h
+│   │                   ├── org_lwjgl_opengl_NVTransformFeedback2.h
+│   │                   ├── org_lwjgl_opengl_NVVertexArrayRange.h
+│   │                   ├── org_lwjgl_opengl_NVVertexAttribInteger64bit.h
+│   │                   ├── org_lwjgl_opengl_NVVertexBufferUnifiedMemory.h
+│   │                   ├── org_lwjgl_opengl_NVViewportSwizzle.h
+│   │                   ├── org_lwjgl_opengl_NVXConditionalRender.h
+│   │                   ├── org_lwjgl_opengl_NVXGpuMulticast2.h
+│   │                   ├── org_lwjgl_opengl_NVXProgressFence.h
+│   │                   ├── org_lwjgl_opengl_OVRMultiview.h
+│   │                   ├── org_lwjgl_stb_LibSTB.h
+│   │                   ├── org_lwjgl_stb_STBDXT.h
+│   │                   ├── org_lwjgl_stb_STBEasyFont.h
+│   │                   ├── org_lwjgl_stb_STBImage.h
+│   │                   ├── org_lwjgl_stb_STBImageResize.h
+│   │                   ├── org_lwjgl_stb_STBImageWrite.h
+│   │                   ├── org_lwjgl_stb_STBPerlin.h
+│   │                   ├── org_lwjgl_stb_STBRectPack.h
+│   │                   ├── org_lwjgl_stb_STBTTFontinfo.h
+│   │                   ├── org_lwjgl_stb_STBTruetype.h
+│   │                   ├── org_lwjgl_stb_STBVorbis.h
+│   │                   ├── org_lwjgl_system_Callback.h
+│   │                   ├── org_lwjgl_system_JNI.h
+│   │                   ├── org_lwjgl_system_MemoryAccessJNI.h
+│   │                   ├── org_lwjgl_system_MemoryUtil.h
+│   │                   ├── org_lwjgl_system_ThreadLocalUtil.h
+│   │                   ├── org_lwjgl_system_dyncall_DynCall.h
+│   │                   ├── org_lwjgl_system_dyncall_DynCallback.h
+│   │                   ├── org_lwjgl_system_dyncall_DynLoad.h
+│   │                   ├── org_lwjgl_system_fcl_DynamicLinkLoader.h
+│   │                   ├── org_lwjgl_system_jni_JNINativeInterface.h
+│   │                   ├── org_lwjgl_system_libc_LibCErrno.h
+│   │                   ├── org_lwjgl_system_libc_LibCLocale.h
+│   │                   ├── org_lwjgl_system_libc_LibCStdio.h
+│   │                   ├── org_lwjgl_system_libc_LibCStdlib.h
+│   │                   ├── org_lwjgl_system_libc_LibCString.h
+│   │                   ├── org_lwjgl_system_linux_DynamicLinkLoader.h
+│   │                   ├── org_lwjgl_system_macosx_CoreFoundation.h
+│   │                   ├── org_lwjgl_system_macosx_CoreGraphics.h
+│   │                   ├── org_lwjgl_system_macosx_DynamicLinkLoader.h
+│   │                   ├── org_lwjgl_system_macosx_ObjCRuntime.h
+│   │                   ├── org_lwjgl_system_windows_GDI32.h
+│   │                   ├── org_lwjgl_system_windows_User32.h
+│   │                   ├── org_lwjgl_system_windows_WinBase.h
+│   │                   └── org_lwjgl_util_tinyfd_TinyFileDialogs.h
+│   ├── libs/
+│   │   └── version
+│   └── tmp/
+│       ├── compileJava/
+│       │   └── previous-compilation-data.bin
+│       └── jar/
+│           └── MANIFEST.MF
+├── gradle/
+│   └── wrapper/
+│       └── gradle-wrapper.properties
+├── src/
+│   └── main/
+│       └── java/
+│           └── org/
+│               └── lwjgl/
+│                   ├── glfw/
+│                   │   ├── Callbacks.java
+│                   │   ├── EventLoop.java
+│                   │   ├── FCLInjector.java
+│                   │   ├── GLFW.java
+│                   │   ├── GLFWCharCallback.java
+│                   │   ├── GLFWCharCallbackI.java
+│                   │   ├── GLFWCharModsCallback.java
+│                   │   ├── GLFWCharModsCallbackI.java
+│                   │   ├── GLFWCursorEnterCallback.java
+│                   │   ├── GLFWCursorEnterCallbackI.java
+│                   │   ├── GLFWCursorPosCallback.java
+│                   │   ├── GLFWCursorPosCallbackI.java
+│                   │   ├── GLFWDropCallback.java
+│                   │   ├── GLFWDropCallbackI.java
+│                   │   ├── GLFWErrorCallback.java
+│                   │   ├── GLFWErrorCallbackI.java
+│                   │   ├── GLFWFramebufferSizeCallback.java
+│                   │   ├── GLFWFramebufferSizeCallbackI.java
+│                   │   ├── GLFWGamepadState.java
+│                   │   ├── GLFWGammaRamp.java
+│                   │   ├── GLFWImage.java
+│                   │   ├── GLFWJoystickCallback.java
+│                   │   ├── GLFWJoystickCallbackI.java
+│                   │   ├── GLFWKeyCallback.java
+│                   │   ├── GLFWKeyCallbackI.java
+│                   │   ├── GLFWMonitorCallback.java
+│                   │   ├── GLFWMonitorCallbackI.java
+│                   │   ├── GLFWMouseButtonCallback.java
+│                   │   ├── GLFWMouseButtonCallbackI.java
+│                   │   ├── GLFWNativeCocoa.java
+│                   │   ├── GLFWNativeEGL.java
+│                   │   ├── GLFWNativeGLX.java
+│                   │   ├── GLFWNativeNSGL.java
+│                   │   ├── GLFWNativeWGL.java
+│                   │   ├── GLFWNativeWayland.java
+│                   │   ├── GLFWNativeWin32.java
+│                   │   ├── GLFWNativeX11.java
+│                   │   ├── GLFWScrollCallback.java
+│                   │   ├── GLFWScrollCallbackI.java
+│                   │   ├── GLFWVidMode.java
+│                   │   ├── GLFWWindowCloseCallback.java
+│                   │   ├── GLFWWindowCloseCallbackI.java
+│                   │   ├── GLFWWindowContentScaleCallback.java
+│                   │   ├── GLFWWindowContentScaleCallbackI.java
+│                   │   ├── GLFWWindowFocusCallback.java
+│                   │   ├── GLFWWindowFocusCallbackI.java
+│                   │   ├── GLFWWindowIconifyCallback.java
+│                   │   ├── GLFWWindowIconifyCallbackI.java
+│                   │   ├── GLFWWindowMaximizeCallback.java
+│                   │   ├── GLFWWindowMaximizeCallbackI.java
+│                   │   ├── GLFWWindowPosCallback.java
+│                   │   ├── GLFWWindowPosCallbackI.java
+│                   │   ├── GLFWWindowRefreshCallback.java
+│                   │   ├── GLFWWindowRefreshCallbackI.java
+│                   │   ├── GLFWWindowSizeCallback.java
+│                   │   ├── GLFWWindowSizeCallbackI.java
+│                   │   └── package-info.java
+│                   ├── openal/
+│                   │   ├── AL.java
+│                   │   ├── AL10.java
+│                   │   ├── AL11.java
+│                   │   ├── ALC.java
+│                   │   ├── ALC10.java
+│                   │   ├── ALC11.java
+│                   │   ├── ALCCapabilities.java
+│                   │   ├── ALCapabilities.java
+│                   │   ├── ALUtil.java
+│                   │   ├── EXTAlaw.java
+│                   │   ├── EXTBFormat.java
+│                   │   ├── EXTCapture.java
+│                   │   ├── EXTDedicated.java
+│                   │   ├── EXTDefaultFilterOrder.java
+│                   │   ├── EXTDisconnect.java
+│                   │   ├── EXTDouble.java
+│                   │   ├── EXTEfx.java
+│                   │   ├── EXTExponentDistance.java
+│                   │   ├── EXTFloat32.java
+│                   │   ├── EXTIma4.java
+│                   │   ├── EXTLinearDistance.java
+│                   │   ├── EXTMCFormats.java
+│                   │   ├── EXTMulaw.java
+│                   │   ├── EXTMulawBFormat.java
+│                   │   ├── EXTMulawMCFormats.java
+│                   │   ├── EXTOffset.java
+│                   │   ├── EXTSourceDistanceModel.java
+│                   │   ├── EXTSourceRadius.java
+│                   │   ├── EXTStaticBuffer.java
+│                   │   ├── EXTStereoAngles.java
+│                   │   ├── EXTThreadLocalContext.java
+│                   │   ├── EXTVorbis.java
+│                   │   ├── EnumerateAllExt.java
+│                   │   ├── LOKIAudioChannel.java
+│                   │   ├── LOKIIMAADPCM.java
+│                   │   ├── LOKIQuadriphonic.java
+│                   │   ├── LOKIWAVEFormat.java
+│                   │   ├── SOFTBlockAlignment.java
+│                   │   ├── SOFTDeferredUpdates.java
+│                   │   ├── SOFTDeviceClock.java
+│                   │   ├── SOFTDirectChannels.java
+│                   │   ├── SOFTGainClampEx.java
+│                   │   ├── SOFTHRTF.java
+│                   │   ├── SOFTLoopPoints.java
+│                   │   ├── SOFTLoopback.java
+│                   │   ├── SOFTMSADPCM.java
+│                   │   ├── SOFTOutputLimiter.java
+│                   │   ├── SOFTPauseDevice.java
+│                   │   ├── SOFTSourceLatency.java
+│                   │   ├── SOFTSourceLength.java
+│                   │   ├── SOFTSourceResampler.java
+│                   │   ├── SOFTSourceSpatialize.java
+│                   │   └── package-info.java
+│                   ├── opengl/
+│                   │   ├── AMDBlendMinmaxFactor.java
+│                   │   ├── AMDDebugOutput.java
+│                   │   ├── AMDDepthClampSeparate.java
+│                   │   ├── AMDDrawBuffersBlend.java
+│                   │   ├── AMDFramebufferMultisampleAdvanced.java
+│                   │   ├── AMDGPUShaderHalfFloat.java
+│                   │   ├── AMDGPUShaderHalfFloatFetch.java
+│                   │   ├── AMDGPUShaderInt64.java
+│                   │   ├── AMDInterleavedElements.java
+│                   │   ├── AMDOcclusionQueryEvent.java
+│                   │   ├── AMDPerformanceMonitor.java
+│                   │   ├── AMDPinnedMemory.java
+│                   │   ├── AMDQueryBufferObject.java
+│                   │   ├── AMDSamplePositions.java
+│                   │   ├── AMDSeamlessCubemapPerTexture.java
+│                   │   ├── AMDSparseTexture.java
+│                   │   ├── AMDStencilOperationExtended.java
+│                   │   ├── AMDTransformFeedback4.java
+│                   │   ├── AMDVertexShaderTessellator.java
+│                   │   ├── ARBBaseInstance.java
+│                   │   ├── ARBBindlessTexture.java
+│                   │   ├── ARBBlendFuncExtended.java
+│                   │   ├── ARBBufferStorage.java
+│                   │   ├── ARBClearBufferObject.java
+│                   │   ├── ARBClearTexture.java
+│                   │   ├── ARBClipControl.java
+│                   │   ├── ARBColorBufferFloat.java
+│                   │   ├── ARBCompressedTexturePixelStorage.java
+│                   │   ├── ARBComputeShader.java
+│                   │   ├── ARBComputeVariableGroupSize.java
+│                   │   ├── ARBConditionalRenderInverted.java
+│                   │   ├── ARBCopyBuffer.java
+│                   │   ├── ARBCopyImage.java
+│                   │   ├── ARBCullDistance.java
+│                   │   ├── ARBDebugOutput.java
+│                   │   ├── ARBDepthBufferFloat.java
+│                   │   ├── ARBDepthClamp.java
+│                   │   ├── ARBDepthTexture.java
+│                   │   ├── ARBDirectStateAccess.java
+│                   │   ├── ARBDrawBuffers.java
+│                   │   ├── ARBDrawBuffersBlend.java
+│                   │   ├── ARBDrawElementsBaseVertex.java
+│                   │   ├── ARBDrawIndirect.java
+│                   │   ├── ARBDrawInstanced.java
+│                   │   ├── ARBES2Compatibility.java
+│                   │   ├── ARBES31Compatibility.java
+│                   │   ├── ARBES32Compatibility.java
+│                   │   ├── ARBES3Compatibility.java
+│                   │   ├── ARBEnhancedLayouts.java
+│                   │   ├── ARBExplicitUniformLocation.java
+│                   │   ├── ARBFragmentProgram.java
+│                   │   ├── ARBFragmentShader.java
+│                   │   ├── ARBFramebufferNoAttachments.java
+│                   │   ├── ARBFramebufferObject.java
+│                   │   ├── ARBFramebufferSRGB.java
+│                   │   ├── ARBGLSPIRV.java
+│                   │   ├── ARBGPUShader5.java
+│                   │   ├── ARBGPUShaderFP64.java
+│                   │   ├── ARBGPUShaderInt64.java
+│                   │   ├── ARBGeometryShader4.java
+│                   │   ├── ARBGetProgramBinary.java
+│                   │   ├── ARBGetTextureSubImage.java
+│                   │   ├── ARBHalfFloatPixel.java
+│                   │   ├── ARBHalfFloatVertex.java
+│                   │   ├── ARBImaging.java
+│                   │   ├── ARBIndirectParameters.java
+│                   │   ├── ARBInstancedArrays.java
+│                   │   ├── ARBInternalformatQuery.java
+│                   │   ├── ARBInternalformatQuery2.java
+│                   │   ├── ARBInvalidateSubdata.java
+│                   │   ├── ARBMapBufferAlignment.java
+│                   │   ├── ARBMapBufferRange.java
+│                   │   ├── ARBMatrixPalette.java
+│                   │   ├── ARBMultiBind.java
+│                   │   ├── ARBMultiDrawIndirect.java
+│                   │   ├── ARBMultisample.java
+│                   │   ├── ARBMultitexture.java
+│                   │   ├── ARBOcclusionQuery.java
+│                   │   ├── ARBOcclusionQuery2.java
+│                   │   ├── ARBParallelShaderCompile.java
+│                   │   ├── ARBPipelineStatisticsQuery.java
+│                   │   ├── ARBPixelBufferObject.java
+│                   │   ├── ARBPointParameters.java
+│                   │   ├── ARBPointSprite.java
+│                   │   ├── ARBPolygonOffsetClamp.java
+│                   │   ├── ARBProgramInterfaceQuery.java
+│                   │   ├── ARBProvokingVertex.java
+│                   │   ├── ARBQueryBufferObject.java
+│                   │   ├── ARBRobustness.java
+│                   │   ├── ARBSPIRVExtensions.java
+│                   │   ├── ARBSampleLocations.java
+│                   │   ├── ARBSampleShading.java
+│                   │   ├── ARBSamplerObjects.java
+│                   │   ├── ARBSeamlessCubeMap.java
+│                   │   ├── ARBSeamlessCubemapPerTexture.java
+│                   │   ├── ARBSeparateShaderObjects.java
+│                   │   ├── ARBShaderAtomicCounters.java
+│                   │   ├── ARBShaderImageLoadStore.java
+│                   │   ├── ARBShaderObjects.java
+│                   │   ├── ARBShaderStorageBufferObject.java
+│                   │   ├── ARBShaderSubroutine.java
+│                   │   ├── ARBShadingLanguage100.java
+│                   │   ├── ARBShadingLanguageInclude.java
+│                   │   ├── ARBShadow.java
+│                   │   ├── ARBShadowAmbient.java
+│                   │   ├── ARBSparseBuffer.java
+│                   │   ├── ARBSparseTexture.java
+│                   │   ├── ARBStencilTexturing.java
+│                   │   ├── ARBSync.java
+│                   │   ├── ARBTessellationShader.java
+│                   │   ├── ARBTextureBarrier.java
+│                   │   ├── ARBTextureBorderClamp.java
+│                   │   ├── ARBTextureBufferObject.java
+│                   │   ├── ARBTextureBufferRange.java
+│                   │   ├── ARBTextureCompression.java
+│                   │   ├── ARBTextureCompressionBPTC.java
+│                   │   ├── ARBTextureCompressionRGTC.java
+│                   │   ├── ARBTextureCubeMap.java
+│                   │   ├── ARBTextureCubeMapArray.java
+│                   │   ├── ARBTextureEnvCombine.java
+│                   │   ├── ARBTextureEnvDot3.java
+│                   │   ├── ARBTextureFilterAnisotropic.java
+│                   │   ├── ARBTextureFilterMinmax.java
+│                   │   ├── ARBTextureFloat.java
+│                   │   ├── ARBTextureGather.java
+│                   │   ├── ARBTextureMirrorClampToEdge.java
+│                   │   ├── ARBTextureMirroredRepeat.java
+│                   │   ├── ARBTextureMultisample.java
+│                   │   ├── ARBTextureRG.java
+│                   │   ├── ARBTextureRGB10_A2UI.java
+│                   │   ├── ARBTextureRectangle.java
+│                   │   ├── ARBTextureStorage.java
+│                   │   ├── ARBTextureStorageMultisample.java
+│                   │   ├── ARBTextureSwizzle.java
+│                   │   ├── ARBTextureView.java
+│                   │   ├── ARBTimerQuery.java
+│                   │   ├── ARBTransformFeedback2.java
+│                   │   ├── ARBTransformFeedback3.java
+│                   │   ├── ARBTransformFeedbackInstanced.java
+│                   │   ├── ARBTransformFeedbackOverflowQuery.java
+│                   │   ├── ARBTransposeMatrix.java
+│                   │   ├── ARBUniformBufferObject.java
+│                   │   ├── ARBVertexArrayBGRA.java
+│                   │   ├── ARBVertexArrayObject.java
+│                   │   ├── ARBVertexAttrib64Bit.java
+│                   │   ├── ARBVertexAttribBinding.java
+│                   │   ├── ARBVertexBlend.java
+│                   │   ├── ARBVertexBufferObject.java
+│                   │   ├── ARBVertexProgram.java
+│                   │   ├── ARBVertexShader.java
+│                   │   ├── ARBVertexType2_10_10_10_REV.java
+│                   │   ├── ARBViewportArray.java
+│                   │   ├── ARBWindowPos.java
+│                   │   ├── ATIMeminfo.java
+│                   │   ├── ATITextureCompression3DC.java
+│                   │   ├── CGL.java
+│                   │   ├── EXT422Pixels.java
+│                   │   ├── EXTABGR.java
+│                   │   ├── EXTBGRA.java
+│                   │   ├── EXTBindableUniform.java
+│                   │   ├── EXTBlendColor.java
+│                   │   ├── EXTBlendEquationSeparate.java
+│                   │   ├── EXTBlendFuncSeparate.java
+│                   │   ├── EXTBlendMinmax.java
+│                   │   ├── EXTBlendSubtract.java
+│                   │   ├── EXTClipVolumeHint.java
+│                   │   ├── EXTCompiledVertexArray.java
+│                   │   ├── EXTDebugLabel.java
+│                   │   ├── EXTDebugMarker.java
+│                   │   ├── EXTDepthBoundsTest.java
+│                   │   ├── EXTDirectStateAccess.java
+│                   │   ├── EXTDrawBuffers2.java
+│                   │   ├── EXTDrawInstanced.java
+│                   │   ├── EXTEGLImageStorage.java
+│                   │   ├── EXTExternalBuffer.java
+│                   │   ├── EXTFramebufferBlit.java
+│                   │   ├── EXTFramebufferMultisample.java
+│                   │   ├── EXTFramebufferMultisampleBlitScaled.java
+│                   │   ├── EXTFramebufferObject.java
+│                   │   ├── EXTFramebufferSRGB.java
+│                   │   ├── EXTGPUProgramParameters.java
+│                   │   ├── EXTGPUShader4.java
+│                   │   ├── EXTGeometryShader4.java
+│                   │   ├── EXTMemoryObject.java
+│                   │   ├── EXTMemoryObjectFD.java
+│                   │   ├── EXTMemoryObjectWin32.java
+│                   │   ├── EXTPackedDepthStencil.java
+│                   │   ├── EXTPackedFloat.java
+│                   │   ├── EXTPixelBufferObject.java
+│                   │   ├── EXTPointParameters.java
+│                   │   ├── EXTPolygonOffsetClamp.java
+│                   │   ├── EXTProvokingVertex.java
+│                   │   ├── EXTRasterMultisample.java
+│                   │   ├── EXTSecondaryColor.java
+│                   │   ├── EXTSemaphore.java
+│                   │   ├── EXTSemaphoreFD.java
+│                   │   ├── EXTSemaphoreWin32.java
+│                   │   ├── EXTSeparateShaderObjects.java
+│                   │   ├── EXTShaderFramebufferFetch.java
+│                   │   ├── EXTShaderFramebufferFetchNonCoherent.java
+│                   │   ├── EXTShaderImageLoadStore.java
+│                   │   ├── EXTSharedTexturePalette.java
+│                   │   ├── EXTStencilClearTag.java
+│                   │   ├── EXTStencilTwoSide.java
+│                   │   ├── EXTStencilWrap.java
+│                   │   ├── EXTTextureArray.java
+│                   │   ├── EXTTextureBufferObject.java
+│                   │   ├── EXTTextureCompressionLATC.java
+│                   │   ├── EXTTextureCompressionRGTC.java
+│                   │   ├── EXTTextureCompressionS3TC.java
+│                   │   ├── EXTTextureFilterAnisotropic.java
+│                   │   ├── EXTTextureFilterMinmax.java
+│                   │   ├── EXTTextureInteger.java
+│                   │   ├── EXTTextureMirrorClamp.java
+│                   │   ├── EXTTextureSRGB.java
+│                   │   ├── EXTTextureSRGBDecode.java
+│                   │   ├── EXTTextureSRGBR8.java
+│                   │   ├── EXTTextureSharedExponent.java
+│                   │   ├── EXTTextureSnorm.java
+│                   │   ├── EXTTextureSwizzle.java
+│                   │   ├── EXTTimerQuery.java
+│                   │   ├── EXTTransformFeedback.java
+│                   │   ├── EXTVertexAttrib64bit.java
+│                   │   ├── EXTWin32KeyedMutex.java
+│                   │   ├── EXTWindowRectangles.java
+│                   │   ├── EXTX11SyncObject.java
+│                   │   ├── GL.java
+│                   │   ├── GL11.java
+│                   │   ├── GL11C.java
+│                   │   ├── GL12.java
+│                   │   ├── GL12C.java
+│                   │   ├── GL13.java
+│                   │   ├── GL13C.java
+│                   │   ├── GL14.java
+│                   │   ├── GL14C.java
+│                   │   ├── GL15.java
+│                   │   ├── GL15C.java
+│                   │   ├── GL20.java
+│                   │   ├── GL20C.java
+│                   │   ├── GL21.java
+│                   │   ├── GL21C.java
+│                   │   ├── GL30.java
+│                   │   ├── GL30C.java
+│                   │   ├── GL31.java
+│                   │   ├── GL31C.java
+│                   │   ├── GL32.java
+│                   │   ├── GL32C.java
+│                   │   ├── GL33.java
+│                   │   ├── GL33C.java
+│                   │   ├── GL40.java
+│                   │   ├── GL40C.java
+│                   │   ├── GL41.java
+│                   │   ├── GL41C.java
+│                   │   ├── GL42.java
+│                   │   ├── GL42C.java
+│                   │   ├── GL43.java
+│                   │   ├── GL43C.java
+│                   │   ├── GL44.java
+│                   │   ├── GL44C.java
+│                   │   ├── GL45.java
+│                   │   ├── GL45C.java
+│                   │   ├── GL46.java
+│                   │   ├── GL46C.java
+│                   │   ├── GLCapabilities.java
+│                   │   ├── GLChecks.java
+│                   │   ├── GLDebugMessageAMDCallback.java
+│                   │   ├── GLDebugMessageAMDCallbackI.java
+│                   │   ├── GLDebugMessageARBCallback.java
+│                   │   ├── GLDebugMessageARBCallbackI.java
+│                   │   ├── GLDebugMessageCallback.java
+│                   │   ├── GLDebugMessageCallbackI.java
+│                   │   ├── GLUtil.java
+│                   │   ├── GLX.java
+│                   │   ├── GLX11.java
+│                   │   ├── GLX12.java
+│                   │   ├── GLX13.java
+│                   │   ├── GLX14.java
+│                   │   ├── GLXAMDGPUAssociation.java
+│                   │   ├── GLXARBContextFlushControl.java
+│                   │   ├── GLXARBCreateContext.java
+│                   │   ├── GLXARBCreateContextNoError.java
+│                   │   ├── GLXARBCreateContextProfile.java
+│                   │   ├── GLXARBCreateContextRobustness.java
+│                   │   ├── GLXARBFBConfigFloat.java
+│                   │   ├── GLXARBFramebufferSRGB.java
+│                   │   ├── GLXARBGetProcAddress.java
+│                   │   ├── GLXARBMultisample.java
+│                   │   ├── GLXARBRobustnessApplicationIsolation.java
+│                   │   ├── GLXARBVertexBufferObject.java
+│                   │   ├── GLXCapabilities.java
+│                   │   ├── GLXEXTBufferAge.java
+│                   │   ├── GLXEXTContextPriority.java
+│                   │   ├── GLXEXTCreateContextES2Profile.java
+│                   │   ├── GLXEXTCreateContextESProfile.java
+│                   │   ├── GLXEXTFBConfigPackedFloat.java
+│                   │   ├── GLXEXTFramebufferSRGB.java
+│                   │   ├── GLXEXTImportContext.java
+│                   │   ├── GLXEXTStereoTree.java
+│                   │   ├── GLXEXTSwapControl.java
+│                   │   ├── GLXEXTSwapControlTear.java
+│                   │   ├── GLXEXTTextureFromPixmap.java
+│                   │   ├── GLXEXTVisualInfo.java
+│                   │   ├── GLXEXTVisualRating.java
+│                   │   ├── GLXINTELSwapEvent.java
+│                   │   ├── GLXNVCopyBuffer.java
+│                   │   ├── GLXNVCopyImage.java
+│                   │   ├── GLXNVDelayBeforeSwap.java
+│                   │   ├── GLXNVFloatBuffer.java
+│                   │   ├── GLXNVMultisampleCoverage.java
+│                   │   ├── GLXNVRobustnessVideoMemoryPurge.java
+│                   │   ├── GLXNVSwapGroup.java
+│                   │   ├── GLXSGIMakeCurrentRead.java
+│                   │   ├── GLXSGISwapControl.java
+│                   │   ├── GLXSGIVideoSync.java
+│                   │   ├── GLXSGIXFBConfig.java
+│                   │   ├── GLXSGIXPbuffer.java
+│                   │   ├── GLXSGIXSwapBarrier.java
+│                   │   ├── GLXSGIXSwapGroup.java
+│                   │   ├── GLXStereoNotifyEventEXT.java
+│                   │   ├── GPU_DEVICE.java
+│                   │   ├── GREMEDYFrameTerminator.java
+│                   │   ├── GREMEDYStringMarker.java
+│                   │   ├── INTELBlackholeRender.java
+│                   │   ├── INTELConservativeRasterization.java
+│                   │   ├── INTELFramebufferCMAA.java
+│                   │   ├── INTELMapTexture.java
+│                   │   ├── INTELPerformanceQuery.java
+│                   │   ├── KHRBlendEquationAdvanced.java
+│                   │   ├── KHRBlendEquationAdvancedCoherent.java
+│                   │   ├── KHRContextFlushControl.java
+│                   │   ├── KHRDebug.java
+│                   │   ├── KHRNoError.java
+│                   │   ├── KHRParallelShaderCompile.java
+│                   │   ├── KHRRobustness.java
+│                   │   ├── KHRShaderSubgroup.java
+│                   │   ├── KHRTextureCompressionASTCLDR.java
+│                   │   ├── NVAlphaToCoverageDitherControl.java
+│                   │   ├── NVBindlessMultiDrawIndirect.java
+│                   │   ├── NVBindlessMultiDrawIndirectCount.java
+│                   │   ├── NVBindlessTexture.java
+│                   │   ├── NVBlendEquationAdvanced.java
+│                   │   ├── NVBlendEquationAdvancedCoherent.java
+│                   │   ├── NVBlendMinmaxFactor.java
+│                   │   ├── NVClipSpaceWScaling.java
+│                   │   ├── NVCommandList.java
+│                   │   ├── NVConditionalRender.java
+│                   │   ├── NVConservativeRaster.java
+│                   │   ├── NVConservativeRasterDilate.java
+│                   │   ├── NVConservativeRasterPreSnap.java
+│                   │   ├── NVConservativeRasterPreSnapTriangles.java
+│                   │   ├── NVCopyDepthToColor.java
+│                   │   ├── NVCopyImage.java
+│                   │   ├── NVDeepTexture3D.java
+│                   │   ├── NVDepthBufferFloat.java
+│                   │   ├── NVDepthClamp.java
+│                   │   ├── NVDrawTexture.java
+│                   │   ├── NVDrawVulkanImage.java
+│                   │   ├── NVExplicitMultisample.java
+│                   │   ├── NVFence.java
+│                   │   ├── NVFillRectangle.java
+│                   │   ├── NVFloatBuffer.java
+│                   │   ├── NVFogDistance.java
+│                   │   ├── NVFragmentCoverageToColor.java
+│                   │   ├── NVFramebufferMixedSamples.java
+│                   │   ├── NVFramebufferMultisampleCoverage.java
+│                   │   ├── NVGPUMulticast.java
+│                   │   ├── NVGPUShader5.java
+│                   │   ├── NVHalfFloat.java
+│                   │   ├── NVInternalformatSampleQuery.java
+│                   │   ├── NVLightMaxExponent.java
+│                   │   ├── NVMemoryAttachment.java
+│                   │   ├── NVMeshShader.java
+│                   │   ├── NVMultisampleCoverage.java
+│                   │   ├── NVMultisampleFilterHint.java
+│                   │   ├── NVPackedDepthStencil.java
+│                   │   ├── NVPathRendering.java
+│                   │   ├── NVPathRenderingSharedEdge.java
+│                   │   ├── NVPixelDataRange.java
+│                   │   ├── NVPointSprite.java
+│                   │   ├── NVPrimitiveRestart.java
+│                   │   ├── NVQueryResource.java
+│                   │   ├── NVQueryResourceTag.java
+│                   │   ├── NVRepresentativeFragmentTest.java
+│                   │   ├── NVRobustnessVideoMemoryPurge.java
+│                   │   ├── NVSampleLocations.java
+│                   │   ├── NVScissorExclusive.java
+│                   │   ├── NVShaderBufferLoad.java
+│                   │   ├── NVShaderBufferStore.java
+│                   │   ├── NVShaderSubgroupPartitioned.java
+│                   │   ├── NVShaderThreadGroup.java
+│                   │   ├── NVShadingRateImage.java
+│                   │   ├── NVTexgenReflection.java
+│                   │   ├── NVTextureBarrier.java
+│                   │   ├── NVTextureMultisample.java
+│                   │   ├── NVTransformFeedback.java
+│                   │   ├── NVTransformFeedback2.java
+│                   │   ├── NVUniformBufferUnifiedMemory.java
+│                   │   ├── NVVertexArrayRange.java
+│                   │   ├── NVVertexArrayRange2.java
+│                   │   ├── NVVertexAttribInteger64bit.java
+│                   │   ├── NVVertexBufferUnifiedMemory.java
+│                   │   ├── NVViewportSwizzle.java
+│                   │   ├── NVXConditionalRender.java
+│                   │   ├── NVXGPUMemoryInfo.java
+│                   │   ├── NVXGpuMulticast2.java
+│                   │   ├── NVXProgressFence.java
+│                   │   ├── OVRMultiview.java
+│                   │   ├── WGL.java
+│                   │   ├── WGLAMDGPUAssociation.java
+│                   │   ├── WGLARBBufferRegion.java
+│                   │   ├── WGLARBContextFlushControl.java
+│                   │   ├── WGLARBCreateContext.java
+│                   │   ├── WGLARBCreateContextNoError.java
+│                   │   ├── WGLARBCreateContextProfile.java
+│                   │   ├── WGLARBCreateContextRobustness.java
+│                   │   ├── WGLARBExtensionsString.java
+│                   │   ├── WGLARBFramebufferSRGB.java
+│                   │   ├── WGLARBMakeCurrentRead.java
+│                   │   ├── WGLARBMultisample.java
+│                   │   ├── WGLARBPbuffer.java
+│                   │   ├── WGLARBPixelFormat.java
+│                   │   ├── WGLARBPixelFormatFloat.java
+│                   │   ├── WGLARBRenderTexture.java
+│                   │   ├── WGLARBRobustnessApplicationIsolation.java
+│                   │   ├── WGLATIPixelFormatFloat.java
+│                   │   ├── WGLATIRenderTextureRectangle.java
+│                   │   ├── WGLCapabilities.java
+│                   │   ├── WGLEXTColorspace.java
+│                   │   ├── WGLEXTCreateContextES2Profile.java
+│                   │   ├── WGLEXTCreateContextESProfile.java
+│                   │   ├── WGLEXTDepthFloat.java
+│                   │   ├── WGLEXTExtensionsString.java
+│                   │   ├── WGLEXTFramebufferSRGB.java
+│                   │   ├── WGLEXTPixelFormatPackedFloat.java
+│                   │   ├── WGLEXTSwapControl.java
+│                   │   ├── WGLNVCopyImage.java
+│                   │   ├── WGLNVDXInterop.java
+│                   │   ├── WGLNVDelayBeforeSwap.java
+│                   │   ├── WGLNVFloatBuffer.java
+│                   │   ├── WGLNVGPUAffinity.java
+│                   │   ├── WGLNVMultigpuContext.java
+│                   │   ├── WGLNVMultisampleCoverage.java
+│                   │   ├── WGLNVRenderDepthTexture.java
+│                   │   ├── WGLNVRenderTextureRectangle.java
+│                   │   ├── WGLNVSwapGroup.java
+│                   │   ├── WGLNVVertexArrayRange.java
+│                   │   └── package-info.java
+│                   ├── stb/
+│                   │   ├── LibSTB.java
+│                   │   ├── STBDXT.java
+│                   │   ├── STBEasyFont.java
+│                   │   ├── STBIEOFCallback.java
+│                   │   ├── STBIEOFCallbackI.java
+│                   │   ├── STBIIOCallbacks.java
+│                   │   ├── STBIReadCallback.java
+│                   │   ├── STBIReadCallbackI.java
+│                   │   ├── STBISkipCallback.java
+│                   │   ├── STBISkipCallbackI.java
+│                   │   ├── STBIWriteCallback.java
+│                   │   ├── STBIWriteCallbackI.java
+│                   │   ├── STBIZlibCompress.java
+│                   │   ├── STBIZlibCompressI.java
+│                   │   ├── STBImage.java
+│                   │   ├── STBImageResize.java
+│                   │   ├── STBImageWrite.java
+│                   │   ├── STBPerlin.java
+│                   │   ├── STBRPContext.java
+│                   │   ├── STBRPNode.java
+│                   │   ├── STBRPRect.java
+│                   │   ├── STBRectPack.java
+│                   │   ├── STBTTAlignedQuad.java
+│                   │   ├── STBTTBakedChar.java
+│                   │   ├── STBTTBitmap.java
+│                   │   ├── STBTTFontinfo.java
+│                   │   ├── STBTTPackContext.java
+│                   │   ├── STBTTPackRange.java
+│                   │   ├── STBTTPackedchar.java
+│                   │   ├── STBTTVertex.java
+│                   │   ├── STBTruetype.java
+│                   │   ├── STBVorbis.java
+│                   │   ├── STBVorbisAlloc.java
+│                   │   ├── STBVorbisInfo.java
+│                   │   └── package-info.java
+│                   ├── system/
+│                   │   ├── dyncall/
+│                   │   │   ├── DynCall.java
+│                   │   │   ├── DynCallback.java
+│                   │   │   ├── DynLoad.java
+│                   │   │   └── package-info.java
+│                   │   ├── fcl/
+│                   │   │   ├── DynamicLinkLoader.java
+│                   │   │   ├── FCLLibrary.java
+│                   │   │   └── package-info.java
+│                   │   ├── jemalloc/
+│                   │   │   ├── ExtentAlloc.java
+│                   │   │   ├── ExtentAllocI.java
+│                   │   │   ├── ExtentCommit.java
+│                   │   │   ├── ExtentCommitI.java
+│                   │   │   ├── ExtentDalloc.java
+│                   │   │   ├── ExtentDallocI.java
+│                   │   │   ├── ExtentDecommit.java
+│                   │   │   ├── ExtentDecommitI.java
+│                   │   │   ├── ExtentDestroy.java
+│                   │   │   ├── ExtentDestroyI.java
+│                   │   │   ├── ExtentHooks.java
+│                   │   │   ├── ExtentMerge.java
+│                   │   │   ├── ExtentMergeI.java
+│                   │   │   ├── ExtentPurge.java
+│                   │   │   ├── ExtentPurgeI.java
+│                   │   │   ├── ExtentSplit.java
+│                   │   │   ├── ExtentSplitI.java
+│                   │   │   ├── JEmalloc.java
+│                   │   │   ├── JEmallocAllocator.java
+│                   │   │   ├── MallocMessageCallback.java
+│                   │   │   ├── MallocMessageCallbackI.java
+│                   │   │   └── package-info.java
+│                   │   ├── jni/
+│                   │   │   ├── JNINativeInterface.java
+│                   │   │   ├── JNINativeMethod.java
+│                   │   │   └── package-info.java
+│                   │   ├── libc/
+│                   │   │   ├── LibCErrno.java
+│                   │   │   ├── LibCLocale.java
+│                   │   │   ├── LibCStdio.java
+│                   │   │   ├── LibCStdlib.java
+│                   │   │   ├── LibCString.java
+│                   │   │   └── package-info.java
+│                   │   ├── linux/
+│                   │   │   ├── DynamicLinkLoader.java
+│                   │   │   ├── LinuxLibrary.java
+│                   │   │   ├── Visual.java
+│                   │   │   ├── X11.java
+│                   │   │   ├── XAnyEvent.java
+│                   │   │   ├── XButtonEvent.java
+│                   │   │   ├── XCirculateEvent.java
+│                   │   │   ├── XCirculateRequestEvent.java
+│                   │   │   ├── XClientMessageEvent.java
+│                   │   │   ├── XColormapEvent.java
+│                   │   │   ├── XConfigureEvent.java
+│                   │   │   ├── XConfigureRequestEvent.java
+│                   │   │   ├── XCreateWindowEvent.java
+│                   │   │   ├── XCrossingEvent.java
+│                   │   │   ├── XDestroyWindowEvent.java
+│                   │   │   ├── XErrorEvent.java
+│                   │   │   ├── XEvent.java
+│                   │   │   ├── XExposeEvent.java
+│                   │   │   ├── XFocusChangeEvent.java
+│                   │   │   ├── XGenericEvent.java
+│                   │   │   ├── XGenericEventCookie.java
+│                   │   │   ├── XGraphicsExposeEvent.java
+│                   │   │   ├── XGravityEvent.java
+│                   │   │   ├── XKeyEvent.java
+│                   │   │   ├── XKeymapEvent.java
+│                   │   │   ├── XMapEvent.java
+│                   │   │   ├── XMapRequestEvent.java
+│                   │   │   ├── XMappingEvent.java
+│                   │   │   ├── XMotionEvent.java
+│                   │   │   ├── XNoExposeEvent.java
+│                   │   │   ├── XPropertyEvent.java
+│                   │   │   ├── XReparentEvent.java
+│                   │   │   ├── XResizeRequestEvent.java
+│                   │   │   ├── XSelectionClearEvent.java
+│                   │   │   ├── XSelectionEvent.java
+│                   │   │   ├── XSelectionRequestEvent.java
+│                   │   │   ├── XSetWindowAttributes.java
+│                   │   │   ├── XTimeCoord.java
+│                   │   │   ├── XUnmapEvent.java
+│                   │   │   ├── XVisibilityEvent.java
+│                   │   │   ├── XVisualInfo.java
+│                   │   │   └── package-info.java
+│                   │   ├── macosx/
+│                   │   │   ├── CGEventTapCallBack.java
+│                   │   │   ├── CGEventTapCallBackI.java
+│                   │   │   ├── CGEventTapInformation.java
+│                   │   │   ├── CGPoint.java
+│                   │   │   ├── CoreFoundation.java
+│                   │   │   ├── CoreGraphics.java
+│                   │   │   ├── DynamicLinkLoader.java
+│                   │   │   ├── EnumerationMutationHandler.java
+│                   │   │   ├── EnumerationMutationHandlerI.java
+│                   │   │   ├── LibC.java
+│                   │   │   ├── LibSystem.java
+│                   │   │   ├── MacOSXLibrary.java
+│                   │   │   ├── MacOSXLibraryBundle.java
+│                   │   │   ├── MacOSXLibraryDL.java
+│                   │   │   ├── ObjCMethodDescription.java
+│                   │   │   ├── ObjCPropertyAttribute.java
+│                   │   │   ├── ObjCRuntime.java
+│                   │   │   └── package-info.java
+│                   │   ├── windows/
+│                   │   │   ├── DEVMODE.java
+│                   │   │   ├── DISPLAY_DEVICE.java
+│                   │   │   ├── GDI32.java
+│                   │   │   ├── HARDWAREINPUT.java
+│                   │   │   ├── INPUT.java
+│                   │   │   ├── KEYBDINPUT.java
+│                   │   │   ├── MONITORINFOEX.java
+│                   │   │   ├── MOUSEINPUT.java
+│                   │   │   ├── MSG.java
+│                   │   │   ├── PIXELFORMATDESCRIPTOR.java
+│                   │   │   ├── POINT.java
+│                   │   │   ├── POINTL.java
+│                   │   │   ├── RECT.java
+│                   │   │   ├── SECURITY_ATTRIBUTES.java
+│                   │   │   ├── TOUCHINPUT.java
+│                   │   │   ├── User32.java
+│                   │   │   ├── WINDOWPLACEMENT.java
+│                   │   │   ├── WNDCLASSEX.java
+│                   │   │   ├── WinBase.java
+│                   │   │   ├── WindowProc.java
+│                   │   │   ├── WindowProcI.java
+│                   │   │   ├── WindowsLibrary.java
+│                   │   │   ├── WindowsUtil.java
+│                   │   │   └── package-info.java
+│                   │   ├── APIUtil.java
+│                   │   ├── Callback.java
+│                   │   ├── CallbackI.java
+│                   │   ├── CheckIntrinsics.java
+│                   │   ├── Checks.java
+│                   │   ├── Configuration.java
+│                   │   ├── CustomBuffer.java
+│                   │   ├── FunctionProvider.java
+│                   │   ├── FunctionProviderLocal.java
+│                   │   ├── JNI.java
+│                   │   ├── Library.java
+│                   │   ├── LibraryResource.java
+│                   │   ├── MathUtil.java
+│                   │   ├── MemoryAccessJNI.java
+│                   │   ├── MemoryManage.java
+│                   │   ├── MemoryStack.java
+│                   │   ├── MemoryUtil.java
+│                   │   ├── MultiReleaseMemCopy.java
+│                   │   ├── MultiReleaseTextDecoding.java
+│                   │   ├── NativeResource.java
+│                   │   ├── NativeType.java
+│                   │   ├── NonnullDefault.java
+│                   │   ├── Platform.java
+│                   │   ├── Pointer.java
+│                   │   ├── SharedLibrary.java
+│                   │   ├── SharedLibraryLoader.java
+│                   │   ├── StackWalkUtil.java
+│                   │   ├── Struct.java
+│                   │   ├── StructBuffer.java
+│                   │   ├── ThreadLocalUtil.java
+│                   │   └── package-info.java
+│                   ├── util/
+│                   │   └── tinyfd/
+│                   │       ├── TinyFileDialogs.java
+│                   │       └── package-info.java
+│                   ├── BufferUtils.java
+│                   ├── CLongBuffer.java
+│                   ├── PointerBuffer.java
+│                   ├── Version.java
+│                   └── package-info.java
+├── .gitattributes
+├── .gitignore
+├── LICENSE
+├── README.md
+├── build.gradle
+├── gradlew
+├── gradlew.bat
+└── settings.gradle

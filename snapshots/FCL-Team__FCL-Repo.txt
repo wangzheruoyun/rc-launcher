@@ -1,0 +1,16 @@
+# Repository: FCL-Team/FCL-Repo
+# Default branch: main
+# Total entries: 10
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── sync2gitee.yml
+├── res/
+│   ├── announcement_v2.txt
+│   ├── eula.txt
+│   └── version_map.json
+├── .gitattributes
+├── .gitignore
+└── README.md

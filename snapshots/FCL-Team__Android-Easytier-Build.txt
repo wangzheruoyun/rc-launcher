@@ -1,0 +1,18 @@
+# Repository: FCL-Team/Android-Easytier-Build
+# Default branch: main
+# Total entries: 12
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── android.yml
+├── scripts/
+│   ├── build_android.sh
+│   ├── fetch_easytier.sh
+│   └── patch_ffi_crate_type.sh
+├── .gitattributes
+├── .gitignore
+├── BUILD_CONFIG.env
+├── LICENSE
+└── README.md

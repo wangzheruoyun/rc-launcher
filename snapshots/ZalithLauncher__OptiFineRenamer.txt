@@ -1,0 +1,39 @@
+# Repository: ZalithLauncher/OptiFineRenamer
+# Default branch: main
+# Total entries: 33
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .idea/
+│   ├── artifacts/
+│   │   └── OptiFineRenamer_main_jar.xml
+│   ├── .gitignore
+│   ├── gradle.xml
+│   ├── misc.xml
+│   ├── uiDesigner.xml
+│   └── vcs.xml
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── src/
+│   └── main/
+│       ├── java/
+│       │   └── com/
+│       │       └── movtery/
+│       │           └── optifine_renamer/
+│       │               ├── optifine/
+│       │               │   └── ChangeClassTransformer.java
+│       │               ├── MainAgent.java
+│       │               └── Print.java
+│       └── resources/
+│           └── META-INF/
+│               └── MANIFEST.MF
+├── .gitignore
+├── LICENSE.txt
+├── README.md
+├── README_ZH_CN.md
+├── build.gradle
+├── gradlew
+├── gradlew.bat
+└── settings.gradle

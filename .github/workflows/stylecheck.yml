@@ -1,0 +1,85 @@
+# Unified code-style gate for RC Launcher.
+#
+# Mirrors cuberite's `StyleCheck.yml` philosophy: one style, one gate, enforced
+# automatically on every push/PR so reviews focus on behaviour, not whitespace.
+#
+# What runs:
+#   * Rust  — `cargo fmt --check` (hard, must be clean) + `cargo clippy -D warnings`
+#             (hard). These are the strict gate and MUST pass.
+#   * Kotlin— `ktlintCheck` (formatting-first, driven by .editorconfig) +
+#             `detekt` (best-effort static analysis). Reported via
+#             `continue-on-error` so a pre-existing formatting wrinkle never
+#             blocks a merge; run `./gradlew ktlintFormat` locally to normalise.
+#
+# Config lives in: rustfmt.toml, clippy.toml, .editorconfig, config/detekt/detekt.yml.
+# See docs/CONTRIBUTING.md for the contributor-facing checklist.
+
+name: StyleCheck
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Rust: formatting + lints. This is the STRICT gate.
+  # ---------------------------------------------------------------------------
+  rust:
+    name: Rust (fmt + clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust (stable + rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-style-${{ hashFiles('rust/Cargo.lock') }}
+
+      - name: cargo fmt --check
+        run: cd rust && cargo fmt --all -- --check
+
+      - name: cargo clippy (-D warnings)
+        run: cd rust && cargo clippy --all-targets --all-features -- -D warnings
+
+  # ---------------------------------------------------------------------------
+  # Kotlin / Compose: formatting + static analysis. Best-effort (continue-on-error)
+  # until the whole Kotlin tree is normalised; the Rust job above is the hard gate.
+  # ---------------------------------------------------------------------------
+  kotlin:
+    name: Kotlin (ktlint + detekt)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: ktlintCheck
+        run: ./gradlew ktlintCheck --no-daemon
+
+      - name: detekt
+        run: ./gradlew detekt --no-daemon

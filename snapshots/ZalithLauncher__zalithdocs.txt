@@ -1,0 +1,216 @@
+# Repository: ZalithLauncher/zalithdocs
+# Default branch: main
+# Total entries: 210
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .vitepress/
+│   ├── theme/
+│   │   ├── components/
+│   │   │   ├── AnnouncementBanner.vue
+│   │   │   ├── ApngPlayer.vue
+│   │   │   └── ThemeSwitcher.vue
+│   │   ├── style/
+│   │   │   ├── blur.css
+│   │   │   ├── red.css
+│   │   │   └── sakura.css
+│   │   ├── index.ts
+│   │   └── style.css
+│   └── config.mts
+├── docs/
+│   ├── about/
+│   │   ├── about.md
+│   │   ├── privacy.md
+│   │   └── terms.md
+│   ├── announcement/
+│   │   └── discord-shutdown.md
+│   ├── control2_help/
+│   │   ├── basic_operation.md
+│   │   ├── control_layer.md
+│   │   ├── control_layout_operations.md
+│   │   ├── controls.md
+│   │   └── overview.md
+│   ├── help/
+│   │   ├── account.md
+│   │   ├── auth_server.md
+│   │   ├── changing_skin_capes.md
+│   │   ├── download_game.md
+│   │   ├── modloader.md
+│   │   └── version_isolation.md
+│   └── projects/
+│       ├── zl1.md
+│       └── zl2.md
+├── en/
+│   ├── docs/
+│   │   ├── about/
+│   │   │   ├── about.md
+│   │   │   ├── privacy.md
+│   │   │   └── terms.md
+│   │   ├── announcement/
+│   │   │   └── discord-shutdown.md
+│   │   ├── control2_help/
+│   │   │   ├── basic_operation.md
+│   │   │   ├── control_layer.md
+│   │   │   ├── control_layout_operations.md
+│   │   │   ├── controls.md
+│   │   │   └── overview.md
+│   │   ├── help/
+│   │   │   ├── account.md
+│   │   │   ├── auth_server.md
+│   │   │   ├── changing_skin_capes.md
+│   │   │   ├── download_game.md
+│   │   │   ├── modloader.md
+│   │   │   └── version_isolation.md
+│   │   └── projects/
+│   │       ├── zl1.md
+│   │       └── zl2.md
+│   ├── config.ts
+│   └── index.md
+├── locales/
+│   ├── en.ts
+│   └── zh.ts
+├── public/
+│   ├── author/
+│   │   └── lemwood.webp
+│   ├── en/
+│   │   └── docs/
+│   │       ├── account/
+│   │       │   ├── auth_server/
+│   │       │   │   ├── ely_by_account.jpg
+│   │       │   │   ├── ely_by_login.jpg
+│   │       │   │   ├── ely_by_login_dialog.png
+│   │       │   │   ├── ely_by_yggdrasil_api.png
+│   │       │   │   ├── ely_by_yggdrasil_doc.png
+│   │       │   │   ├── little_skin_select_role.jpg
+│   │       │   │   └── write_yggdrasil_api_url.jpg
+│   │       │   ├── microsoft/
+│   │       │   │   ├── accept_license.jpg
+│   │       │   │   ├── choose_capes.jpg
+│   │       │   │   ├── choose_skin_capes.jpg
+│   │       │   │   ├── choose_skin_model.jpg
+│   │       │   │   ├── game_new_capes.jpg
+│   │       │   │   ├── game_new_skin.jpg
+│   │       │   │   ├── get_capes.jpg
+│   │       │   │   ├── get_device_code.jpg
+│   │       │   │   ├── load_new_skin.jpg
+│   │       │   │   ├── microsoft_account.jpg
+│   │       │   │   ├── microsoft_login.jpg
+│   │       │   │   ├── microsoft_login_completed.jpg
+│   │       │   │   ├── post_new_capes.jpg
+│   │       │   │   ├── post_new_skin.jpg
+│   │       │   │   ├── start_microsoft_login.jpg
+│   │       │   │   └── write_device_code.jpg
+│   │       │   ├── offline/
+│   │       │   │   ├── invalid_username1.jpg
+│   │       │   │   ├── invalid_username2.jpg
+│   │       │   │   ├── offline_completed.jpg
+│   │       │   │   └── offline_username.jpg
+│   │       │   ├── edit_profile.png
+│   │       │   ├── purchased_minecraft.png
+│   │       │   └── to_account.jpg
+│   │       ├── control2_help/
+│   │       │   ├── basic_operation/
+│   │       │   │   ├── edit_layout.png
+│   │       │   │   └── editor_menu.png
+│   │       │   ├── control_layer/
+│   │       │   │   ├── control_layer_attributes.png
+│   │       │   │   ├── create_new_layer.png
+│   │       │   │   └── ordering.gif
+│   │       │   ├── controls/
+│   │       │   │   ├── add_controls.png
+│   │       │   │   ├── drag.gif
+│   │       │   │   ├── edit_control.png
+│   │       │   │   └── preview_mode.png
+│   │       │   └── overview/
+│   │       │       ├── create_new.png
+│   │       │       └── find_manage.png
+│   │       ├── download_game/
+│   │       │   ├── download_game_dialog.jpg
+│   │       │   ├── download_game_screen.jpg
+│   │       │   ├── notification_permission.jpg
+│   │       │   ├── start_install.jpg
+│   │       │   ├── to_downloads.jpg
+│   │       │   ├── to_versions.jpg
+│   │       │   └── versions.jpg
+│   │       ├── version_manager/
+│   │       │   └── saves.jpg
+│   │       ├── addons.jpg
+│   │       ├── install_modloader.jpg
+│   │       └── to_downloads.jpg
+│   ├── zh/
+│   │   └── docs/
+│   │       ├── account/
+│   │       │   ├── auth_server/
+│   │       │   │   ├── little_skin_account.jpg
+│   │       │   │   ├── little_skin_login.jpg
+│   │       │   │   ├── little_skin_login_dialog.png
+│   │       │   │   ├── little_skin_select_role.jpg
+│   │       │   │   ├── little_skin_yggdrasil_api.png
+│   │       │   │   ├── little_skin_yggdrasil_card.png
+│   │       │   │   └── write_yggdrasil_api_url.jpg
+│   │       │   ├── microsoft/
+│   │       │   │   ├── accept_license.jpg
+│   │       │   │   ├── choose_capes.jpg
+│   │       │   │   ├── choose_skin_capes.jpg
+│   │       │   │   ├── choose_skin_model.jpg
+│   │       │   │   ├── game_new_capes.jpg
+│   │       │   │   ├── game_new_skin.jpg
+│   │       │   │   ├── get_capes.jpg
+│   │       │   │   ├── get_device_code.jpg
+│   │       │   │   ├── load_new_skin.jpg
+│   │       │   │   ├── microsoft_account.jpg
+│   │       │   │   ├── microsoft_login.jpg
+│   │       │   │   ├── microsoft_login_completed.jpg
+│   │       │   │   ├── post_new_capes.jpg
+│   │       │   │   ├── post_new_skin.jpg
+│   │       │   │   ├── start_microsoft_login.jpg
+│   │       │   │   └── write_device_code.jpg
+│   │       │   ├── offline/
+│   │       │   │   ├── invalid_username1.jpg
+│   │       │   │   ├── invalid_username2.jpg
+│   │       │   │   ├── offline_completed.jpg
+│   │       │   │   └── offline_username.jpg
+│   │       │   ├── edit_profile.jpg
+│   │       │   ├── not_purchased_minecraft.jpg
+│   │       │   ├── purchased_minecraft.png
+│   │       │   └── to_account.jpg
+│   │       ├── control2_help/
+│   │       │   ├── basic_operation/
+│   │       │   │   ├── edit_layout.png
+│   │       │   │   └── editor_menu.png
+│   │       │   ├── control_layer/
+│   │       │   │   ├── control_layer_attributes.png
+│   │       │   │   ├── create_new_layer.png
+│   │       │   │   └── ordering.gif
+│   │       │   ├── controls/
+│   │       │   │   ├── add_controls.png
+│   │       │   │   ├── drag.gif
+│   │       │   │   ├── edit_control.png
+│   │       │   │   └── preview_mode.png
+│   │       │   └── overview/
+│   │       │       ├── create_new.png
+│   │       │       └── find_manage.png
+│   │       ├── download_game/
+│   │       │   ├── download_game_dialog.jpg
+│   │       │   ├── download_game_screen.jpg
+│   │       │   ├── notification_permission.jpg
+│   │       │   ├── start_install.jpg
+│   │       │   ├── to_downloads.jpg
+│   │       │   ├── to_versions.jpg
+│   │       │   └── versions.jpg
+│   │       ├── version_manager/
+│   │       │   └── saves.jpg
+│   │       ├── addons.jpg
+│   │       ├── install_modloader.jpg
+│   │       └── to_downloads.jpg
+│   ├── robots.txt
+│   ├── zl_icon.webp
+│   ├── zl_title.png
+│   └── zl_token.png
+├── .gitignore
+├── README.md
+├── config.ts
+├── index.md
+├── package.json
+├── pnpm-lock.yaml
+└── pnpm-workspace.yaml

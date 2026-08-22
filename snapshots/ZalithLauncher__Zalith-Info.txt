@@ -1,0 +1,18 @@
+# Repository: ZalithLauncher/Zalith-Info
+# Default branch: main
+# Total entries: 12
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── update_sponsors.yaml
+├── update_sponsors/
+│   └── main.py
+├── v2/
+│   ├── latest_version.json
+│   └── latest_version_md.json
+├── .gitignore
+├── launcher_notice.json
+├── launcher_sponsor.json
+└── launcher_version.json

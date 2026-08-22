@@ -1,0 +1,50 @@
+# Repository: ZalithLauncher/RendererPlugin-v2
+# Default branch: main
+# Total entries: 44
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── app/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── com/
+│   │       │       └── launchers_plugin/
+│   │       │           └── renderer/
+│   │       │               └── MainActivity.kt
+│   │       ├── res/
+│   │       │   ├── drawable/
+│   │       │   │   └── img_app.png
+│   │       │   └── values/
+│   │       │       └── strings.xml
+│   │       └── AndroidManifest.xml
+│   ├── .gitignore
+│   └── build.gradle.kts
+├── dsl/
+│   ├── src/
+│   │   └── main/
+│   │       └── kotlin/
+│   │           └── com/
+│   │               └── launchers_plugin/
+│   │                   └── renderer/
+│   │                       └── buildscript/
+│   │                           ├── BuilderDSL.kt
+│   │                           ├── LegacyManifestBuilder.kt
+│   │                           ├── RendererConfig.kt
+│   │                           └── RendererPlugin.kt
+│   ├── build.gradle.kts
+│   └── settings.gradle.kts
+├── gradle/
+│   ├── wrapper/
+│   │   ├── gradle-wrapper.jar
+│   │   └── gradle-wrapper.properties
+│   └── libs.versions.toml
+├── .gitattributes
+├── .gitignore
+├── README.md
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+├── jitpack.yml
+└── settings.gradle.kts

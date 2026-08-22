@@ -1,0 +1,11 @@
+# Repository: FCL-Team/Android-OpenJDK-Build
+# Default branch: main
+# Total entries: 5
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── build.yml
+├── .gitattributes
+└── README.md

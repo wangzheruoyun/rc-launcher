@@ -1,0 +1,120 @@
+# Repository: FCL-Team/caciocavallo11-FCL
+# Default branch: fcl-java11
+# Total entries: 114
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── maven.yml
+├── cacio-shared/
+│   ├── src/
+│   │   └── main/
+│   │       └── java/
+│   │           └── com/
+│   │               └── github/
+│   │                   └── caciocavallosilano/
+│   │                       └── cacio/
+│   │                           └── peer/
+│   │                               ├── managed/
+│   │                               │   ├── AbstractManagedWindowContainer.java
+│   │                               │   ├── EventData.java
+│   │                               │   ├── FocusManager.java
+│   │                               │   ├── FullScreenEventPump.java
+│   │                               │   ├── FullScreenWindowFactory.java
+│   │                               │   ├── ManagedWindow.java
+│   │                               │   ├── ManagedWindowContainer.java
+│   │                               │   ├── PlatformScreen.java
+│   │                               │   ├── PlatformScreenSelector.java
+│   │                               │   └── ScreenManagedWindowContainer.java
+│   │                               ├── CacioButtonPeer.java
+│   │                               ├── CacioCanvasPeer.java
+│   │                               ├── CacioCheckboxMenuItemPeer.java
+│   │                               ├── CacioCheckboxPeer.java
+│   │                               ├── CacioChoicePeer.java
+│   │                               ├── CacioComponent.java
+│   │                               ├── CacioComponentPeer.java
+│   │                               ├── CacioContainerPeer.java
+│   │                               ├── CacioDialogPeer.java
+│   │                               ├── CacioEventPump.java
+│   │                               ├── CacioEventSource.java
+│   │                               ├── CacioFileDialogPeer.java
+│   │                               ├── CacioFramePeer.java
+│   │                               ├── CacioKeyboardFocusManagerPeer.java
+│   │                               ├── CacioLabelPeer.java
+│   │                               ├── CacioListPeer.java
+│   │                               ├── CacioMenuBarPeer.java
+│   │                               ├── CacioMenuComponentPeer.java
+│   │                               ├── CacioMenuItemPeer.java
+│   │                               ├── CacioMenuPeer.java
+│   │                               ├── CacioMouseInfoPeer.java
+│   │                               ├── CacioPanelPeer.java
+│   │                               ├── CacioPopupMenuPeer.java
+│   │                               ├── CacioScrollBarPeer.java
+│   │                               ├── CacioScrollPanePeer.java
+│   │                               ├── CacioSwingComponent.java
+│   │                               ├── CacioTextAreaPeer.java
+│   │                               ├── CacioTextFieldPeer.java
+│   │                               ├── CacioToolkit.java
+│   │                               ├── CacioWindowPeer.java
+│   │                               ├── KFMHelper.java
+│   │                               ├── PlatformToplevelWindow.java
+│   │                               ├── PlatformWindow.java
+│   │                               ├── PlatformWindowFactory.java
+│   │                               ├── ProxyWindow.java
+│   │                               ├── ProxyWindowPeer.java
+│   │                               └── WindowClippedGraphics.java
+│   └── pom.xml
+├── cacio-tta/
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── com/
+│   │   │           └── github/
+│   │   │               └── caciocavallosilano/
+│   │   │                   └── cacio/
+│   │   │                       └── ctc/
+│   │   │                           ├── junit/
+│   │   │                           │   ├── CacioAssertJRunner.java
+│   │   │                           │   └── CacioTestRunner.java
+│   │   │                           ├── AbstractKeyStrokeMapping.java
+│   │   │                           ├── CTCAndroidInput.java
+│   │   │                           ├── CTCEventSource.java
+│   │   │                           ├── CTCFontManager.java
+│   │   │                           ├── CTCGraphicsConfiguration.java
+│   │   │                           ├── CTCGraphicsDevice.java
+│   │   │                           ├── CTCGraphicsEnvironment.java
+│   │   │                           ├── CTCPreloadClassLoader.java
+│   │   │                           ├── CTCRobotPeer.java
+│   │   │                           ├── CTCScreen.java
+│   │   │                           ├── CTCSurfaceManagerFactory.java
+│   │   │                           ├── CTCToolkit.java
+│   │   │                           ├── CTCVolatileSurfaceManager.java
+│   │   │                           ├── FontManagerUtil.java
+│   │   │                           ├── KeyStrokeMapping.java
+│   │   │                           ├── KeyStrokeMappingDE.java
+│   │   │                           ├── KeyStrokeMappingEN.java
+│   │   │                           ├── KeyStrokeMappingFactory.java
+│   │   │                           └── MouseClickSupport.java
+│   │   └── test/
+│   │       └── java/
+│   │           └── com/
+│   │               └── github/
+│   │                   └── caciocavallosilano/
+│   │                       └── cacio/
+│   │                           └── ctc/
+│   │                               ├── ClickEventTestFESTTest.java
+│   │                               ├── DialogFocusLostFESTTest.java
+│   │                               ├── DragMouseTest.java
+│   │                               ├── JidePopupFocusFESTTest.java
+│   │                               ├── MouseInfoTest.java
+│   │                               ├── PopupFocusFESTTest.java
+│   │                               ├── ResizeWindowTest.java
+│   │                               ├── SimpleFESTTest.java
+│   │                               └── WindowLeakTest.java
+│   └── pom.xml
+├── .gitignore
+├── LICENSE
+├── README.md
+├── build_and_out.sh
+└── pom.xml

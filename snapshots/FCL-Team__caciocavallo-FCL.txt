@@ -1,0 +1,793 @@
+# Repository: FCL-Team/caciocavallo-FCL
+# Default branch: master
+# Total entries: 787
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── maven.yml
+├── .settings/
+│   └── org.eclipse.m2e.core.prefs
+├── cacio-androidnw/
+│   ├── .settings/
+│   │   ├── org.eclipse.jdt.apt.core.prefs
+│   │   ├── org.eclipse.jdt.core.prefs
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── lib/
+│   │   └── xml-libs-pack.jar
+│   ├── src/
+│   │   └── main/
+│   │       ├── android_api_java/
+│   │       │   ├── android/
+│   │       │   │   ├── annotation/
+│   │       │   │   │   ├── AnimRes.java
+│   │       │   │   │   ├── AnimatorRes.java
+│   │       │   │   │   ├── AnyRes.java
+│   │       │   │   │   ├── ArrayRes.java
+│   │       │   │   │   ├── AttrRes.java
+│   │       │   │   │   ├── BoolRes.java
+│   │       │   │   │   ├── ColorRes.java
+│   │       │   │   │   ├── DimenRes.java
+│   │       │   │   │   ├── DrawableRes.java
+│   │       │   │   │   ├── FractionRes.java
+│   │       │   │   │   ├── IdRes.java
+│   │       │   │   │   ├── IntDef.java
+│   │       │   │   │   ├── IntegerRes.java
+│   │       │   │   │   ├── InterpolatorRes.java
+│   │       │   │   │   ├── LayoutRes.java
+│   │       │   │   │   ├── MenuRes.java
+│   │       │   │   │   ├── NonNull.java
+│   │       │   │   │   ├── Nullable.java
+│   │       │   │   │   ├── PluralsRes.java
+│   │       │   │   │   ├── RawRes.java
+│   │       │   │   │   ├── SdkConstant.java
+│   │       │   │   │   ├── StringDef.java
+│   │       │   │   │   ├── StringRes.java
+│   │       │   │   │   ├── StyleRes.java
+│   │       │   │   │   ├── StyleableRes.java
+│   │       │   │   │   ├── SuppressLint.java
+│   │       │   │   │   ├── SystemApi.java
+│   │       │   │   │   ├── TargetApi.java
+│   │       │   │   │   ├── Widget.java
+│   │       │   │   │   └── XmlRes.java
+│   │       │   │   ├── content/
+│   │       │   │   │   └── res/
+│   │       │   │   │       ├── AssetManager.java
+│   │       │   │   │       └── CompatibilityInfo.java
+│   │       │   │   ├── graphics/
+│   │       │   │   │   ├── Atlas.java
+│   │       │   │   │   ├── AvoidXfermode.java
+│   │       │   │   │   ├── Bitmap.aidl
+│   │       │   │   │   ├── Bitmap.java
+│   │       │   │   │   ├── BitmapFactory.java
+│   │       │   │   │   ├── BitmapRegionDecoder.java
+│   │       │   │   │   ├── BitmapShader.java
+│   │       │   │   │   ├── BlurMaskFilter.java
+│   │       │   │   │   ├── Camera.java
+│   │       │   │   │   ├── Canvas.java
+│   │       │   │   │   ├── Color.java
+│   │       │   │   │   ├── ColorFilter.java
+│   │       │   │   │   ├── ColorMatrix.java
+│   │       │   │   │   ├── ColorMatrixColorFilter.java
+│   │       │   │   │   ├── ComposePathEffect.java
+│   │       │   │   │   ├── ComposeShader.java
+│   │       │   │   │   ├── CornerPathEffect.java
+│   │       │   │   │   ├── DashPathEffect.java
+│   │       │   │   │   ├── DiscretePathEffect.java
+│   │       │   │   │   ├── DrawFilter.java
+│   │       │   │   │   ├── EmbossMaskFilter.java
+│   │       │   │   │   ├── FontFamily.java
+│   │       │   │   │   ├── FontListParser.java
+│   │       │   │   │   ├── ImageFormat.java
+│   │       │   │   │   ├── Insets.java
+│   │       │   │   │   ├── Interpolator.java
+│   │       │   │   │   ├── LargeBitmap.java
+│   │       │   │   │   ├── LayerRasterizer.java
+│   │       │   │   │   ├── LightingColorFilter.java
+│   │       │   │   │   ├── LinearGradient.java
+│   │       │   │   │   ├── MaskFilter.java
+│   │       │   │   │   ├── Matrix.java
+│   │       │   │   │   ├── Movie.java
+│   │       │   │   │   ├── NinePatch.java
+│   │       │   │   │   ├── Outline.java
+│   │       │   │   │   ├── Paint.java
+│   │       │   │   │   ├── PaintFlagsDrawFilter.java
+│   │       │   │   │   ├── Path.java
+│   │       │   │   │   ├── PathDashPathEffect.java
+│   │       │   │   │   ├── PathEffect.java
+│   │       │   │   │   ├── PathMeasure.java
+│   │       │   │   │   ├── Picture.java
+│   │       │   │   │   ├── PixelFormat.java
+│   │       │   │   │   ├── PixelXorXfermode.java
+│   │       │   │   │   ├── Point.aidl
+│   │       │   │   │   ├── Point.java
+│   │       │   │   │   ├── PointF.aidl
+│   │       │   │   │   ├── PointF.java
+│   │       │   │   │   ├── PorterDuff.java
+│   │       │   │   │   ├── PorterDuffColorFilter.java
+│   │       │   │   │   ├── PorterDuffXfermode.java
+│   │       │   │   │   ├── RadialGradient.java
+│   │       │   │   │   ├── Rasterizer.java
+│   │       │   │   │   ├── Rect.aidl
+│   │       │   │   │   ├── Rect.java
+│   │       │   │   │   ├── RectF.aidl
+│   │       │   │   │   ├── RectF.java
+│   │       │   │   │   ├── Region.aidl
+│   │       │   │   │   ├── Region.java
+│   │       │   │   │   ├── RegionIterator.java
+│   │       │   │   │   ├── Shader.java
+│   │       │   │   │   ├── SumPathEffect.java
+│   │       │   │   │   ├── SurfaceTexture.java
+│   │       │   │   │   ├── SweepGradient.java
+│   │       │   │   │   ├── TableMaskFilter.java
+│   │       │   │   │   ├── TemporaryBuffer.java
+│   │       │   │   │   ├── Typeface.java
+│   │       │   │   │   ├── Xfermode.java
+│   │       │   │   │   ├── YuvImage.java
+│   │       │   │   │   └── package.html
+│   │       │   │   ├── hardware/
+│   │       │   │   │   └── camera2/
+│   │       │   │   │       └── utils/
+│   │       │   │   │           └── HashCodeHelpers.java
+│   │       │   │   ├── os/
+│   │       │   │   │   ├── OpenJDKNativeRegister.java
+│   │       │   │   │   ├── Parcel.java
+│   │       │   │   │   ├── ParcelFileDescriptor.java
+│   │       │   │   │   ├── Parcelable.java
+│   │       │   │   │   ├── SystemClock.java
+│   │       │   │   │   ├── SystemProperties.java
+│   │       │   │   │   └── Trace.java
+│   │       │   │   ├── system/
+│   │       │   │   │   ├── OsConstants.java
+│   │       │   │   │   ├── StructAddrinfo.java
+│   │       │   │   │   ├── StructFlock.java
+│   │       │   │   │   ├── StructGroupReq.java
+│   │       │   │   │   ├── StructGroupSourceReq.java
+│   │       │   │   │   ├── StructLinger.java
+│   │       │   │   │   ├── StructPasswd.java
+│   │       │   │   │   ├── StructPollfd.java
+│   │       │   │   │   ├── StructStat.java
+│   │       │   │   │   ├── StructStatVfs.java
+│   │       │   │   │   ├── StructTimeval.java
+│   │       │   │   │   ├── StructUcred.java
+│   │       │   │   │   └── StructUtsname.java
+│   │       │   │   ├── text/
+│   │       │   │   │   └── TextUtils.java
+│   │       │   │   ├── util/
+│   │       │   │   │   ├── AndroidException.java
+│   │       │   │   │   ├── AndroidRuntimeException.java
+│   │       │   │   │   ├── ArrayMap.java
+│   │       │   │   │   ├── ArraySet.java
+│   │       │   │   │   ├── AttributeSet.java
+│   │       │   │   │   ├── Base64.java
+│   │       │   │   │   ├── Base64DataException.java
+│   │       │   │   │   ├── Base64InputStream.java
+│   │       │   │   │   ├── Base64OutputStream.java
+│   │       │   │   │   ├── Config.java
+│   │       │   │   │   ├── ContainerHelpers.java
+│   │       │   │   │   ├── DayOfMonthCursor.java
+│   │       │   │   │   ├── DebugUtils.java
+│   │       │   │   │   ├── DisplayMetrics.java
+│   │       │   │   │   ├── EventLog.java
+│   │       │   │   │   ├── EventLogTags.java
+│   │       │   │   │   ├── ExceptionUtils.java
+│   │       │   │   │   ├── FastImmutableArraySet.java
+│   │       │   │   │   ├── FloatMath.java
+│   │       │   │   │   ├── FloatProperty.java
+│   │       │   │   │   ├── IntProperty.java
+│   │       │   │   │   ├── JsonReader.java
+│   │       │   │   │   ├── JsonScope.java
+│   │       │   │   │   ├── JsonToken.java
+│   │       │   │   │   ├── JsonWriter.java
+│   │       │   │   │   ├── LayoutDirection.java
+│   │       │   │   │   ├── LocalLog.java
+│   │       │   │   │   ├── Log.java
+│   │       │   │   │   ├── LogPrinter.java
+│   │       │   │   │   ├── LogWriter.java
+│   │       │   │   │   ├── LongArray.java
+│   │       │   │   │   ├── LongSparseArray.java
+│   │       │   │   │   ├── LongSparseLongArray.java
+│   │       │   │   │   ├── MalformedJsonException.java
+│   │       │   │   │   ├── MapCollections.java
+│   │       │   │   │   ├── MathUtils.java
+│   │       │   │   │   ├── MonthDisplayHelper.java
+│   │       │   │   │   ├── MutableBoolean.java
+│   │       │   │   │   ├── MutableByte.java
+│   │       │   │   │   ├── MutableChar.java
+│   │       │   │   │   ├── MutableDouble.java
+│   │       │   │   │   ├── MutableFloat.java
+│   │       │   │   │   ├── MutableInt.java
+│   │       │   │   │   ├── MutableLong.java
+│   │       │   │   │   ├── MutableShort.java
+│   │       │   │   │   ├── NoSuchPropertyException.java
+│   │       │   │   │   ├── Pair.java
+│   │       │   │   │   ├── Patterns.java
+│   │       │   │   │   ├── Pools.java
+│   │       │   │   │   ├── PrefixPrinter.java
+│   │       │   │   │   ├── PrintStreamPrinter.java
+│   │       │   │   │   ├── PrintWriterPrinter.java
+│   │       │   │   │   ├── Printer.java
+│   │       │   │   │   ├── Property.java
+│   │       │   │   │   ├── Range.java
+│   │       │   │   │   ├── Rational.java
+│   │       │   │   │   ├── ReflectiveProperty.java
+│   │       │   │   │   ├── Singleton.java
+│   │       │   │   │   ├── Size.java
+│   │       │   │   │   ├── SizeF.java
+│   │       │   │   │   ├── Slog.java
+│   │       │   │   │   ├── SparseArray.java
+│   │       │   │   │   ├── SparseBooleanArray.java
+│   │       │   │   │   ├── SparseIntArray.java
+│   │       │   │   │   ├── SparseLongArray.java
+│   │       │   │   │   ├── Spline.java
+│   │       │   │   │   ├── StringBuilderPrinter.java
+│   │       │   │   │   ├── SuperNotCalledException.java
+│   │       │   │   │   ├── TimeFormatException.java
+│   │       │   │   │   ├── TimedRemoteCaller.java
+│   │       │   │   │   ├── TimingLogger.java
+│   │       │   │   │   ├── TrustedTime.java
+│   │       │   │   │   ├── TypedValue.java
+│   │       │   │   │   ├── Xml.java
+│   │       │   │   │   ├── XmlPullAttributes.java
+│   │       │   │   │   └── package.html
+│   │       │   │   └── view/
+│   │       │   │       └── Surface.java
+│   │       │   ├── com/
+│   │       │   │   └── android/
+│   │       │   │       └── internal/
+│   │       │   │           ├── awt/
+│   │       │   │           │   └── AndroidGraphics2D.java.z
+│   │       │   │           └── util/
+│   │       │   │               ├── ArrayUtils.java
+│   │       │   │               ├── FastMath.java
+│   │       │   │               ├── FastPrintWriter.java
+│   │       │   │               ├── FastXmlSerializer.java
+│   │       │   │               ├── GrowingArrayUtils.java
+│   │       │   │               ├── Preconditions.java
+│   │       │   │               └── XmlUtils.java
+│   │       │   ├── dalvik/
+│   │       │   │   └── system/
+│   │       │   │       ├── CloseGuard.java
+│   │       │   │       ├── VMRuntime.java
+│   │       │   │       └── VMStack.java
+│   │       │   ├── libcore/
+│   │       │   │   ├── internal/
+│   │       │   │   │   └── StringPool.java
+│   │       │   │   ├── io/
+│   │       │   │   │   └── IoUtils.java
+│   │       │   │   └── util/
+│   │       │   │       ├── CollectionUtils.java
+│   │       │   │       ├── EmptyArray.java
+│   │       │   │       ├── Objects.java
+│   │       │   │       └── SneakyThrow.java
+│   │       │   └── org/
+│   │       │       └── apache/
+│   │       │           └── harmony/
+│   │       │               └── xml/
+│   │       │                   ├── dom/
+│   │       │                   │   ├── AttrImpl.java
+│   │       │                   │   ├── CDATASectionImpl.java
+│   │       │                   │   ├── CharacterDataImpl.java
+│   │       │                   │   ├── CommentImpl.java
+│   │       │                   │   ├── DOMConfigurationImpl.java
+│   │       │                   │   ├── DOMErrorImpl.java
+│   │       │                   │   ├── DOMImplementationImpl.java
+│   │       │                   │   ├── DocumentFragmentImpl.java
+│   │       │                   │   ├── DocumentImpl.java
+│   │       │                   │   ├── DocumentTypeImpl.java
+│   │       │                   │   ├── ElementImpl.java
+│   │       │                   │   ├── EntityImpl.java
+│   │       │                   │   ├── EntityReferenceImpl.java
+│   │       │                   │   ├── InnerNodeImpl.java
+│   │       │                   │   ├── LeafNodeImpl.java
+│   │       │                   │   ├── NodeImpl.java
+│   │       │                   │   ├── NodeListImpl.java
+│   │       │                   │   ├── NotationImpl.java
+│   │       │                   │   ├── ProcessingInstructionImpl.java
+│   │       │                   │   └── TextImpl.java
+│   │       │                   ├── parsers/
+│   │       │                   │   ├── SAXParserFactoryImpl.java
+│   │       │                   │   └── SAXParserImpl.java
+│   │       │                   ├── ExpatAttributes.java
+│   │       │                   ├── ExpatException.java
+│   │       │                   ├── ExpatParser.java
+│   │       │                   └── ExpatReader.java
+│   │       └── java/
+│   │           └── net/
+│   │               └── java/
+│   │                   └── openjdk/
+│   │                       └── cacio/
+│   │                           └── ctc/
+│   │                               ├── AbstractKeyStrokeMapping.java
+│   │                               ├── CTCAndroidInput.java
+│   │                               ├── CTCClipboard.java
+│   │                               ├── CTCDesktopPeer.java
+│   │                               ├── CTCEventSource.java
+│   │                               ├── CTCFontManager.java
+│   │                               ├── CTCFontScaler.java.z
+│   │                               ├── CTCGraphicsConfiguration.java
+│   │                               ├── CTCGraphicsDevice.java
+│   │                               ├── CTCGraphicsEnvironment.java
+│   │                               ├── CTCRobotPeer.java
+│   │                               ├── CTCScreen.java
+│   │                               ├── CTCStringTransferable.java
+│   │                               ├── CTCSurfaceManagerFactory.java
+│   │                               ├── CTCToolkit.java
+│   │                               ├── CTCVolatileSurfaceManager.java
+│   │                               ├── ExternalMouseReader.java
+│   │                               ├── FCMInternalWrapper.java
+│   │                               ├── FontManagerUtil.java
+│   │                               ├── InfdevGrabHandler.java
+│   │                               ├── KeyStrokeMapping.java
+│   │                               ├── KeyStrokeMappingDE.java
+│   │                               ├── KeyStrokeMappingEN.java
+│   │                               ├── KeyStrokeMappingFactory.java
+│   │                               └── MouseClickSupport.java
+│   ├── .classpath
+│   ├── .project
+│   └── pom.xml
+├── cacio-directfb/
+│   ├── .settings/
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── src/
+│   │   └── main/
+│   │       ├── c/
+│   │       │   ├── DirectFBEventSource.c
+│   │       │   ├── DirectFBGraphicsConfiguration.c
+│   │       │   ├── DirectFBGraphicsEnvironment.c
+│   │       │   └── DirectFBSurfaceData.c
+│   │       ├── include/
+│   │       │   └── SurfaceData.h
+│   │       └── java/
+│   │           └── net/
+│   │               └── java/
+│   │                   └── openjdk/
+│   │                       └── cacio/
+│   │                           └── directfb/
+│   │                               ├── DirectFBEventSource.java
+│   │                               ├── DirectFBGraphicsConfiguration.java
+│   │                               ├── DirectFBGraphicsDevice.java
+│   │                               ├── DirectFBGraphicsEnvironment.java
+│   │                               ├── DirectFBRect.java
+│   │                               ├── DirectFBScreen.java
+│   │                               ├── DirectFBSurfaceData.java
+│   │                               ├── DirectFBSurfaceManager.java
+│   │                               ├── DirectFBSurfaceManagerFactory.java
+│   │                               └── DirectFBToolkit.java
+│   ├── .project
+│   └── pom.xml
+├── cacio-escher/
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── gnu/
+│   │   │           └── java/
+│   │   │               └── awt/
+│   │   │                   └── peer/
+│   │   │                       └── x/
+│   │   │                           ├── EscherBlitLoops.java
+│   │   │                           ├── EscherEventPump.java
+│   │   │                           ├── EscherFontConfiguration.java
+│   │   │                           ├── EscherFontManager.java
+│   │   │                           ├── EscherPlatformWindow.java
+│   │   │                           ├── EscherPlatformWindowFactory.java
+│   │   │                           ├── EscherRenderer.java
+│   │   │                           ├── EscherSurfaceManagerFactory.java
+│   │   │                           ├── EscherTextRenderer.java
+│   │   │                           ├── EscherToolkit.java
+│   │   │                           ├── EscherVolatileSurfaceManager.java
+│   │   │                           ├── KeyboardMapping.java
+│   │   │                           ├── XDrawableDataBuffer.java
+│   │   │                           ├── XDrawableRaster.java
+│   │   │                           ├── XDrawableSurfaceData.java
+│   │   │                           ├── XEventSource.java
+│   │   │                           ├── XGraphicsConfiguration.java
+│   │   │                           ├── XGraphicsDevice.java
+│   │   │                           ├── XGraphicsEnvironment.java
+│   │   │                           └── ZPixmapDataBuffer.java
+│   │   └── test/
+│   │       └── java/
+│   │           ├── gnu/
+│   │           │   └── escher/
+│   │           │       ├── TestButton.java
+│   │           │       ├── TestCanvas.java
+│   │           │       ├── TestComponents.java
+│   │           │       └── TestFrame.java
+│   │           └── TestPanel.java
+│   └── pom.xml
+├── cacio-sdl/
+│   ├── .settings/
+│   │   ├── org.eclipse.jdt.apt.core.prefs
+│   │   ├── org.eclipse.jdt.core.prefs
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── net/
+│   │   │   │       └── java/
+│   │   │   │           └── openjdk/
+│   │   │   │               └── awt/
+│   │   │   │                   └── peer/
+│   │   │   │                       └── sdl/
+│   │   │   │                           ├── SDLBlit.java
+│   │   │   │                           ├── SDLGraphicsConfiguration.java
+│   │   │   │                           ├── SDLGraphicsDevice.java
+│   │   │   │                           ├── SDLGraphicsEnvironment.java
+│   │   │   │                           ├── SDLScreen.java
+│   │   │   │                           ├── SDLSurfaceData.java
+│   │   │   │                           ├── SDLSurfaceManagerFactory.java
+│   │   │   │                           ├── SDLToolkit.java
+│   │   │   │                           └── SDLVolatileSurfaceManager.java
+│   │   │   └── native/
+│   │   │       ├── SDLBlit.c
+│   │   │       ├── SDLGraphicsEnvironment.c
+│   │   │       ├── SDLScreen.c
+│   │   │       ├── SDLSurfaceData.c
+│   │   │       ├── SDLVolatileSurfaceManager.c
+│   │   │       ├── SurfaceData.h
+│   │   │       └── cacio-sdl.h
+│   │   └── test/
+│   │       └── java/
+│   │           └── cacio/
+│   │               └── test/
+│   │                   └── TestPanel.java
+│   ├── .classpath
+│   ├── .project
+│   └── pom.xml
+├── cacio-shared/
+│   ├── .settings/
+│   │   ├── org.eclipse.core.resources.prefs
+│   │   ├── org.eclipse.jdt.apt.core.prefs
+│   │   ├── org.eclipse.jdt.core.prefs
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── sun/
+│   │   │           └── awt/
+│   │   │               └── peer/
+│   │   │                   └── cacio/
+│   │   │                       ├── managed/
+│   │   │                       │   ├── AbstractManagedWindowContainer.java
+│   │   │                       │   ├── EventData.java
+│   │   │                       │   ├── FocusManager.java
+│   │   │                       │   ├── FullScreenEventPump.java
+│   │   │                       │   ├── FullScreenWindowFactory.java
+│   │   │                       │   ├── ManagedWindow.java
+│   │   │                       │   ├── ManagedWindowContainer.java
+│   │   │                       │   ├── PlatformScreen.java
+│   │   │                       │   ├── PlatformScreenSelector.java
+│   │   │                       │   └── ScreenManagedWindowContainer.java
+│   │   │                       ├── BlitClipHelper.java
+│   │   │                       ├── CacioButtonPeer.java
+│   │   │                       ├── CacioCanvasPeer.java
+│   │   │                       ├── CacioCheckboxMenuItemPeer.java
+│   │   │                       ├── CacioCheckboxPeer.java
+│   │   │                       ├── CacioChoicePeer.java
+│   │   │                       ├── CacioComponent.java
+│   │   │                       ├── CacioComponentPeer.java
+│   │   │                       ├── CacioContainerPeer.java
+│   │   │                       ├── CacioDialogPeer.java
+│   │   │                       ├── CacioEventPump.java
+│   │   │                       ├── CacioEventSource.java
+│   │   │                       ├── CacioFileDialogPeer.java
+│   │   │                       ├── CacioFramePeer.java
+│   │   │                       ├── CacioKeyboardFocusManagerPeer.java
+│   │   │                       ├── CacioLabelPeer.java
+│   │   │                       ├── CacioLightweightFramePeer.java
+│   │   │                       ├── CacioListPeer.java
+│   │   │                       ├── CacioMenuBarPeer.java
+│   │   │                       ├── CacioMenuComponentPeer.java
+│   │   │                       ├── CacioMenuItemPeer.java
+│   │   │                       ├── CacioMenuPeer.java
+│   │   │                       ├── CacioMouseInfoPeer.java
+│   │   │                       ├── CacioPanelPeer.java
+│   │   │                       ├── CacioPopupMenuPeer.java
+│   │   │                       ├── CacioScrollBarPeer.java
+│   │   │                       ├── CacioScrollPanePeer.java
+│   │   │                       ├── CacioSwingComponent.java
+│   │   │                       ├── CacioTextAreaPeer.java
+│   │   │                       ├── CacioTextFieldPeer.java
+│   │   │                       ├── CacioToolkit.java
+│   │   │                       ├── CacioWindowPeer.java
+│   │   │                       ├── GetPeer.java
+│   │   │                       ├── KFMHelper.java
+│   │   │                       ├── PlatformToplevelWindow.java
+│   │   │                       ├── PlatformWindow.java
+│   │   │                       ├── PlatformWindowFactory.java
+│   │   │                       ├── ProxyWindow.java
+│   │   │                       ├── ProxyWindowPeer.java
+│   │   │                       └── WindowClippedGraphics.java
+│   │   └── test/
+│   │       └── java/
+│   │           ├── cacio/
+│   │           │   └── test/
+│   │           │       ├── fluffapp/
+│   │           │       │   ├── TestAWT.form
+│   │           │       │   └── TestAWT.java
+│   │           │       ├── TestAddRemoveFrame.form
+│   │           │       ├── TestAddRemoveFrame.java
+│   │           │       ├── TestButton.java
+│   │           │       ├── TestCheckBox.java
+│   │           │       ├── TestChoice.java
+│   │           │       ├── TestFileDialog.java
+│   │           │       ├── TestLabel.java
+│   │           │       ├── TestList.java
+│   │           │       ├── TestMenu.java
+│   │           │       ├── TestPanel.java
+│   │           │       ├── TestPopup.java
+│   │           │       ├── TestScrollBar.java
+│   │           │       ├── TestScrollPane.java
+│   │           │       ├── TestTextArea.java
+│   │           │       └── TestTextField.java
+│   │           └── sun/
+│   │               └── awt/
+│   │                   └── peer/
+│   │                       └── test/
+│   │                           ├── TestList.java
+│   │                           └── TestTextArea.java
+│   ├── .classpath
+│   ├── .project
+│   └── pom.xml
+├── cacio-tta/
+│   ├── .settings/
+│   │   ├── org.eclipse.jdt.apt.core.prefs
+│   │   ├── org.eclipse.jdt.core.prefs
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── src/
+│   │   ├── main/
+│   │   │   └── java/
+│   │   │       └── net/
+│   │   │           └── java/
+│   │   │               └── openjdk/
+│   │   │                   └── cacio/
+│   │   │                       └── ctc/
+│   │   │                           ├── AbstractKeyStrokeMapping.java
+│   │   │                           ├── CTCEventSource.java
+│   │   │                           ├── CTCGraphicsConfiguration.java
+│   │   │                           ├── CTCGraphicsDevice.java
+│   │   │                           ├── CTCGraphicsEnvironment.java
+│   │   │                           ├── CTCRobotPeer.java
+│   │   │                           ├── CTCScreen.java
+│   │   │                           ├── CTCSurfaceManagerFactory.java
+│   │   │                           ├── CTCToolkit.java
+│   │   │                           ├── CTCVolatileSurfaceManager.java
+│   │   │                           ├── KeyStrokeMapping.java
+│   │   │                           ├── KeyStrokeMappingDE.java
+│   │   │                           ├── KeyStrokeMappingEN.java
+│   │   │                           ├── KeyStrokeMappingFactory.java
+│   │   │                           └── MouseClickSupport.java
+│   │   └── test/
+│   │       └── java/
+│   │           └── net/
+│   │               └── java/
+│   │                   └── openjdk/
+│   │                       └── cacio/
+│   │                           └── ctc/
+│   │                               ├── junit/
+│   │                               │   ├── CacioFESTRunner.java
+│   │                               │   └── CacioTestRunner.java
+│   │                               ├── test/
+│   │                               │   └── Test.java
+│   │                               ├── ClickEventTestFESTTest.java
+│   │                               ├── DialogFocusLostFESTTest.java
+│   │                               ├── DragMouseTest.java
+│   │                               ├── JidePopupFocusFESTTest.java
+│   │                               ├── MouseInfoTest.java
+│   │                               ├── PopupFocusFESTTest.java
+│   │                               ├── ResizeWindowTest.java
+│   │                               ├── SimpleFESTTest.java
+│   │                               └── WindowLeakTest.java
+│   ├── .classpath
+│   ├── .project
+│   ├── pom.xml
+│   └── test.png
+├── cacio-wayland/
+│   ├── src/
+│   │   └── main/
+│   │       ├── include/
+│   │       │   └── SurfaceData.h
+│   │       ├── java/
+│   │       │   └── net/
+│   │       │       └── java/
+│   │       │           └── openjdk/
+│   │       │               └── cacio/
+│   │       │                   └── wayland/
+│   │       │                       ├── WaylandEventSource.java
+│   │       │                       ├── WaylandGraphicsConfiguration.java
+│   │       │                       ├── WaylandGraphicsDevice.java
+│   │       │                       ├── WaylandGraphicsEnvironment.java
+│   │       │                       ├── WaylandScreen.java
+│   │       │                       ├── WaylandScreenSelector.java
+│   │       │                       ├── WaylandShmSurfaceData.java
+│   │       │                       ├── WaylandSurface.java
+│   │       │                       ├── WaylandSurfaceManager.java
+│   │       │                       ├── WaylandSurfaceManagerFactory.java
+│   │       │                       └── WaylandToolkit.java
+│   │       └── native/
+│   │           ├── WaylandEventSource.c
+│   │           ├── WaylandGraphicsConfiguration.c
+│   │           ├── WaylandShmSurfaceData.c
+│   │           ├── WaylandSurface.c
+│   │           ├── wayland.c
+│   │           ├── wayland.h
+│   │           ├── wayland_events.c
+│   │           ├── wayland_events.h
+│   │           ├── wayland_input.c
+│   │           ├── wayland_shm_surface.c
+│   │           └── wayland_shm_surface.h
+│   └── pom.xml
+├── cacio-web/
+│   ├── .settings/
+│   │   ├── org.eclipse.jdt.apt.core.prefs
+│   │   ├── org.eclipse.jdt.core.prefs
+│   │   └── org.eclipse.m2e.core.prefs
+│   ├── cacio-web-native/
+│   │   └── pom.xml
+│   ├── cacio-web-package/
+│   │   └── src/
+│   │       └── main/
+│   │           └── assembly/
+│   │               └── src.xml
+│   ├── setup/
+│   │   ├── cacioweb.jar
+│   │   ├── javacw
+│   │   └── javacw.bak
+│   ├── src/
+│   │   └── main/
+│   │       ├── assembly/
+│   │       │   └── src.xml
+│   │       ├── c/
+│   │       │   ├── SurfaceData.h
+│   │       │   ├── WebSurfaceData.c
+│   │       │   └── cacio-web.h
+│   │       ├── java/
+│   │       │   └── net/
+│   │       │       └── java/
+│   │       │           └── openjdk/
+│   │       │               ├── awt/
+│   │       │               │   └── peer/
+│   │       │               │       └── web/
+│   │       │               │           ├── BlitScreenUpdate.java
+│   │       │               │           ├── CopyAreaScreenUpdate.java
+│   │       │               │           ├── GridDamageTracker.java
+│   │       │               │           ├── LibraryLoader.java
+│   │       │               │           ├── ScreenUpdate.java
+│   │       │               │           ├── TreeImagePacker.java
+│   │       │               │           ├── WebEventManager.java
+│   │       │               │           ├── WebFocusManager.java
+│   │       │               │           ├── WebGraphicsConfiguration.java
+│   │       │               │           ├── WebGraphicsDevice.java
+│   │       │               │           ├── WebGraphicsEnvironment.java
+│   │       │               │           ├── WebKeyboardFocusManager.java
+│   │       │               │           ├── WebKeyboardStateTracker.java
+│   │       │               │           ├── WebMouseStateTracker.java
+│   │       │               │           ├── WebRect.java
+│   │       │               │           ├── WebScreen.java
+│   │       │               │           ├── WebSessionState.java
+│   │       │               │           ├── WebSurfaceData.java
+│   │       │               │           ├── WebSurfaceManagerFactory.java
+│   │       │               │           ├── WebSystemTrayPeer.java
+│   │       │               │           ├── WebToolkit.java
+│   │       │               │           ├── WebVolativeSurfaceManager.java
+│   │       │               │           └── WebWindowFactory.java
+│   │       │               └── cacio/
+│   │       │                   ├── server/
+│   │       │                   │   ├── CacioServer.java
+│   │       │                   │   ├── CacioSessionListener.java
+│   │       │                   │   └── CacioWebSecurityManager.java
+│   │       │                   └── servlet/
+│   │       │                       ├── benchmark/
+│   │       │                       │   └── ImgBenchServlet.java
+│   │       │                       ├── imgformat/
+│   │       │                       │   ├── Base64Encoder.java
+│   │       │                       │   ├── DynamicByteBuffer.java
+│   │       │                       │   ├── PNGEncoder.java
+│   │       │                       │   ├── PNGEncoderImageIO.java
+│   │       │                       │   ├── PNGEncoderKeypoint.java
+│   │       │                       │   └── RLEImageEncoder.java
+│   │       │                       ├── transport/
+│   │       │                       │   ├── Base64PngTransport.java
+│   │       │                       │   ├── BinaryPngTransport.java
+│   │       │                       │   ├── BinaryRLETransport.java
+│   │       │                       │   ├── BinaryTransport.java
+│   │       │                       │   ├── ImageTransport.java
+│   │       │                       │   └── Transport.java
+│   │       │                       ├── AppContextCreator.java
+│   │       │                       ├── AppStartServlet.java
+│   │       │                       ├── EventReceiveServlet.java
+│   │       │                       ├── ImageStreamer.java
+│   │       │                       ├── ResourceLoaderServlet.java
+│   │       │                       ├── SessionInitializeServlet.java
+│   │       │                       ├── TestSessionManager.java
+│   │       │                       ├── WebSessionManager.java
+│   │       │                       ├── WebSessionManagerImpl.java
+│   │       │                       ├── WebSocketServlet.java
+│   │       │                       └── WebSocketStreamThread.java
+│   │       ├── resources/
+│   │       │   ├── HttpEventStreamer.js
+│   │       │   ├── ImgTransport.js
+│   │       │   ├── RLEImageDecoder.js
+│   │       │   ├── StreamBase.html
+│   │       │   ├── WSBase64Transport.js
+│   │       │   ├── WebSocketEventStreamer.js
+│   │       │   ├── WebSocketShared.js
+│   │       │   ├── XHR1RLETransport.js
+│   │       │   ├── XHR2PngTransport.js
+│   │       │   ├── XHR2RLETransport.js
+│   │       │   ├── XHR2Shared.js
+│   │       │   ├── XHRBase64Transport.js
+│   │       │   └── XHRShared.js
+│   │       └── webapp/
+│   │           ├── WEB-INF/
+│   │           │   └── web.xml
+│   │           └── index.jsp
+│   ├── .classpath
+│   ├── .project
+│   ├── Makefile
+│   ├── Makefile.bak
+│   ├── Makefile.orig
+│   └── pom.xml
+├── cacio-x11/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── sun/
+│   │   │   │       └── awt/
+│   │   │   │           └── peer/
+│   │   │   │               └── x11/
+│   │   │   │                   ├── X11Blit.java
+│   │   │   │                   ├── X11EventData.java
+│   │   │   │                   ├── X11EventPump.java
+│   │   │   │                   ├── X11GraphicsConfiguration.java
+│   │   │   │                   ├── X11GraphicsDevice.java
+│   │   │   │                   ├── X11GraphicsEnvironment.java
+│   │   │   │                   ├── X11PlatformScreen.java
+│   │   │   │                   ├── X11PlatformWindow.java
+│   │   │   │                   ├── X11PlatformWindowFactory.java
+│   │   │   │                   ├── X11SurfaceData.java
+│   │   │   │                   ├── X11SurfaceManagerFactory.java
+│   │   │   │                   ├── X11Toolkit.java
+│   │   │   │                   └── X11VolatileSurfaceManager.java
+│   │   │   └── native/
+│   │   │       ├── SurfaceData.h
+│   │   │       ├── X11Blit.c
+│   │   │       ├── X11EventPump.c
+│   │   │       ├── X11GraphicsEnvironment.c
+│   │   │       ├── X11PlatformScreen.c
+│   │   │       ├── X11PlatformWindow.c
+│   │   │       ├── X11SurfaceData.c
+│   │   │       ├── X11VolatileSurfaceManager.c
+│   │   │       └── cacio-x11.h
+│   │   └── test/
+│   │       └── java/
+│   │           └── cacio/
+│   │               └── test/
+│   │                   └── TestPanel.java
+│   └── pom.xml
+├── doc/
+│   ├── cacio-web/
+│   │   ├── DamageTracking.html
+│   │   ├── damage_tracker.png
+│   │   ├── packer.png
+│   │   └── real_world_packed.png
+│   ├── Notes.txt
+│   ├── OpenJDK-proposal.txt
+│   ├── Portable AWT Backends Doku.txt
+│   ├── Tutorial_External_Interfaces.html
+│   ├── Tutorial_Internal_Interfaces.html
+│   ├── What we did.txt
+│   ├── challenge_caciocavallo_project.html
+│   ├── index.html
+│   ├── index.html.orig
+│   └── tasks_openjdk_challenge.txt
+├── target/
+│   └── javadoc-bundle-options/
+│       └── javadoc-options-javadoc-resources.xml
+├── .gitignore
+├── .project
+├── LICENSE
+├── README
+├── build_and_out.bash
+└── pom.xml

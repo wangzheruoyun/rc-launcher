@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "source": "FCL-release-1.3.2.7-arm64-v8a.apk assets/app_runtime/java",
+  "generated_at": "",
+  "versions": [
+    {
+      "java_version": "jre8",
+      "major": 8,
+      "build": 12,
+      "archives": [
+        {
+          "kind": "universal",
+          "abi": null,
+          "file": "universal.tar.xz",
+          "sha1": "23cd14560abdfc56a951dbe4c0ab75012f199016",
+          "size": 9540292
+        },
+        {
+          "kind": "bin",
+          "abi": "arm64-v8a",
+          "file": "bin-arm64.tar.xz",
+          "sha1": "ffa036ee0b48271a4e0756d2be60989b77031f76",
+          "size": 4347796
+        }
+      ]
+    },
+    {
+      "java_version": "jre17",
+      "major": 17,
+      "build": 11,
+      "archives": [
+        {
+          "kind": "universal",
+          "abi": null,
+          "file": "universal.tar.xz",
+          "sha1": "292aa9801fd8969dfefb2fe91d723aa87e0bf088",
+          "size": 17070632
+        },
+        {
+          "kind": "bin",
+          "abi": "arm64-v8a",
+          "file": "bin-arm64.tar.xz",
+          "sha1": "dd2d348b254600ac0452207d28e815de3f82dcf8",
+          "size": 4640448
+        }
+      ]
+    },
+    {
+      "java_version": "jre21",
+      "major": 21,
+      "build": 11,
+      "archives": [
+        {
+          "kind": "universal",
+          "abi": null,
+          "file": "universal.tar.xz",
+          "sha1": "6566d32b34211ebd75810c140d740966a3a76767",
+          "size": 18974588
+        },
+        {
+          "kind": "bin",
+          "abi": "arm64-v8a",
+          "file": "bin-arm64.tar.xz",
+          "sha1": "f36209bfcc8bf939aa05eaab71858d14a9be1a2a",
+          "size": 6847128
+        }
+      ]
+    },
+    {
+      "java_version": "jre25",
+      "major": 25,
+      "build": 2,
+      "archives": [
+        {
+          "kind": "universal",
+          "abi": null,
+          "file": "universal.tar.xz",
+          "sha1": "8e3b22d9fbdb56a39fab46cea5cf33dbb56db4da",
+          "size": 32814644
+        },
+        {
+          "kind": "bin",
+          "abi": "arm64-v8a",
+          "file": "bin-arm64.tar.xz",
+          "sha1": "498bbfdaee5d425b09402ba8b4dc48b93da69f4f",
+          "size": 5453168
+        }
+      ]
+    }
+  ]
+}

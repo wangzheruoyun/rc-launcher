@@ -1,0 +1,69 @@
+# Repository: ZalithLauncher/RendererPlugin
+# Default branch: main
+# Total entries: 63
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── android.yml
+├── app/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── com/
+│   │       │       └── movtery/
+│   │       │           └── zalithplugin/
+│   │       │               └── renderer/
+│   │       │                   └── MainActivity.kt
+│   │       ├── jniLibs/
+│   │       │   ├── arm64-v8a/
+│   │       │   │   └── libxx.so
+│   │       │   ├── armeabi-v7a/
+│   │       │   │   └── libxx.so
+│   │       │   ├── x86/
+│   │       │   │   └── libxx.so
+│   │       │   └── x86_64/
+│   │       │       └── libxx.so
+│   │       ├── res/
+│   │       │   ├── mipmap-anydpi-v26/
+│   │       │   │   ├── icon.xml
+│   │       │   │   └── icon_round.xml
+│   │       │   ├── mipmap-hdpi/
+│   │       │   │   ├── icon.png
+│   │       │   │   ├── icon_foreground.png
+│   │       │   │   └── icon_round.png
+│   │       │   ├── mipmap-mdpi/
+│   │       │   │   ├── icon.png
+│   │       │   │   ├── icon_foreground.png
+│   │       │   │   └── icon_round.png
+│   │       │   ├── mipmap-xhdpi/
+│   │       │   │   ├── icon.png
+│   │       │   │   ├── icon_foreground.png
+│   │       │   │   └── icon_round.png
+│   │       │   ├── mipmap-xxhdpi/
+│   │       │   │   ├── icon.png
+│   │       │   │   ├── icon_foreground.png
+│   │       │   │   └── icon_round.png
+│   │       │   ├── mipmap-xxxhdpi/
+│   │       │   │   ├── icon.png
+│   │       │   │   ├── icon_foreground.png
+│   │       │   │   └── icon_round.png
+│   │       │   └── values/
+│   │       │       └── icon_background.xml
+│   │       └── AndroidManifest.xml
+│   ├── .gitignore
+│   ├── build.gradle.kts
+│   └── plugin-key.jks
+├── gradle/
+│   ├── wrapper/
+│   │   ├── gradle-wrapper.jar
+│   │   └── gradle-wrapper.properties
+│   └── libs.versions.toml
+├── .gitattributes
+├── .gitignore
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+└── settings.gradle.kts

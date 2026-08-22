@@ -1,0 +1,75 @@
+# Repository: FCL-Team/EnchantNetCore
+# Default branch: main
+# Total entries: 69
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── src/
+│   ├── androidTest/
+│   │   └── java/
+│   │       └── org/
+│   │           └── fcl/
+│   │               └── enchantnetcore/
+│   │                   └── ExampleInstrumentedTest.kt
+│   ├── main/
+│   │   ├── cpp/
+│   │   │   ├── easytier_libs/
+│   │   │   │   ├── arm64-v8a/
+│   │   │   │   │   └── libeasytier_ffi.a
+│   │   │   │   ├── armeabi-v7a/
+│   │   │   │   │   └── libeasytier_ffi.a
+│   │   │   │   ├── x86/
+│   │   │   │   │   └── libeasytier_ffi.a
+│   │   │   │   ├── x86_64/
+│   │   │   │   │   └── libeasytier_ffi.a
+│   │   │   │   └── easytier.h
+│   │   │   ├── CMakeLists.txt
+│   │   │   └── enchant_net.cpp
+│   │   ├── java/
+│   │   │   └── org/
+│   │   │       └── fcl/
+│   │   │           └── enchantnetcore/
+│   │   │               ├── core/
+│   │   │               │   ├── FakeLanBroadcaster.java
+│   │   │               │   ├── InviteCode.java
+│   │   │               │   ├── LanScanner.java
+│   │   │               │   ├── Room.java
+│   │   │               │   └── RoomKind.java
+│   │   │               ├── easytier/
+│   │   │               │   ├── EasyTierAPI.java
+│   │   │               │   └── NativeBridge.java
+│   │   │               ├── service/
+│   │   │               │   ├── GuestVpnService.java
+│   │   │               │   ├── HostVpnService.java
+│   │   │               │   └── LanScanService.java
+│   │   │               ├── state/
+│   │   │               │   ├── EnchantNetException.java
+│   │   │               │   ├── EnchantNetRole.java
+│   │   │               │   ├── EnchantNetSnapshot.java
+│   │   │               │   ├── EnchantNetState.java
+│   │   │               │   ├── EnchantNetStateListener.java
+│   │   │               │   ├── GuestNoticeRes.java
+│   │   │               │   ├── HostNoticeRes.java
+│   │   │               │   └── LanScanNoticeRes.java
+│   │   │               ├── utils/
+│   │   │               │   ├── InviteQuickValidator.java
+│   │   │               │   ├── IpUtils.java
+│   │   │               │   └── PermissionUtils.java
+│   │   │               ├── EnchantNet.java
+│   │   │               └── LibraryInfo.java
+│   │   ├── res/
+│   │   │   └── drawable/
+│   │   │       └── enchantnet.png
+│   │   └── AndroidManifest.xml
+│   └── test/
+│       └── java/
+│           └── org/
+│               └── fcl/
+│                   └── enchantnetcore/
+│                       └── ExampleUnitTest.kt
+├── .gitattributes
+├── .gitignore
+├── README.md
+├── build.gradle.kts
+├── consumer-rules.pro
+└── proguard-rules.pro

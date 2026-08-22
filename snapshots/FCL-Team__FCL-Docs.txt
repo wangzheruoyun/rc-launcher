@@ -1,0 +1,37 @@
+# Repository: FCL-Team/FCL-Docs
+# Default branch: main
+# Total entries: 31
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── _about/
+│   ├── compilation.md
+│   ├── contribution.md
+│   └── contribution_zh_CN.md
+├── _account/
+│   ├── account.md
+│   └── account_zh_CN.md
+├── _controller/
+│   ├── upload_controller.md
+│   └── upload_controller_zh_CN.md
+├── _launcher/
+│   ├── introduction.md
+│   └── introduction_zh_CN.md
+├── _multiplayer/
+│   └── multiplayer.md
+├── assets/
+│   └── img/
+│       └── docs/
+│           ├── introduction/
+│           │   ├── game.jpg
+│           │   ├── img_app.png
+│           │   ├── ui_main_dark.jpg
+│           │   └── ui_main_light.jpg
+│           └── upload_controller/
+│               ├── community.png
+│               ├── info.png
+│               ├── share_pri.png
+│               ├── share_sec.png
+│               └── upload.png
+├── README.md
+└── index.json

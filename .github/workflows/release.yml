@@ -1,0 +1,194 @@
+# com.rc.launcher — automated release & artifact management (GitHub Actions).
+#
+# Task 23: 自动化发布与产物管理
+#   * 自动打 tag      — push to `main` (or manual dispatch) mints a CI tag
+#                       automatically; an explicit `v*` tag is released as-is.
+#   * 生成 Release    — publishes a GitHub Release (stable or pre-release).
+#   * SHA-256 校验和  — every installable package ships with a SHA256SUMS.txt.
+#   * 清理过期产物    — cleanup-artifacts prunes old Actions artifacts.
+#
+# Modeled after the FCL release.yml (tag-triggered production releases) and the
+# Zalith release_ci (CI builds), while adding automated tagging and artifact
+# housekeeping so the repo stays lean.
+
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.2.3). Leave empty to auto-tag from the default branch.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write   # create tags + publish releases
+
+# Never run two releases for the same ref at once.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RETAIN_ARTIFACTS: 20      # keep the most recent N artifacts
+  ARTIFACT_MAX_AGE_DAYS: 30 # delete artifacts older than this
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1) Resolve / mint the release tag (自动打 tag).
+  # ---------------------------------------------------------------------------
+  version:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      version: ${{ steps.resolve.outputs.version }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag / auto-tag
+        id: resolve
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "Using pushed tag: ${TAG}"
+          elif [[ -n "${INPUT_TAG}" ]]; then
+            TAG="${INPUT_TAG}"
+            if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "Using existing dispatch tag: ${TAG}"
+            else
+              echo "Creating dispatch tag: ${TAG}"
+              git config user.name  "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git tag -a "${TAG}" -m "Release ${TAG}"
+              git push origin "${TAG}"
+            fi
+          else
+            # 自动打 tag: deterministic, collision-free CI tag from main.
+            DATE="$(date -u +%Y.%m.%d)"
+            SHA="$(git rev-parse --short=7 HEAD)"
+            TAG="ci-${DATE}-${SHA}"
+            echo "Auto-tagging main with: ${TAG}"
+            if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              echo "Tag ${TAG} already exists remotely, reusing."
+            else
+              git config user.name  "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git tag -a "${TAG}" -m "Automated CI build ${TAG}"
+              git push origin "${TAG}"
+            fi
+          fi
+          {
+            echo "tag=${TAG}"
+            echo "version=${TAG#v}"
+            # Anything containing a hyphen (ci-*, vX.Y.Z-rcN, …) is a pre-release.
+            case "${TAG}" in
+              *-*) echo "is_prerelease=true"  ;;
+              *)   echo "is_prerelease=false" ;;
+            esac
+          } >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 2) Build the signed APK + AAB, reusing the CI pipeline.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build (reuse CI pipeline)
+    uses: ./.github/workflows/build.yml
+    secrets: inherit
+
+  # ---------------------------------------------------------------------------
+  # 3) Publish the GitHub Release with SHA-256 checksums.
+  # ---------------------------------------------------------------------------
+  release:
+    name: Publish release
+    needs: [ version, build ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: dist
+
+      - name: Download AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-aab
+          path: dist
+          if-no-files-found: ignore
+
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          # Only checksum the installable packages (never the sums file itself),
+          # and stay safe when the AAB is absent.
+          shopt -s nullglob
+          files=( *.apk *.aab )
+          shopt -u nullglob
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No release artifacts (APK/AAB) were produced." >&2
+            exit 1
+          fi
+          rm -f SHA256SUMS.txt
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+          echo "Generated SHA256SUMS.txt:"
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: ${{ needs.version.outputs.tag }}
+          files: |
+            dist/*
+          generate_release_notes: true
+          prerelease: ${{ needs.version.outputs.is_prerelease }}
+          make_latest: ${{ needs.version.outputs.is_prerelease == 'false' }}
+
+  # ---------------------------------------------------------------------------
+  # 4) 清理过期产物 — prune old Actions artifacts to control storage.
+  # ---------------------------------------------------------------------------
+  cleanup-artifacts:
+    name: Clean up expired artifacts
+    needs: [ release ]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write   # required to delete artifacts
+    steps:
+      - name: Delete expired artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RETAIN: ${{ env.RETAIN_ARTIFACTS }}
+          MAX_AGE_DAYS: ${{ env.ARTIFACT_MAX_AGE_DAYS }}
+        run: |
+          set -euo pipefail
+          repo="${GITHUB_REPOSITORY}"
+          cutoff=$(date -u -d "-${MAX_AGE_DAYS} days" +%s)
+          echo "Pruning artifacts in ${repo}: keep latest ${RETAIN}, delete older than ${MAX_AGE_DAYS} days."
+          # Stream every artifact (paginated) as "created_at<TAB>id<TAB>name",
+          # sort newest-first, drop the most recent RETAIN, then delete any that
+          # are older than the cutoff.
+          gh api -X GET "repos/${repo}/actions/artifacts?per_page=100" --paginate \
+            | jq -r '.artifacts[] | "\(.created_at)\t\(.id)\t\(.name)"' \
+            | sort -r \
+            | tail -n +$((RETAIN + 1)) \
+            | while IFS=$'\t' read -r created id name; do
+                ts=$(date -u -d "${created}" +%s)
+                if [[ "${ts}" -lt "${cutoff}" ]]; then
+                  echo "Deleting artifact #${id} (${name}, created ${created})"
+                  if ! gh api -X DELETE "repos/${repo}/actions/artifacts/${id}"; then
+                    echo "  !! failed to delete #${id}" >&2
+                  fi
+                fi
+              done
+          echo "Artifact cleanup pass complete."

@@ -1,0 +1,63 @@
+# Detekt — static analysis for the Kotlin/Compose side of RC Launcher.
+# Enforced (best-effort) by .github/workflows/stylecheck.yml via the
+# `io.gitlab.arturbosch.detekt` Gradle plugin. `buildUponDefaultConfig` in the
+# Gradle config merges these overrides on top of Detekt's built-in defaults, so
+# only the deltas are listed here. The goal mirrors the Rust side: one predictable
+# style, one shared config, low collaboration friction.
+#
+# Note: Detekt is configured with `ignoreFailures = true` + the CI job uses
+# `continue-on-error`, so it reports findings without ever blocking a merge.
+# `ktlint` (driven by .editorconfig) is the stricter, formatting-first gate.
+
+build:
+  # Report everything; we do not fail on a raw issue count.
+  maxIssues: 100000
+  excludeCorrectable: true
+  weights:
+    Complexity: 1
+    Style: 1
+    Performance: 1
+    PotentialDefects: 1
+    Security: 1
+    Naming: 1
+    Bugs: 1
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+  exclude:
+    - ProjectStatisticsReport
+    - ComplexityReport
+    - NotificationReport
+
+comments:
+  active: true
+  AbsentOrWrongFileLicense:
+    active: false
+
+style:
+  WildcardImport:
+    active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 120
+  NoEmptyFirstLineInClassBody:
+    active: true
+  PackageName:
+    active: false
+  FileName:
+    active: false
+  FinalNewLine:
+    active: false
+
+naming:
+  PackageNaming:
+    active: false
+  ClassNaming:
+    active: true
+  FunctionNaming:
+    active: true
+  VariableNaming:
+    active: true

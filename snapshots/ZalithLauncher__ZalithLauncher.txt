@@ -1,0 +1,1199 @@
+# Repository: ZalithLauncher/ZalithLauncher
+# Default branch: main
+# Total entries: 1193
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   └── feature_request.yml
+│   ├── images/
+│   │   ├── Screenshot_Game_EN_US.jpg
+│   │   ├── Screenshot_Game_ZH_CN.jpg
+│   │   ├── Screenshot_Game_ZH_TW.jpg
+│   │   ├── Screenshot_Launcher_Dark_EN_US.jpg
+│   │   ├── Screenshot_Launcher_Dark_ZH_CN.jpg
+│   │   ├── Screenshot_Launcher_Dark_ZH_TW.jpg
+│   │   ├── Screenshot_Launcher_Light_EN_US.jpg
+│   │   ├── Screenshot_Launcher_Light_ZH_CN.jpg
+│   │   └── Screenshot_Launcher_Light_ZH_TW.jpg
+│   └── workflows/
+│       └── android.yml
+├── ZalithLauncher/
+│   ├── libs/
+│   │   ├── ExagearApacheCommons.jar
+│   │   ├── exp4j-0.4.9-SNAPSHOT.jar
+│   │   ├── gson-2.8.6.jar
+│   │   ├── lwjgl3-natives-release.aar
+│   │   └── openal-soft-release.aar
+│   ├── src/
+│   │   └── main/
+│   │       ├── assets/
+│   │       │   ├── components/
+│   │       │   │   ├── caciocavallo/
+│   │       │   │   │   ├── ResConfHack.jar
+│   │       │   │   │   ├── cacio-androidnw-1.10-SNAPSHOT.jar
+│   │       │   │   │   ├── cacio-shared-1.10-SNAPSHOT.jar
+│   │       │   │   │   └── version
+│   │       │   │   ├── caciocavallo17/
+│   │       │   │   │   ├── cacio-agent.jar
+│   │       │   │   │   ├── cacio-shared-1.19.1-SNAPSHOT.jar
+│   │       │   │   │   ├── cacio-tta-1.19.1-SNAPSHOT.jar
+│   │       │   │   │   └── version
+│   │       │   │   ├── components/
+│   │       │   │   │   ├── MioFabricAgent.jar
+│   │       │   │   │   ├── MioLibPatcher.jar
+│   │       │   │   │   ├── OptiFineRenamer.jar
+│   │       │   │   │   ├── forge_installer.jar
+│   │       │   │   │   ├── java_sandbox.policy
+│   │       │   │   │   ├── log4j-rce-patch-1.12.xml
+│   │       │   │   │   ├── log4j-rce-patch-1.7.xml
+│   │       │   │   │   ├── pro-grade.jar
+│   │       │   │   │   └── version
+│   │       │   │   ├── jre-17/
+│   │       │   │   │   ├── bin-arm.tar.xz
+│   │       │   │   │   ├── bin-arm64.tar.xz
+│   │       │   │   │   ├── bin-x86.tar.xz
+│   │       │   │   │   ├── bin-x86_64.tar.xz
+│   │       │   │   │   ├── universal.tar.xz
+│   │       │   │   │   └── version
+│   │       │   │   ├── jre-21/
+│   │       │   │   │   ├── bin-arm.tar.xz
+│   │       │   │   │   ├── bin-arm64.tar.xz
+│   │       │   │   │   ├── bin-x86.tar.xz
+│   │       │   │   │   ├── bin-x86_64.tar.xz
+│   │       │   │   │   ├── universal.tar.xz
+│   │       │   │   │   └── version
+│   │       │   │   ├── jre-25/
+│   │       │   │   │   ├── bin-arm.tar.xz
+│   │       │   │   │   ├── bin-arm64.tar.xz
+│   │       │   │   │   ├── bin-x86_64.tar.xz
+│   │       │   │   │   ├── universal.tar.xz
+│   │       │   │   │   └── version
+│   │       │   │   ├── jre-8/
+│   │       │   │   │   ├── bin-arm.tar.xz
+│   │       │   │   │   ├── bin-arm64.tar.xz
+│   │       │   │   │   ├── bin-x86.tar.xz
+│   │       │   │   │   ├── bin-x86_64.tar.xz
+│   │       │   │   │   ├── universal.tar.xz
+│   │       │   │   │   └── version
+│   │       │   │   ├── lwjgl3/
+│   │       │   │   │   ├── lwjgl-glfw-classes.jar
+│   │       │   │   │   └── version
+│   │       │   │   └── other_login/
+│   │       │   │       ├── authlib-injector.jar
+│   │       │   │       ├── nide8auth.jar
+│   │       │   │       └── version
+│   │       │   ├── default.json
+│   │       │   ├── mod_data.txt
+│   │       │   ├── modpack_data.txt
+│   │       │   ├── options.txt
+│   │       │   ├── resolv.conf
+│   │       │   └── steve.png
+│   │       ├── java/
+│   │       │   ├── com/
+│   │       │   │   ├── kdt/
+│   │       │   │   │   ├── mcgui/
+│   │       │   │   │   │   ├── ProgressLayout.java
+│   │       │   │   │   │   └── TextProgressBar.java
+│   │       │   │   │   ├── DefocusableScrollView.java
+│   │       │   │   │   └── LoggerView.java
+│   │       │   │   ├── mio/
+│   │       │   │   │   └── util/
+│   │       │   │   │       └── AndroidUtil.kt
+│   │       │   │   ├── movtery/
+│   │       │   │   │   ├── anim/
+│   │       │   │   │   │   ├── animations/
+│   │       │   │   │   │   │   ├── bounce/
+│   │       │   │   │   │   │   │   ├── BounceEnlargeAnimator.kt
+│   │       │   │   │   │   │   │   ├── BounceInDownAnimator.kt
+│   │       │   │   │   │   │   │   ├── BounceInLeftAnimator.kt
+│   │       │   │   │   │   │   │   ├── BounceInRightAnimator.kt
+│   │       │   │   │   │   │   │   ├── BounceInUpAnimator.kt
+│   │       │   │   │   │   │   │   └── BounceShrinkAnimator.kt
+│   │       │   │   │   │   │   ├── fade/
+│   │       │   │   │   │   │   │   ├── FadeInAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeInDownAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeInLeftAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeInRightAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeInUpAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeOutAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeOutDownAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeOutLeftAnimator.kt
+│   │       │   │   │   │   │   │   ├── FadeOutRightAnimator.kt
+│   │       │   │   │   │   │   │   └── FadeOutUpAnimator.kt
+│   │       │   │   │   │   │   ├── other/
+│   │       │   │   │   │   │   │   ├── PulseAnimator.kt
+│   │       │   │   │   │   │   │   ├── ShakeAnimator.kt
+│   │       │   │   │   │   │   │   └── WobbleAnimator.kt
+│   │       │   │   │   │   │   ├── slide/
+│   │       │   │   │   │   │   │   ├── SlideInDownAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideInLeftAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideInRightAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideInUpAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideOutDownAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideOutLeftAnimator.kt
+│   │       │   │   │   │   │   │   ├── SlideOutRightAnimator.kt
+│   │       │   │   │   │   │   │   └── SlideOutUpAnimator.kt
+│   │       │   │   │   │   │   ├── Animations.kt
+│   │       │   │   │   │   │   └── BaseAnimator.kt
+│   │       │   │   │   │   ├── AnimCallback.kt
+│   │       │   │   │   │   └── AnimPlayer.kt
+│   │       │   │   │   └── zalithlauncher/
+│   │       │   │   │       ├── context/
+│   │       │   │   │       │   ├── ContextExecutor.kt
+│   │       │   │   │       │   └── LocaleHelper.kt
+│   │       │   │   │       ├── event/
+│   │       │   │   │       │   ├── single/
+│   │       │   │   │       │   │   ├── AccountUpdateEvent.kt
+│   │       │   │   │       │   │   ├── LaunchGameEvent.kt
+│   │       │   │   │       │   │   ├── LauncherIgnoreNotchEvent.kt
+│   │       │   │   │       │   │   ├── MCOptionChangeEvent.kt
+│   │       │   │   │       │   │   ├── MainBackgroundChangeEvent.kt
+│   │       │   │   │       │   │   ├── PageOpacityChangeEvent.kt
+│   │       │   │   │       │   │   ├── RefreshHotbarEvent.kt
+│   │       │   │   │       │   │   ├── RefreshVersionsEvent.kt
+│   │       │   │   │       │   │   ├── SettingsChangeEvent.kt
+│   │       │   │   │       │   │   └── SwapToLoginEvent.kt
+│   │       │   │   │       │   ├── sticky/
+│   │       │   │   │       │   │   ├── FileSelectorEvent.kt
+│   │       │   │   │       │   │   ├── MinecraftVersionValueEvent.kt
+│   │       │   │   │       │   │   └── SelectInstallTaskEvent.kt
+│   │       │   │   │       │   └── value/
+│   │       │   │   │       │       ├── AddFragmentEvent.kt
+│   │       │   │   │       │       ├── DownloadPageEvent.kt
+│   │       │   │   │       │       ├── DownloadProgressKeyEvent.kt
+│   │       │   │   │       │       ├── HotbarChangeEvent.kt
+│   │       │   │   │       │       ├── InstallGameEvent.kt
+│   │       │   │   │       │       ├── InstallLocalModpackEvent.kt
+│   │       │   │   │       │       ├── JvmExitEvent.kt
+│   │       │   │   │       │       ├── LocalLoginEvent.kt
+│   │       │   │   │       │       ├── MicrosoftLoginEvent.kt
+│   │       │   │   │       │       ├── OtherLoginEvent.kt
+│   │       │   │   │       │       └── SettingsPageSwapEvent.kt
+│   │       │   │   │       ├── feature/
+│   │       │   │   │       │   ├── accounts/
+│   │       │   │   │       │   │   ├── AccountType.kt
+│   │       │   │   │       │   │   ├── AccountUtils.kt
+│   │       │   │   │       │   │   ├── AccountsManager.kt
+│   │       │   │   │       │   │   ├── LocalAccountUtils.kt
+│   │       │   │   │       │   │   └── OtherLoginHelper.kt
+│   │       │   │   │       │   ├── background/
+│   │       │   │   │       │   │   ├── BackgroundManager.kt
+│   │       │   │   │       │   │   ├── BackgroundType.kt
+│   │       │   │   │       │   │   └── CallbackDrawableImageViewTarget.kt
+│   │       │   │   │       │   ├── customprofilepath/
+│   │       │   │   │       │   │   ├── ProfilePathHome.kt
+│   │       │   │   │       │   │   ├── ProfilePathJsonObject.kt
+│   │       │   │   │       │   │   └── ProfilePathManager.kt
+│   │       │   │   │       │   ├── download/
+│   │       │   │   │       │   │   ├── enums/
+│   │       │   │   │       │   │   │   ├── Category.kt
+│   │       │   │   │       │   │   │   ├── Classify.kt
+│   │       │   │   │       │   │   │   ├── DependencyType.kt
+│   │       │   │   │       │   │   │   ├── ModLoader.kt
+│   │       │   │   │       │   │   │   ├── Platform.kt
+│   │       │   │   │       │   │   │   ├── Sort.kt
+│   │       │   │   │       │   │   │   └── VersionType.kt
+│   │       │   │   │       │   │   ├── install/
+│   │       │   │   │       │   │   │   ├── InstallHelper.kt
+│   │       │   │   │       │   │   │   ├── ModPackInstallFunction.kt
+│   │       │   │   │       │   │   │   ├── OnFileDownloadedListener.kt
+│   │       │   │   │       │   │   │   └── UnpackWorldZipHelper.kt
+│   │       │   │   │       │   │   ├── item/
+│   │       │   │   │       │   │   │   ├── DependenciesInfoItem.kt
+│   │       │   │   │       │   │   │   ├── InfoItem.kt
+│   │       │   │   │       │   │   │   ├── ModInfoItem.kt
+│   │       │   │   │       │   │   │   ├── ModLikeVersionItem.kt
+│   │       │   │   │       │   │   │   ├── ModLoaderWrapper.kt
+│   │       │   │   │       │   │   │   ├── ModVersionItem.kt
+│   │       │   │   │       │   │   │   ├── ScreenshotItem.kt
+│   │       │   │   │       │   │   │   ├── SearchResult.kt
+│   │       │   │   │       │   │   │   └── VersionItem.kt
+│   │       │   │   │       │   │   ├── platform/
+│   │       │   │   │       │   │   │   ├── curseforge/
+│   │       │   │   │       │   │   │   │   ├── CurseForgeCommonUtils.kt
+│   │       │   │   │       │   │   │   │   ├── CurseForgeHelper.kt
+│   │       │   │   │       │   │   │   │   ├── CurseForgeModHelper.kt
+│   │       │   │   │       │   │   │   │   └── CurseForgeModPackInstallHelper.kt
+│   │       │   │   │       │   │   │   ├── modrinth/
+│   │       │   │   │       │   │   │   │   ├── ModrinthCommonUtils.kt
+│   │       │   │   │       │   │   │   │   ├── ModrinthHelper.kt
+│   │       │   │   │       │   │   │   │   ├── ModrinthModHelper.kt
+│   │       │   │   │       │   │   │   │   └── ModrinthModPackInstallHelper.kt
+│   │       │   │   │       │   │   │   ├── AbstractPlatformHelper.kt
+│   │       │   │   │       │   │   │   └── PlatformNotSupportedException.java
+│   │       │   │   │       │   │   ├── utils/
+│   │       │   │   │       │   │   │   ├── CategoryUtils.kt
+│   │       │   │   │       │   │   │   ├── DependencyUtils.kt
+│   │       │   │   │       │   │   │   ├── ModLoaderUtils.kt
+│   │       │   │   │       │   │   │   ├── PlatformUtils.kt
+│   │       │   │   │       │   │   │   └── VersionTypeUtils.kt
+│   │       │   │   │       │   │   ├── Filters.kt
+│   │       │   │   │       │   │   ├── InfoAdapter.kt
+│   │       │   │   │       │   │   ├── InfoCache.kt
+│   │       │   │   │       │   │   ├── InfoViewModel.kt
+│   │       │   │   │       │   │   ├── ModDependenciesAdapter.java
+│   │       │   │   │       │   │   ├── ScreenshotAdapter.kt
+│   │       │   │   │       │   │   ├── SelfReferencingFuture.kt
+│   │       │   │   │       │   │   └── VersionAdapter.kt
+│   │       │   │   │       │   ├── log/
+│   │       │   │   │       │   │   └── Logging.kt
+│   │       │   │   │       │   ├── login/
+│   │       │   │   │       │   │   ├── AuthRequest.java
+│   │       │   │   │       │   │   ├── AuthResult.java
+│   │       │   │   │       │   │   ├── OtherLoginApi.kt
+│   │       │   │   │       │   │   ├── Refresh.java
+│   │       │   │   │       │   │   └── Servers.java
+│   │       │   │   │       │   ├── mod/
+│   │       │   │   │       │   │   ├── models/
+│   │       │   │   │       │   │   │   └── MCBBSPackMeta.java
+│   │       │   │   │       │   │   ├── modloader/
+│   │       │   │   │       │   │   │   ├── FabricLikeApiModDownloadTask.kt
+│   │       │   │   │       │   │   │   ├── FabricLikeDownloadTask.java
+│   │       │   │   │       │   │   │   ├── FabricLikeUtils.kt
+│   │       │   │   │       │   │   │   ├── ForgeBuildVersion.kt
+│   │       │   │   │       │   │   │   ├── ForgeDownloadTask.java
+│   │       │   │   │       │   │   │   ├── ModVersionListAdapter.kt
+│   │       │   │   │       │   │   │   ├── NeoForgeDownloadTask.kt
+│   │       │   │   │       │   │   │   ├── NeoForgeUtils.kt
+│   │       │   │   │       │   │   │   └── OptiFineDownloadTask.kt
+│   │       │   │   │       │   │   ├── modpack/
+│   │       │   │   │       │   │   │   ├── install/
+│   │       │   │   │       │   │   │   │   ├── InstallExtra.kt
+│   │       │   │   │       │   │   │   │   ├── InstallLocalModPack.kt
+│   │       │   │   │       │   │   │   │   ├── ModPackInfo.kt
+│   │       │   │   │       │   │   │   │   └── ModPackUtils.kt
+│   │       │   │   │       │   │   │   └── MCBBSModPack.kt
+│   │       │   │   │       │   │   ├── parser/
+│   │       │   │   │       │   │   │   ├── AllModCheckSettings.kt
+│   │       │   │   │       │   │   │   ├── ModChecker.kt
+│   │       │   │   │       │   │   │   ├── ModInfo.java
+│   │       │   │   │       │   │   │   ├── ModInfoCache.kt
+│   │       │   │   │       │   │   │   ├── ModParser.kt
+│   │       │   │   │       │   │   │   └── ModParserListener.kt
+│   │       │   │   │       │   │   ├── ModToggleHandler.kt
+│   │       │   │   │       │   │   └── ModUtils.kt
+│   │       │   │   │       │   ├── notice/
+│   │       │   │   │       │   │   ├── CheckNewNotice.kt
+│   │       │   │   │       │   │   ├── CheckNoticeListener.kt
+│   │       │   │   │       │   │   ├── NoticeInfo.kt
+│   │       │   │   │       │   │   └── NoticeJsonObject.kt
+│   │       │   │   │       │   ├── unpack/
+│   │       │   │   │       │   │   ├── AbstractUnpackTask.kt
+│   │       │   │   │       │   │   ├── Components.kt
+│   │       │   │   │       │   │   ├── Jre.kt
+│   │       │   │   │       │   │   ├── OnTaskRunningListener.kt
+│   │       │   │   │       │   │   ├── UnpackComponentsTask.kt
+│   │       │   │   │       │   │   ├── UnpackJreTask.kt
+│   │       │   │   │       │   │   └── UnpackSingleFilesTask.kt
+│   │       │   │   │       │   ├── update/
+│   │       │   │   │       │   │   ├── LauncherVersion.java
+│   │       │   │   │       │   │   ├── UpdateLauncher.java
+│   │       │   │   │       │   │   └── UpdateUtils.kt
+│   │       │   │   │       │   ├── version/
+│   │       │   │   │       │   │   ├── favorites/
+│   │       │   │   │       │   │   │   └── FavoritesVersionUtils.kt
+│   │       │   │   │       │   │   ├── install/
+│   │       │   │   │       │   │   │   ├── Addons.kt
+│   │       │   │   │       │   │   │   ├── GameInstaller.kt
+│   │       │   │   │       │   │   │   ├── InstallArgsUtils.kt
+│   │       │   │   │       │   │   │   ├── InstallTask.kt
+│   │       │   │   │       │   │   │   └── InstallTaskItem.kt
+│   │       │   │   │       │   │   ├── utils/
+│   │       │   │   │       │   │   │   ├── VersionIconUtils.kt
+│   │       │   │   │       │   │   │   └── VersionInfoUtils.kt
+│   │       │   │   │       │   │   ├── CurrentGameInfo.kt
+│   │       │   │   │       │   │   ├── NoVersionException.java
+│   │       │   │   │       │   │   ├── Version.kt
+│   │       │   │   │       │   │   ├── VersionConfig.kt
+│   │       │   │   │       │   │   ├── VersionInfo.kt
+│   │       │   │   │       │   │   └── VersionsManager.kt
+│   │       │   │   │       │   ├── CheckSponsor.kt
+│   │       │   │   │       │   ├── MCOptions.kt
+│   │       │   │   │       │   └── ProfileLanguageSelector.kt
+│   │       │   │   │       ├── launch/
+│   │       │   │   │       │   ├── LaunchArgs.kt
+│   │       │   │   │       │   └── LaunchGame.kt
+│   │       │   │   │       ├── listener/
+│   │       │   │   │       │   └── SimpleTextWatcher.java
+│   │       │   │   │       ├── plugins/
+│   │       │   │   │       │   ├── driver/
+│   │       │   │   │       │   │   ├── Driver.kt
+│   │       │   │   │       │   │   └── DriverPluginManager.kt
+│   │       │   │   │       │   ├── renderer/
+│   │       │   │   │       │   │   ├── ApkRendererPlugin.kt
+│   │       │   │   │       │   │   ├── LocalRendererPlugin.kt
+│   │       │   │   │       │   │   ├── RendererConfig.kt
+│   │       │   │   │       │   │   ├── RendererPlugin.kt
+│   │       │   │   │       │   │   └── RendererPluginManager.kt
+│   │       │   │   │       │   └── PluginLoader.kt
+│   │       │   │   │       ├── renderer/
+│   │       │   │   │       │   ├── renderers/
+│   │       │   │   │       │   │   ├── FreedrenoRenderer.kt
+│   │       │   │   │       │   │   ├── GL4ESRenderer.kt
+│   │       │   │   │       │   │   ├── PanfrostRenderer.kt
+│   │       │   │   │       │   │   ├── VirGLRenderer.kt
+│   │       │   │   │       │   │   └── VulkanZinkRenderer.kt
+│   │       │   │   │       │   ├── RendererInterface.kt
+│   │       │   │   │       │   ├── Renderers.kt
+│   │       │   │   │       │   └── RenderersList.kt
+│   │       │   │   │       ├── setting/
+│   │       │   │   │       │   ├── unit/
+│   │       │   │   │       │   │   ├── AbstractSettingUnit.kt
+│   │       │   │   │       │   │   ├── BooleanSettingUnit.kt
+│   │       │   │   │       │   │   ├── DoubleSettingUnit.kt
+│   │       │   │   │       │   │   ├── FloatSettingUnit.kt
+│   │       │   │   │       │   │   ├── IntSettingUnit.kt
+│   │       │   │   │       │   │   ├── LongSettingUnit.kt
+│   │       │   │   │       │   │   └── StringSettingUnit.kt
+│   │       │   │   │       │   ├── AllSettings.kt
+│   │       │   │   │       │   ├── AllStaticSettings.kt
+│   │       │   │   │       │   └── Settings.kt
+│   │       │   │   │       ├── support/
+│   │       │   │   │       │   └── touch_controller/
+│   │       │   │   │       │       ├── ContactHandler.kt
+│   │       │   │   │       │       ├── ControllerProxy.java
+│   │       │   │   │       │       └── VibrationHandler.kt
+│   │       │   │   │       ├── task/
+│   │       │   │   │       │   ├── OnTaskEndedListener.kt
+│   │       │   │   │       │   ├── OnTaskThrowableListener.kt
+│   │       │   │   │       │   ├── SimpleTask.kt
+│   │       │   │   │       │   ├── Task.kt
+│   │       │   │   │       │   ├── TaskExecutionPhaseListener.kt
+│   │       │   │   │       │   └── TaskExecutors.kt
+│   │       │   │   │       ├── ui/
+│   │       │   │   │       │   ├── activity/
+│   │       │   │   │       │   │   ├── BaseActivity.java
+│   │       │   │   │       │   │   ├── ErrorActivity.kt
+│   │       │   │   │       │   │   ├── InstallableAdapter.kt
+│   │       │   │   │       │   │   ├── InstallableItem.kt
+│   │       │   │   │       │   │   └── SplashActivity.kt
+│   │       │   │   │       │   ├── dialog/
+│   │       │   │   │       │   │   ├── AbstractSelectDialog.kt
+│   │       │   │   │       │   │   ├── ControlInfoDialog.kt
+│   │       │   │   │       │   │   ├── DeleteDialog.kt
+│   │       │   │   │       │   │   ├── DraggableDialog.java
+│   │       │   │   │       │   │   ├── EditControlInfoDialog.kt
+│   │       │   │   │       │   │   ├── EditTextDialog.kt
+│   │       │   │   │       │   │   ├── FavoritesVersionDialog.kt
+│   │       │   │   │       │   │   ├── FilesDialog.java
+│   │       │   │   │       │   │   ├── FullScreenDialog.kt
+│   │       │   │   │       │   │   ├── KeyboardDialog.java
+│   │       │   │   │       │   │   ├── LifecycleAwareTipDialog.kt
+│   │       │   │   │       │   │   ├── LocalRendererPluginDialog.kt
+│   │       │   │   │       │   │   ├── ModDependenciesDialog.kt
+│   │       │   │   │       │   │   ├── OtherLoginDialog.kt
+│   │       │   │   │       │   │   ├── ProgressDialog.kt
+│   │       │   │   │       │   │   ├── SelectControlsDialog.kt
+│   │       │   │   │       │   │   ├── SelectMouseDialog.kt
+│   │       │   │   │       │   │   ├── SelectRoleDialog.kt
+│   │       │   │   │       │   │   ├── SelectRuntimeDialog.kt
+│   │       │   │   │       │   │   ├── SelectVersionDialog.kt
+│   │       │   │   │       │   │   ├── TipDialog.kt
+│   │       │   │   │       │   │   └── UpdateDialog.kt
+│   │       │   │   │       │   ├── fragment/
+│   │       │   │   │       │   │   ├── about/
+│   │       │   │   │       │   │   │   ├── AboutInfoPageFragment.kt
+│   │       │   │   │       │   │   │   └── AboutSponsorPageFragment.kt
+│   │       │   │   │       │   │   ├── download/
+│   │       │   │   │       │   │   │   ├── addon/
+│   │       │   │   │       │   │   │   │   ├── DownloadFabricApiFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadFabricFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadFabricLikeApiModFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadFabricLikeFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadForgeFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadNeoForgeFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadOptiFineFragment.kt
+│   │       │   │   │       │   │   │   │   ├── DownloadQuiltApiFragment.kt
+│   │       │   │   │       │   │   │   │   └── DownloadQuiltFragment.kt
+│   │       │   │   │       │   │   │   └── resource/
+│   │       │   │   │       │   │   │       ├── AbstractResourceDownloadFragment.kt
+│   │       │   │   │       │   │   │       ├── ModDownloadFragment.kt
+│   │       │   │   │       │   │   │       ├── ModPackDownloadFragment.kt
+│   │       │   │   │       │   │   │       ├── ResourcePackDownloadFragment.kt
+│   │       │   │   │       │   │   │       ├── ShaderPackDownloadFragment.kt
+│   │       │   │   │       │   │   │       └── WorldDownloadFragment.kt
+│   │       │   │   │       │   │   ├── settings/
+│   │       │   │   │       │   │   │   ├── wrapper/
+│   │       │   │   │       │   │   │   │   ├── AbstractSettingsWrapper.kt
+│   │       │   │   │       │   │   │   │   ├── BaseSettingsWrapper.kt
+│   │       │   │   │       │   │   │   │   ├── EditTextSettingsWrapper.kt
+│   │       │   │   │       │   │   │   │   ├── ListSettingsWrapper.kt
+│   │       │   │   │       │   │   │   │   ├── OnViewClickListener.kt
+│   │       │   │   │       │   │   │   │   ├── SeekBarSettingsWrapper.kt
+│   │       │   │   │       │   │   │   │   └── SwitchSettingsWrapper.kt
+│   │       │   │   │       │   │   │   ├── AbstractSettingsFragment.kt
+│   │       │   │   │       │   │   │   ├── ControlSettingsFragment.kt
+│   │       │   │   │       │   │   │   ├── ExperimentalSettingsFragment.kt
+│   │       │   │   │       │   │   │   ├── GameSettingsFragment.kt
+│   │       │   │   │       │   │   │   ├── LauncherSettingsFragment.kt
+│   │       │   │   │       │   │   │   ├── SettingCategory.kt
+│   │       │   │   │       │   │   │   └── VideoSettingsFragment.kt
+│   │       │   │   │       │   │   ├── AboutFragment.kt
+│   │       │   │   │       │   │   ├── AccountFragment.kt
+│   │       │   │   │       │   │   ├── BaseFragment.kt
+│   │       │   │   │       │   │   ├── ControlButtonFragment.kt
+│   │       │   │   │       │   │   ├── CustomBackgroundFragment.kt
+│   │       │   │   │       │   │   ├── CustomMouseFragment.kt
+│   │       │   │   │       │   │   ├── DownloadFragment.kt
+│   │       │   │   │       │   │   ├── DownloadModFragment.kt
+│   │       │   │   │       │   │   ├── FilesFragment.kt
+│   │       │   │   │       │   │   ├── FragmentWithAnim.kt
+│   │       │   │   │       │   │   ├── InstallGameFragment.kt
+│   │       │   │   │       │   │   ├── ModsFragment.kt
+│   │       │   │   │       │   │   ├── SettingsFragment.kt
+│   │       │   │   │       │   │   ├── VersionConfigFragment.kt
+│   │       │   │   │       │   │   ├── VersionManagerFragment.kt
+│   │       │   │   │       │   │   ├── VersionSelectorFragment.kt
+│   │       │   │   │       │   │   └── VersionsListFragment.kt
+│   │       │   │   │       │   ├── layout/
+│   │       │   │   │       │   │   ├── AnimConstraintLayout.kt
+│   │       │   │   │       │   │   └── AnimRelativeLayout.kt
+│   │       │   │   │       │   ├── subassembly/
+│   │       │   │   │       │   │   ├── about/
+│   │       │   │   │       │   │   │   ├── AboutItemBean.java
+│   │       │   │   │       │   │   │   ├── AboutRecyclerAdapter.java
+│   │       │   │   │       │   │   │   ├── SponsorMeta.java
+│   │       │   │   │       │   │   │   └── SponsorRecyclerAdapter.java
+│   │       │   │   │       │   │   ├── account/
+│   │       │   │   │       │   │   │   ├── AccountAdapter.java
+│   │       │   │   │       │   │   │   ├── AccountViewWrapper.kt
+│   │       │   │   │       │   │   │   └── SelectAccountListener.kt
+│   │       │   │   │       │   │   ├── adapter/
+│   │       │   │   │       │   │   │   └── ObjectSpinnerAdapter.kt
+│   │       │   │   │       │   │   ├── customcontrols/
+│   │       │   │   │       │   │   │   ├── ControlInfoData.kt
+│   │       │   │   │       │   │   │   ├── ControlItemBean.kt
+│   │       │   │   │       │   │   │   ├── ControlListAdapter.java
+│   │       │   │   │       │   │   │   ├── ControlSelectedListener.kt
+│   │       │   │   │       │   │   │   ├── ControlsListViewCreator.java
+│   │       │   │   │       │   │   │   └── EditControlData.kt
+│   │       │   │   │       │   │   ├── customprofilepath/
+│   │       │   │   │       │   │   │   ├── ProfileItem.kt
+│   │       │   │   │       │   │   │   └── ProfilePathAdapter.kt
+│   │       │   │   │       │   │   ├── filelist/
+│   │       │   │   │       │   │   │   ├── FileIcon.kt
+│   │       │   │   │       │   │   │   ├── FileItemBean.kt
+│   │       │   │   │       │   │   │   ├── FileRecyclerAdapter.java
+│   │       │   │   │       │   │   │   ├── FileRecyclerView.java
+│   │       │   │   │       │   │   │   ├── FileRecyclerViewCreator.kt
+│   │       │   │   │       │   │   │   ├── FileSelectedListener.kt
+│   │       │   │   │       │   │   │   ├── RefreshListener.kt
+│   │       │   │   │       │   │   │   └── SetTitleListener.kt
+│   │       │   │   │       │   │   ├── hotbar/
+│   │       │   │   │       │   │   │   ├── HotbarType.kt
+│   │       │   │   │       │   │   │   └── HotbarUtils.kt
+│   │       │   │   │       │   │   ├── menu/
+│   │       │   │   │       │   │   │   ├── ControlMenu.kt
+│   │       │   │   │       │   │   │   └── MenuUtils.kt
+│   │       │   │   │       │   │   ├── modlist/
+│   │       │   │   │       │   │   │   ├── ModListAdapter.kt
+│   │       │   │   │       │   │   │   ├── ModListFragment.kt
+│   │       │   │   │       │   │   │   └── ModListItemBean.kt
+│   │       │   │   │       │   │   ├── settingsbutton/
+│   │       │   │   │       │   │   │   ├── OnTypeChangeListener.kt
+│   │       │   │   │       │   │   │   └── SettingsButtonWrapper.kt
+│   │       │   │   │       │   │   ├── version/
+│   │       │   │   │       │   │   │   ├── FavoritesVersionAdapter.kt
+│   │       │   │   │       │   │   │   └── VersionAdapter.kt
+│   │       │   │   │       │   │   ├── versionlist/
+│   │       │   │   │       │   │   │   ├── VersionListView.java
+│   │       │   │   │       │   │   │   ├── VersionSelectedListener.kt
+│   │       │   │   │       │   │   │   └── VersionType.kt
+│   │       │   │   │       │   │   └── view/
+│   │       │   │   │       │   │       ├── DraggableViewWrapper.kt
+│   │       │   │   │       │   │       ├── GameMenuViewWrapper.kt
+│   │       │   │   │       │   │       └── SearchViewWrapper.kt
+│   │       │   │   │       │   └── view/
+│   │       │   │   │       │       ├── AnimButton.kt
+│   │       │   │   │       │       ├── AnimCheckBox.kt
+│   │       │   │   │       │       ├── AnimEditText.kt
+│   │       │   │   │       │       └── AnimTextView.kt
+│   │       │   │   │       ├── utils/
+│   │       │   │   │       │   ├── anim/
+│   │       │   │   │       │   │   ├── AnimUtils.kt
+│   │       │   │   │       │   │   ├── SlideAnimation.kt
+│   │       │   │   │       │   │   └── ViewAnimUtils.kt
+│   │       │   │   │       │   ├── file/
+│   │       │   │   │       │   │   ├── FileCopyHandler.kt
+│   │       │   │   │       │   │   ├── FileDeletionHandler.kt
+│   │       │   │   │       │   │   ├── FileHandler.kt
+│   │       │   │   │       │   │   ├── FileSearchProgress.kt
+│   │       │   │   │       │   │   ├── FileTools.kt
+│   │       │   │   │       │   │   ├── InvalidFilenameException.java
+│   │       │   │   │       │   │   └── PasteFile.java
+│   │       │   │   │       │   ├── http/
+│   │       │   │   │       │   │   ├── CallUtils.kt
+│   │       │   │   │       │   │   └── NetworkUtils.kt
+│   │       │   │   │       │   ├── image/
+│   │       │   │   │       │   │   ├── Dimension.kt
+│   │       │   │   │       │   │   └── ImageUtils.kt
+│   │       │   │   │       │   ├── path/
+│   │       │   │   │       │   │   ├── LibPath.kt
+│   │       │   │   │       │   │   ├── PathManager.kt
+│   │       │   │   │       │   │   └── UrlManager.kt
+│   │       │   │   │       │   ├── platform/
+│   │       │   │   │       │   │   └── MemoryUtils.kt
+│   │       │   │   │       │   ├── runtime/
+│   │       │   │   │       │   │   ├── RuntimeSelectedListener.kt
+│   │       │   │   │       │   │   └── SelectRuntimeUtils.kt
+│   │       │   │   │       │   ├── skin/
+│   │       │   │   │       │   │   ├── SkinFileDownloader.kt
+│   │       │   │   │       │   │   └── SkinLoader.java
+│   │       │   │   │       │   ├── stringutils/
+│   │       │   │   │       │   │   ├── ShiftDirection.kt
+│   │       │   │   │       │   │   ├── SortStrings.kt
+│   │       │   │   │       │   │   ├── StringFilter.kt
+│   │       │   │   │       │   │   ├── StringUtils.java
+│   │       │   │   │       │   │   └── StringUtilsKt.kt
+│   │       │   │   │       │   ├── CleanUpCache.kt
+│   │       │   │   │       │   ├── CopyDefaultFromAssets.kt
+│   │       │   │   │       │   ├── LauncherProfiles.kt
+│   │       │   │   │       │   ├── MCVersionRegex.kt
+│   │       │   │   │       │   ├── NewbieGuideUtils.kt
+│   │       │   │   │       │   ├── NumberWithUnits.kt
+│   │       │   │   │       │   ├── StoragePermissionsUtils.kt
+│   │       │   │   │       │   └── ZHTools.java
+│   │       │   │   │       └── InfoCenter.kt
+│   │       │   │   └── oracle/
+│   │       │   │       └── dalvik/
+│   │       │   │           └── VMLauncher.java
+│   │       │   ├── dalvik/
+│   │       │   │   └── annotation/
+│   │       │   │       └── optimization/
+│   │       │   │           └── CriticalNative.java
+│   │       │   ├── net/
+│   │       │   │   └── kdt/
+│   │       │   │       └── pojavlaunch/
+│   │       │   │           ├── authenticator/
+│   │       │   │           │   ├── listener/
+│   │       │   │           │   │   ├── DoneListener.java
+│   │       │   │           │   │   └── ErrorListener.java
+│   │       │   │           │   └── microsoft/
+│   │       │   │           │       ├── MicrosoftBackgroundLogin.java
+│   │       │   │           │       └── PresentedException.java
+│   │       │   │           ├── colorselector/
+│   │       │   │           │   ├── AlphaSelectionListener.java
+│   │       │   │           │   ├── AlphaView.java
+│   │       │   │           │   ├── ColorSelectionListener.java
+│   │       │   │           │   ├── ColorSelector.java
+│   │       │   │           │   ├── ColorSideBySideView.java
+│   │       │   │           │   ├── HueSelectionListener.java
+│   │       │   │           │   ├── HueView.java
+│   │       │   │           │   ├── RectangleSelectionListener.java
+│   │       │   │           │   └── SVRectangleView.java
+│   │       │   │           ├── contracts/
+│   │       │   │           │   └── OpenDocumentWithExtension.java
+│   │       │   │           ├── customcontrols/
+│   │       │   │           │   ├── buttons/
+│   │       │   │           │   │   ├── ControlButton.java
+│   │       │   │           │   │   ├── ControlDrawer.java
+│   │       │   │           │   │   ├── ControlInterface.java
+│   │       │   │           │   │   ├── ControlJoystick.java
+│   │       │   │           │   │   └── ControlSubButton.java
+│   │       │   │           │   ├── gamepad/
+│   │       │   │           │   │   ├── DefaultDataProvider.java
+│   │       │   │           │   │   ├── Gamepad.java
+│   │       │   │           │   │   ├── GamepadButton.java
+│   │       │   │           │   │   ├── GamepadDataProvider.java
+│   │       │   │           │   │   ├── GamepadDpad.java
+│   │       │   │           │   │   ├── GamepadEmulatedButton.java
+│   │       │   │           │   │   ├── GamepadJoystick.java
+│   │       │   │           │   │   ├── GamepadMap.java
+│   │       │   │           │   │   ├── GamepadMapStore.java
+│   │       │   │           │   │   └── GamepadMapperAdapter.java
+│   │       │   │           │   ├── handleview/
+│   │       │   │           │   │   ├── ActionButtonInterface.java
+│   │       │   │           │   │   ├── ActionRow.java
+│   │       │   │           │   │   ├── AddSubButton.java
+│   │       │   │           │   │   ├── CloneButton.java
+│   │       │   │           │   │   ├── ControlHandleView.java
+│   │       │   │           │   │   ├── DeleteButton.java
+│   │       │   │           │   │   └── EditControlPopup.java
+│   │       │   │           │   ├── keyboard/
+│   │       │   │           │   │   ├── AwtCharSender.java
+│   │       │   │           │   │   ├── CharacterSenderStrategy.java
+│   │       │   │           │   │   ├── LwjglCharSender.java
+│   │       │   │           │   │   └── TouchCharInput.java
+│   │       │   │           │   ├── mouse/
+│   │       │   │           │   │   ├── AbstractTouchpad.java
+│   │       │   │           │   │   ├── AndroidPointerCapture.java
+│   │       │   │           │   │   ├── DropGesture.java
+│   │       │   │           │   │   ├── GyroControl.java
+│   │       │   │           │   │   ├── HotbarView.java
+│   │       │   │           │   │   ├── InGUIEventProcessor.java
+│   │       │   │           │   │   ├── InGameEventProcessor.java
+│   │       │   │           │   │   ├── LeftClickGesture.java
+│   │       │   │           │   │   ├── PointerTracker.java
+│   │       │   │           │   │   ├── RightClickGesture.java
+│   │       │   │           │   │   ├── Scroller.java
+│   │       │   │           │   │   ├── TapDetector.java
+│   │       │   │           │   │   ├── TouchEventProcessor.java
+│   │       │   │           │   │   ├── Touchpad.java
+│   │       │   │           │   │   └── ValidatorGesture.java
+│   │       │   │           │   ├── ControlButtonMenuListener.java
+│   │       │   │           │   ├── ControlData.java
+│   │       │   │           │   ├── ControlDrawerData.java
+│   │       │   │           │   ├── ControlJoystickData.java
+│   │       │   │           │   ├── ControlLayout.java
+│   │       │   │           │   ├── CustomControls.java
+│   │       │   │           │   ├── EditorExitable.java
+│   │       │   │           │   ├── LayoutConverter.java
+│   │       │   │           │   └── LayoutSanitizer.java
+│   │       │   │           ├── fragments/
+│   │       │   │           │   ├── GamepadMapperFragment.java
+│   │       │   │           │   ├── MainMenuFragment.java
+│   │       │   │           │   └── MicrosoftLoginFragment.java
+│   │       │   │           ├── lifecycle/
+│   │       │   │           │   ├── ContextAwareDoneListener.java
+│   │       │   │           │   └── ContextExecutorTask.java
+│   │       │   │           ├── memory/
+│   │       │   │           │   ├── MemoryHoleFinder.java
+│   │       │   │           │   └── SelfMapsParser.java
+│   │       │   │           ├── mirrors/
+│   │       │   │           │   ├── DownloadMirror.java
+│   │       │   │           │   └── MirrorTamperedException.java
+│   │       │   │           ├── modloaders/
+│   │       │   │           │   ├── modpacks/
+│   │       │   │           │   │   ├── api/
+│   │       │   │           │   │   │   ├── ApiHandler.java
+│   │       │   │           │   │   │   └── ModDownloader.java
+│   │       │   │           │   │   └── models/
+│   │       │   │           │   │       ├── CurseManifest.java
+│   │       │   │           │   │       └── ModrinthIndex.java
+│   │       │   │           │   ├── FabricVersion.java
+│   │       │   │           │   ├── ForgeUtils.java
+│   │       │   │           │   ├── ForgeVersionListHandler.java
+│   │       │   │           │   ├── OFDownloadPageScraper.java
+│   │       │   │           │   ├── OptiFineScraper.java
+│   │       │   │           │   └── OptiFineUtils.java
+│   │       │   │           ├── multirt/
+│   │       │   │           │   ├── MultiRTConfigDialog.java
+│   │       │   │           │   ├── MultiRTUtils.java
+│   │       │   │           │   ├── RTRecyclerViewAdapter.java
+│   │       │   │           │   └── Runtime.java
+│   │       │   │           ├── plugins/
+│   │       │   │           │   └── FFmpegPlugin.java
+│   │       │   │           ├── prefs/
+│   │       │   │           │   └── LauncherPreferences.java
+│   │       │   │           ├── progresskeeper/
+│   │       │   │           │   ├── DownloaderProgressWrapper.java
+│   │       │   │           │   ├── ProgressKeeper.java
+│   │       │   │           │   ├── ProgressListener.java
+│   │       │   │           │   ├── ProgressState.java
+│   │       │   │           │   └── TaskCountListener.java
+│   │       │   │           ├── scoped/
+│   │       │   │           │   └── FolderProvider.java
+│   │       │   │           ├── services/
+│   │       │   │           │   ├── GameService.java
+│   │       │   │           │   ├── ProgressService.java
+│   │       │   │           │   └── ProgressServiceKeeper.java
+│   │       │   │           ├── tasks/
+│   │       │   │           │   ├── AsyncMinecraftDownloader.java
+│   │       │   │           │   ├── AsyncVersionList.java
+│   │       │   │           │   ├── MinecraftDownloader.java
+│   │       │   │           │   ├── NativesExtractor.java
+│   │       │   │           │   └── SpeedCalculator.java
+│   │       │   │           ├── utils/
+│   │       │   │           │   ├── DownloadUtils.java
+│   │       │   │           │   ├── FileUtils.java
+│   │       │   │           │   ├── FilteredSubList.java
+│   │       │   │           │   ├── GsonJsonUtils.java
+│   │       │   │           │   ├── JREUtils.java
+│   │       │   │           │   ├── JSONUtils.java
+│   │       │   │           │   ├── MathUtils.java
+│   │       │   │           │   ├── MatrixUtils.java
+│   │       │   │           │   ├── NotificationUtils.java
+│   │       │   │           │   └── ZipUtils.java
+│   │       │   │           ├── value/
+│   │       │   │           │   ├── launcherprofiles/
+│   │       │   │           │   │   └── MinecraftAuthenticationDatabase.java
+│   │       │   │           │   ├── DependentLibrary.java
+│   │       │   │           │   ├── MinecraftAccount.java
+│   │       │   │           │   ├── MinecraftClientInfo.java
+│   │       │   │           │   └── MinecraftLibraryArtifact.java
+│   │       │   │           ├── AWTCanvasView.java
+│   │       │   │           ├── AWTInputBridge.java
+│   │       │   │           ├── AWTInputEvent.java
+│   │       │   │           ├── Architecture.java
+│   │       │   │           ├── CriticalNativeTest.java
+│   │       │   │           ├── CustomControlsActivity.java
+│   │       │   │           ├── EfficientAndroidLWJGLKeycode.java
+│   │       │   │           ├── GrabListener.java
+│   │       │   │           ├── JAssetInfo.java
+│   │       │   │           ├── JAssets.java
+│   │       │   │           ├── JMinecraftVersionList.java
+│   │       │   │           ├── JavaGUILauncherActivity.java
+│   │       │   │           ├── LauncherActivity.java
+│   │       │   │           ├── Logger.java
+│   │       │   │           ├── LwjglGlfwKeycode.java
+│   │       │   │           ├── MainActivity.java
+│   │       │   │           ├── MinecraftGLSurface.java
+│   │       │   │           ├── MissingStorageActivity.java
+│   │       │   │           ├── PojavApplication.java
+│   │       │   │           ├── ShowErrorActivity.java
+│   │       │   │           ├── SingleTapConfirm.java
+│   │       │   │           └── Tools.java
+│   │       │   └── org/
+│   │       │       ├── jackhuang/
+│   │       │       │   └── hmcl/
+│   │       │       │       ├── ui/
+│   │       │       │       │   └── versions/
+│   │       │       │       │       └── ModTranslations.java
+│   │       │       │       └── util/
+│   │       │       │           ├── io/
+│   │       │       │           │   └── IOUtils.java
+│   │       │       │           ├── versioning/
+│   │       │       │           │   ├── VersionNumber.java
+│   │       │       │           │   └── VersionRange.java
+│   │       │       │           ├── Pair.java
+│   │       │       │           └── StringUtils.java
+│   │       │       └── lwjgl/
+│   │       │           └── glfw/
+│   │       │               └── CallbackBridge.java
+│   │       ├── jni/
+│   │       │   ├── GL/
+│   │       │   │   ├── gl.h
+│   │       │   │   ├── glext.h
+│   │       │   │   └── osmesa.h
+│   │       │   ├── awt_xawt/
+│   │       │   │   └── xawt_fake.c
+│   │       │   ├── ctxbridges/
+│   │       │   │   ├── br_loader.c
+│   │       │   │   ├── br_loader.h
+│   │       │   │   ├── bridge_tbl.h
+│   │       │   │   ├── common.h
+│   │       │   │   ├── egl_loader.c
+│   │       │   │   ├── egl_loader.h
+│   │       │   │   ├── gl_bridge.c
+│   │       │   │   ├── gl_bridge.h
+│   │       │   │   ├── osm_bridge.c
+│   │       │   │   ├── osm_bridge.h
+│   │       │   │   ├── osmesa_loader.c
+│   │       │   │   ├── osmesa_loader.h
+│   │       │   │   ├── renderer_config.h
+│   │       │   │   ├── swap_interval_no_egl.c
+│   │       │   │   ├── virgl_bridge.c
+│   │       │   │   └── virgl_bridge.h
+│   │       │   ├── driver_helper/
+│   │       │   │   ├── driver_helper.c
+│   │       │   │   ├── nsbypass.c
+│   │       │   │   └── nsbypass.h
+│   │       │   ├── environ/
+│   │       │   │   ├── environ.c
+│   │       │   │   └── environ.h
+│   │       │   ├── linkerhook/
+│   │       │   │   ├── linkerhook.cpp
+│   │       │   │   ├── linkerhook.h
+│   │       │   │   └── linkerns.c
+│   │       │   ├── Android.mk
+│   │       │   ├── Application.mk
+│   │       │   ├── awt_bridge.c
+│   │       │   ├── bigcoreaffinity.c
+│   │       │   ├── egl_bridge.c
+│   │       │   ├── exit_hook.c
+│   │       │   ├── input_bridge_v3.c
+│   │       │   ├── java_exec_hooks.c
+│   │       │   ├── jre_launcher.c
+│   │       │   ├── log.h
+│   │       │   ├── lwjgl_dlopen_hook.c
+│   │       │   ├── stdio_is.c
+│   │       │   ├── stdio_is.h
+│   │       │   ├── utils.c
+│   │       │   └── utils.h
+│   │       ├── jniLibs/
+│   │       │   ├── arm64-v8a/
+│   │       │   │   ├── libEGL_angle.so
+│   │       │   │   ├── libGLESv2_angle.so
+│   │       │   │   ├── libOSMesa_2121.so
+│   │       │   │   ├── libOSMesa_2300d.so
+│   │       │   │   ├── libOSMesa_8.so
+│   │       │   │   ├── libVkLayer_khronos_timeline_semaphore.so
+│   │       │   │   ├── libc++_shared.so
+│   │       │   │   ├── libgl4es_114.so
+│   │       │   │   ├── libimgui-javaarm64.so
+│   │       │   │   ├── libjnidispatch.so
+│   │       │   │   ├── libshaderconv.so
+│   │       │   │   ├── libunpack200.so
+│   │       │   │   ├── libvirgl_test_server.so
+│   │       │   │   └── libvulkan_freedreno.so
+│   │       │   ├── armeabi-v7a/
+│   │       │   │   ├── libEGL_angle.so
+│   │       │   │   ├── libGLESv2_angle.so
+│   │       │   │   ├── libOSMesa_2121.so
+│   │       │   │   ├── libOSMesa_2300d.so
+│   │       │   │   ├── libOSMesa_8.so
+│   │       │   │   ├── libc++_shared.so
+│   │       │   │   ├── libepoxy_0.so
+│   │       │   │   ├── libgl4es_114.so
+│   │       │   │   ├── libimgui-javaarm.so
+│   │       │   │   ├── libjnidispatch.so
+│   │       │   │   ├── libshaderconv.so
+│   │       │   │   ├── libtwitchsdk.so
+│   │       │   │   ├── libunpack200.so
+│   │       │   │   ├── libvirgl_test_server.so
+│   │       │   │   └── libvirglrenderer_1.so
+│   │       │   ├── x86/
+│   │       │   │   ├── libEGL_angle.so
+│   │       │   │   ├── libGLESv2_angle.so
+│   │       │   │   ├── libc++_shared.so
+│   │       │   │   ├── libgl4es_114.so
+│   │       │   │   ├── libimgui-java.so
+│   │       │   │   ├── libjnidispatch.so
+│   │       │   │   ├── libshaderconv.so
+│   │       │   │   └── libunpack200.so
+│   │       │   └── x86_64/
+│   │       │       ├── libEGL_angle.so
+│   │       │       ├── libGLESv2_angle.so
+│   │       │       ├── libOSMesa_2121.so
+│   │       │       ├── libOSMesa_2300d.so
+│   │       │       ├── libOSMesa_8.so
+│   │       │       ├── libc++_shared.so
+│   │       │       ├── libepoxy_0.so
+│   │       │       ├── libgl4es_114.so
+│   │       │       ├── libimgui-java.so
+│   │       │       ├── libjnidispatch.so
+│   │       │       ├── libshaderconv.so
+│   │       │       ├── libunpack200.so
+│   │       │       ├── libvirgl_test_server.so
+│   │       │       └── libvirglrenderer_1.so
+│   │       ├── res/
+│   │       │   ├── anim/
+│   │       │   │   ├── cut_into.xml
+│   │       │   │   ├── cut_out.xml
+│   │       │   │   └── fade_downwards.xml
+│   │       │   ├── drawable/
+│   │       │   │   ├── app_name_title.png
+│   │       │   │   ├── background_card.xml
+│   │       │   │   ├── background_control_editor.xml
+│   │       │   │   ├── background_edit_box.xml
+│   │       │   │   ├── background_edit_box_selected.xml
+│   │       │   │   ├── background_edit_box_unselected.xml
+│   │       │   │   ├── background_game_menu.xml
+│   │       │   │   ├── background_icon_edit.xml
+│   │       │   │   ├── background_item.xml
+│   │       │   │   ├── background_item_2.xml
+│   │       │   │   ├── background_item_2_selected.xml
+│   │       │   │   ├── background_item_2_unselected.xml
+│   │       │   │   ├── background_item_disabled.xml
+│   │       │   │   ├── background_item_selected.xml
+│   │       │   │   ├── background_item_unselected.xml
+│   │       │   │   ├── background_mod_category.xml
+│   │       │   │   ├── background_text.xml
+│   │       │   │   ├── button_background.xml
+│   │       │   │   ├── button_background_selected.xml
+│   │       │   │   ├── button_background_unselected.xml
+│   │       │   │   ├── dialog_background.xml
+│   │       │   │   ├── ic_about.xml
+│   │       │   │   ├── ic_add.xml
+│   │       │   │   ├── ic_add_new.xml
+│   │       │   │   ├── ic_anvil.png
+│   │       │   │   ├── ic_check.xml
+│   │       │   │   ├── ic_chicken_old.png
+│   │       │   │   ├── ic_close.xml
+│   │       │   │   ├── ic_command_block.png
+│   │       │   │   ├── ic_copy.xml
+│   │       │   │   ├── ic_curseforge.png
+│   │       │   │   ├── ic_disabled.xml
+│   │       │   │   ├── ic_download.xml
+│   │       │   │   ├── ic_download_alpha.xml
+│   │       │   │   ├── ic_download_beta.xml
+│   │       │   │   ├── ic_download_release.xml
+│   │       │   │   ├── ic_edit.xml
+│   │       │   │   ├── ic_fabric.webp
+│   │       │   │   ├── ic_favorite.xml
+│   │       │   │   ├── ic_favorite_border.xml
+│   │       │   │   ├── ic_file.xml
+│   │       │   │   ├── ic_folder.xml
+│   │       │   │   ├── ic_hair.xml
+│   │       │   │   ├── ic_help.xml
+│   │       │   │   ├── ic_java.xml
+│   │       │   │   ├── ic_launch_link.xml
+│   │       │   │   ├── ic_launcher_background.xml
+│   │       │   │   ├── ic_menu_custom_controls.xml
+│   │       │   │   ├── ic_menu_delete_forever.xml
+│   │       │   │   ├── ic_menu_home.xml
+│   │       │   │   ├── ic_menu_settings.xml
+│   │       │   │   ├── ic_minecraft.png
+│   │       │   │   ├── ic_mod_search.xml
+│   │       │   │   ├── ic_modrinth.png
+│   │       │   │   ├── ic_more.xml
+│   │       │   │   ├── ic_mouse_pointer.png
+│   │       │   │   ├── ic_move.xml
+│   │       │   │   ├── ic_neoforge.png
+│   │       │   │   ├── ic_old_cobblestone.png
+│   │       │   │   ├── ic_old_grass_block.png
+│   │       │   │   ├── ic_optifine.png
+│   │       │   │   ├── ic_paste.xml
+│   │       │   │   ├── ic_pojav_full.webp
+│   │       │   │   ├── ic_profile_crash_report.xml
+│   │       │   │   ├── ic_profile_folder.xml
+│   │       │   │   ├── ic_profile_logs.xml
+│   │       │   │   ├── ic_profile_mods.xml
+│   │       │   │   ├── ic_profile_resource_pack.xml
+│   │       │   │   ├── ic_profile_saves.xml
+│   │       │   │   ├── ic_profile_shader_pack.xml
+│   │       │   │   ├── ic_quilt.webp
+│   │       │   │   ├── ic_refresh.xml
+│   │       │   │   ├── ic_reset.xml
+│   │       │   │   ├── ic_screenshot.xml
+│   │       │   │   ├── ic_search.xml
+│   │       │   │   ├── ic_setting.xml
+│   │       │   │   ├── ic_setting_experimental.xml
+│   │       │   │   ├── ic_setting_game.xml
+│   │       │   │   ├── ic_setting_launcher.xml
+│   │       │   │   ├── ic_setting_video.xml
+│   │       │   │   ├── ic_share.xml
+│   │       │   │   ├── ic_spinner_arrow_right.xml
+│   │       │   │   ├── ic_storage_alert.xml
+│   │       │   │   ├── ic_view_handle.xml
+│   │       │   │   ├── ic_warning.xml
+│   │       │   │   ├── ic_zip.xml
+│   │       │   │   ├── image_about_bangbang93.png
+│   │       │   │   ├── image_about_lingmuqiuzhu.png
+│   │       │   │   ├── image_about_mcmod.png
+│   │       │   │   ├── image_about_movtery.png
+│   │       │   │   ├── image_about_shirosakimio.png
+│   │       │   │   ├── image_about_verafirefly.png
+│   │       │   │   ├── image_xibao.png
+│   │       │   │   ├── no_focus_shown.xml
+│   │       │   │   ├── selector_bar_horizontal.xml
+│   │       │   │   ├── selector_bar_vertical.xml
+│   │       │   │   ├── shadow_gradient_down.xml
+│   │       │   │   ├── shadow_gradient_left.xml
+│   │       │   │   ├── shadow_gradient_right.xml
+│   │       │   │   ├── shadow_gradient_up.xml
+│   │       │   │   ├── spinner_arrow.xml
+│   │       │   │   └── view_text_progressbar.xml
+│   │       │   ├── layout/
+│   │       │   │   ├── activity_custom_controls.xml
+│   │       │   │   ├── activity_error.xml
+│   │       │   │   ├── activity_game.xml
+│   │       │   │   ├── activity_java_gui_launcher.xml
+│   │       │   │   ├── activity_launcher.xml
+│   │       │   │   ├── activity_splash.xml
+│   │       │   │   ├── dialog_color_selector.xml
+│   │       │   │   ├── dialog_control_button_setting.xml
+│   │       │   │   ├── dialog_control_info.xml
+│   │       │   │   ├── dialog_edit_control_info.xml
+│   │       │   │   ├── dialog_edit_text.xml
+│   │       │   │   ├── dialog_keyboard.xml
+│   │       │   │   ├── dialog_mod_dependencies.xml
+│   │       │   │   ├── dialog_operation_file.xml
+│   │       │   │   ├── dialog_other_login.xml
+│   │       │   │   ├── dialog_progress.xml
+│   │       │   │   ├── dialog_select_item.xml
+│   │       │   │   ├── dialog_select_version.xml
+│   │       │   │   ├── dialog_tip.xml
+│   │       │   │   ├── dialog_update.xml
+│   │       │   │   ├── fragment_about.xml
+│   │       │   │   ├── fragment_about_info_page.xml
+│   │       │   │   ├── fragment_about_sponsor_page.xml
+│   │       │   │   ├── fragment_account.xml
+│   │       │   │   ├── fragment_control_manager.xml
+│   │       │   │   ├── fragment_controller_remapper.xml
+│   │       │   │   ├── fragment_custom_background.xml
+│   │       │   │   ├── fragment_custom_mouse.xml
+│   │       │   │   ├── fragment_download.xml
+│   │       │   │   ├── fragment_download_resource.xml
+│   │       │   │   ├── fragment_files.xml
+│   │       │   │   ├── fragment_install_game.xml
+│   │       │   │   ├── fragment_launcher.xml
+│   │       │   │   ├── fragment_microsoft_login.xml
+│   │       │   │   ├── fragment_mod_download.xml
+│   │       │   │   ├── fragment_mods.xml
+│   │       │   │   ├── fragment_settings.xml
+│   │       │   │   ├── fragment_version.xml
+│   │       │   │   ├── fragment_version_config.xml
+│   │       │   │   ├── fragment_version_manager.xml
+│   │       │   │   ├── fragment_versions_list.xml
+│   │       │   │   ├── item_about_view.xml
+│   │       │   │   ├── item_account_manager.xml
+│   │       │   │   ├── item_centered_textview.xml
+│   │       │   │   ├── item_centered_textview_large.xml
+│   │       │   │   ├── item_control_list_view.xml
+│   │       │   │   ├── item_controller_mapping.xml
+│   │       │   │   ├── item_download_info.xml
+│   │       │   │   ├── item_favorite_folder.xml
+│   │       │   │   ├── item_file_list_view.xml
+│   │       │   │   ├── item_installable.xml
+│   │       │   │   ├── item_local_renderer_view.xml
+│   │       │   │   ├── item_mod_dependencies.xml
+│   │       │   │   ├── item_mod_download.xml
+│   │       │   │   ├── item_mod_version.xml
+│   │       │   │   ├── item_multirt_runtime.xml
+│   │       │   │   ├── item_other_server.xml
+│   │       │   │   ├── item_profile_path.xml
+│   │       │   │   ├── item_select_multirt_runtime.xml
+│   │       │   │   ├── item_sponsor_view.xml
+│   │       │   │   ├── item_version.xml
+│   │       │   │   ├── settings_fragment_control.xml
+│   │       │   │   ├── settings_fragment_experimental.xml
+│   │       │   │   ├── settings_fragment_game.xml
+│   │       │   │   ├── settings_fragment_launcher.xml
+│   │       │   │   ├── settings_fragment_video.xml
+│   │       │   │   ├── storage_test_no_sdcard.xml
+│   │       │   │   ├── view_account.xml
+│   │       │   │   ├── view_add_other_server.xml
+│   │       │   │   ├── view_control_menu.xml
+│   │       │   │   ├── view_file_action_bar.xml
+│   │       │   │   ├── view_game_menu.xml
+│   │       │   │   ├── view_game_menu_window.xml
+│   │       │   │   ├── view_info_screenshot.xml
+│   │       │   │   ├── view_loading.xml
+│   │       │   │   ├── view_logger.xml
+│   │       │   │   ├── view_path_manager.xml
+│   │       │   │   ├── view_progress.xml
+│   │       │   │   ├── view_search.xml
+│   │       │   │   ├── view_single_action_popup.xml
+│   │       │   │   ├── view_task_running.xml
+│   │       │   │   └── view_version_manager.xml
+│   │       │   ├── mipmap-anydpi-v26/
+│   │       │   │   ├── ic_launcher.xml
+│   │       │   │   └── ic_launcher_round.xml
+│   │       │   ├── mipmap-hdpi/
+│   │       │   │   ├── ic_launcher.png
+│   │       │   │   ├── ic_launcher_foreground.png
+│   │       │   │   └── ic_launcher_round.png
+│   │       │   ├── mipmap-mdpi/
+│   │       │   │   ├── ic_launcher.png
+│   │       │   │   ├── ic_launcher_foreground.png
+│   │       │   │   └── ic_launcher_round.png
+│   │       │   ├── mipmap-xhdpi/
+│   │       │   │   ├── ic_launcher.png
+│   │       │   │   ├── ic_launcher_foreground.png
+│   │       │   │   └── ic_launcher_round.png
+│   │       │   ├── mipmap-xxhdpi/
+│   │       │   │   ├── ic_launcher.png
+│   │       │   │   ├── ic_launcher_foreground.png
+│   │       │   │   └── ic_launcher_round.png
+│   │       │   ├── mipmap-xxxhdpi/
+│   │       │   │   ├── ic_launcher.png
+│   │       │   │   ├── ic_launcher_foreground.png
+│   │       │   │   └── ic_launcher_round.png
+│   │       │   ├── values/
+│   │       │   │   ├── attrs.xml
+│   │       │   │   ├── colors.xml
+│   │       │   │   ├── dimens.xml
+│   │       │   │   ├── game_language_name.xml
+│   │       │   │   ├── game_language_vaule.xml
+│   │       │   │   ├── headings_array.xml
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   ├── strings.xml
+│   │       │   │   └── styles.xml
+│   │       │   ├── values-ar/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-de/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-fr/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-night/
+│   │       │   │   ├── colors_night.xml
+│   │       │   │   └── styles.xml
+│   │       │   ├── values-pt-rBR/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-ru/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-vi/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-zh-rCN/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   ├── values-zh-rTW/
+│   │       │   │   ├── keycodes.xml
+│   │       │   │   ├── mod_categories.xml
+│   │       │   │   └── strings.xml
+│   │       │   └── xml/
+│   │       │       ├── anim_scale.xml
+│   │       │       ├── network_security_config.xml
+│   │       │       └── provider_paths.xml
+│   │       └── AndroidManifest.xml
+│   ├── build.gradle.kts
+│   ├── debug.keystore
+│   ├── gradle.properties
+│   ├── movtery-key.jks
+│   └── proguard-rules.pro
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── jre_lwjgl3glfw/
+│   ├── libs/
+│   │   ├── jsr305.jar
+│   │   ├── lwjgl-freetype.jar
+│   │   ├── lwjgl-glfw.jar
+│   │   ├── lwjgl-jemalloc.jar
+│   │   ├── lwjgl-lwjglx.jar
+│   │   ├── lwjgl-nanovg.jar
+│   │   ├── lwjgl-openal.jar
+│   │   ├── lwjgl-opengl.jar
+│   │   ├── lwjgl-stb.jar
+│   │   ├── lwjgl-tinyfd.jar
+│   │   └── lwjgl.jar
+│   ├── src/
+│   │   └── main/
+│   │       └── java/
+│   │           ├── android/
+│   │           │   └── util/
+│   │           │       ├── ArrayMap.java
+│   │           │       ├── ContainerHelpers.java
+│   │           │       ├── EmptyArray.java
+│   │           │       ├── MapCollections.java
+│   │           │       └── Objects.java
+│   │           ├── net/
+│   │           │   ├── java/
+│   │           │   │   └── openjdk/
+│   │           │   │       └── cacio/
+│   │           │   │           └── ctc/
+│   │           │   │               ├── ExternalMouseReader.java
+│   │           │   │               └── InfdevGrabHandler.java
+│   │           │   └── minecraft/
+│   │           │       └── client/
+│   │           │           └── ClientBrandRetriever.java.z
+│   │           └── org/
+│   │               └── lwjgl/
+│   │                   ├── glfw/
+│   │                   │   ├── CallbackBridge.java
+│   │                   │   ├── Callbacks.java
+│   │                   │   ├── GLFW.java
+│   │                   │   ├── GLFWNativeCocoa.java
+│   │                   │   ├── GLFWNativeEGL.java
+│   │                   │   ├── GLFWNativeNSGL.java
+│   │                   │   ├── GLFWNativeOSMesa.java
+│   │                   │   ├── GLFWNativeWGL.java
+│   │                   │   ├── GLFWNativeWayland.java
+│   │                   │   ├── GLFWNativeWin32.java
+│   │                   │   ├── GLFWNativeX11.java
+│   │                   │   └── GLFWWindowProperties.java
+│   │                   ├── input/
+│   │                   │   └── InfdevMouse.java
+│   │                   └── opengl/
+│   │                       └── PojavRendererInit.java
+│   ├── build.gradle.kts
+│   └── jre_lwjgl3glfw.iml
+├── .gitignore
+├── LICENSE
+├── README-ZH_TW.md
+├── README.md
+├── README_ZH_CN.md
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+└── settings.gradle.kts

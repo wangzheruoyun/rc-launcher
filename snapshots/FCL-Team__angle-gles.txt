@@ -1,0 +1,4309 @@
+# Repository: FCL-Team/angle-gles
+# Default branch: main
+# Total entries: 4303
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── android.yml
+├── android/
+│   ├── AndroidManifest.xml
+│   ├── AndroidManifest.xml.jinja2
+│   ├── OWNERS
+│   ├── android.software.angle.xml
+│   ├── angle_apk.gni
+│   └── compress_symbols.py
+├── build_overrides/
+│   ├── angle.gni
+│   ├── build.gni
+│   ├── clspv.gni
+│   ├── dawn.gni
+│   ├── glslang.gni
+│   ├── gtest.gni
+│   ├── lunarg_vulkantools.gni
+│   ├── protobuf.gni
+│   ├── spirv_tools.gni
+│   ├── swiftshader.gni
+│   ├── tint.gni
+│   ├── vulkan_common.gni
+│   ├── vulkan_headers.gni
+│   ├── vulkan_loader.gni
+│   ├── vulkan_memory_allocator.gni
+│   ├── vulkan_tools.gni
+│   ├── vulkan_utility_libraries.gni
+│   ├── vulkan_validation_layers.gni
+│   └── wayland.gni
+├── doc/
+│   ├── img/
+│   │   ├── JobUnit.png
+│   │   ├── RegressionTestingArchitecture.png
+│   │   ├── StateChangeNotificationFlow.svg
+│   │   ├── StateNotificationExample.svg
+│   │   ├── SwarmingTaskInfo.png
+│   │   ├── TestBatchFailure.png
+│   │   ├── TestShardFailure.png
+│   │   └── VangleDebugOverlay.png
+│   ├── 64BitSafety.md
+│   ├── AddingExtensions.md
+│   ├── BecomingCommitter.md
+│   ├── BranchingAndRolling.md
+│   ├── BufferImplementation.md
+│   ├── BuildingAngleForChromiumDevelopment.md
+│   ├── CaptureAndReplay.md
+│   ├── ChoosingANGLEBranch.md
+│   ├── CodeReviewProcess.md
+│   ├── CodingStandard.md
+│   ├── CompilingTranslatorWithEmscripten.md
+│   ├── ContributingCode.md
+│   ├── DebugOverlayInVulkanBackend.md
+│   ├── DebuggingTips.md
+│   ├── DevSetup.md
+│   ├── DevSetupAndroid.md
+│   ├── DirtyBits.md
+│   ├── DynamicShaderCompilation.md
+│   ├── ES1Status.md
+│   ├── ExtensionSupport.md
+│   ├── ExternalBenchmarks.md
+│   ├── GPUMemoryAnalysis.md
+│   ├── MANGLE.md
+│   ├── MetalBackendShaders.md
+│   ├── Orientation.md
+│   ├── ResourceLimits.md
+│   ├── ShaderSubstitution.md
+│   ├── SourceAccess.md
+│   ├── StandaloneBenchmark.md
+│   ├── TestingAndProcesses.md
+│   ├── TestingOnBots.md
+│   ├── Update20120704.md
+│   ├── Update20130618.md
+│   ├── Update20131120.md
+│   ├── Update20140325.md
+│   ├── Update20150105.md
+│   ├── VTF.md
+│   ├── WritingShaderASTTransformations.md
+│   └── dEQP.md
+├── extensions/
+│   ├── ANGLE_base_vertex_base_instance.txt
+│   ├── ANGLE_base_vertex_base_instance_shader_builtin.txt
+│   ├── ANGLE_blob_cache.txt
+│   ├── ANGLE_client_arrays.txt
+│   ├── ANGLE_clip_cull_distance.txt
+│   ├── ANGLE_compressed_texture_etc.txt
+│   ├── ANGLE_copy_texture_3d.txt
+│   ├── ANGLE_depth_texture.txt
+│   ├── ANGLE_explicit_context_gles1.txt
+│   ├── ANGLE_external_objects_flags.txt
+│   ├── ANGLE_external_objects_fuchsia.txt
+│   ├── ANGLE_framebuffer_blit.txt
+│   ├── ANGLE_framebuffer_multisample.txt
+│   ├── ANGLE_get_image.txt
+│   ├── ANGLE_get_serialized_context_string.txt
+│   ├── ANGLE_get_tex_level_parameter.txt
+│   ├── ANGLE_instanced_arrays.txt
+│   ├── ANGLE_logic_op.txt
+│   ├── ANGLE_lossy_etc_decode.txt
+│   ├── ANGLE_memory_size.txt
+│   ├── ANGLE_multi_draw.txt
+│   ├── ANGLE_multiview_multisample.txt
+│   ├── ANGLE_pack_reverse_row_order.txt
+│   ├── ANGLE_polygon_mode.txt
+│   ├── ANGLE_program_binary.txt
+│   ├── ANGLE_program_binary_readiness_query.txt
+│   ├── ANGLE_program_cache_control.txt
+│   ├── ANGLE_provoking_vertex.txt
+│   ├── ANGLE_read_only_depth_stencil_feedback_loops.txt
+│   ├── ANGLE_relaxed_vertex_attribute_type.txt
+│   ├── ANGLE_renderability_validation.txt
+│   ├── ANGLE_request_extension.txt
+│   ├── ANGLE_rgbx_internal_format.txt
+│   ├── ANGLE_robust_client_memory.txt
+│   ├── ANGLE_robust_fragment_shader_output.txt
+│   ├── ANGLE_robust_resource_initialization.txt
+│   ├── ANGLE_shader_binary.txt
+│   ├── ANGLE_shader_pixel_local_storage.txt
+│   ├── ANGLE_stencil_texturing.txt
+│   ├── ANGLE_texture_compression_dxt.txt
+│   ├── ANGLE_texture_multisample.txt
+│   ├── ANGLE_texture_usage.txt
+│   ├── ANGLE_translated_shader_source.txt
+│   ├── ANGLE_vulkan_image.txt
+│   ├── ANGLE_webgl_compatibility.txt
+│   ├── ANGLE_yuv_internal_format.txt
+│   ├── CHROMIUM_bind_generates_resource.txt
+│   ├── CHROMIUM_bind_uniform_location.txt
+│   ├── CHROMIUM_compressed_copy_texture.txt
+│   ├── CHROMIUM_copy_texture.txt
+│   ├── CHROMIUM_sync_query.txt
+│   ├── EGL_ANGLE_colorspace_attribute_passthrough.txt
+│   ├── EGL_ANGLE_context_virtualization.txt
+│   ├── EGL_ANGLE_create_context_backwards_compatible.txt
+│   ├── EGL_ANGLE_create_context_client_arrays.txt
+│   ├── EGL_ANGLE_create_context_extensions_enabled.txt
+│   ├── EGL_ANGLE_create_context_webgl_compatibility.txt
+│   ├── EGL_ANGLE_create_surface_swap_interval.txt
+│   ├── EGL_ANGLE_d3d_share_handle_client_buffer.txt
+│   ├── EGL_ANGLE_d3d_texture_client_buffer.txt
+│   ├── EGL_ANGLE_device_cgl.txt
+│   ├── EGL_ANGLE_device_creation.txt
+│   ├── EGL_ANGLE_device_creation_d3d11.txt
+│   ├── EGL_ANGLE_device_d3d.txt
+│   ├── EGL_ANGLE_device_d3d11.txt
+│   ├── EGL_ANGLE_device_d3d9.txt
+│   ├── EGL_ANGLE_device_eagl.txt
+│   ├── EGL_ANGLE_device_metal.txt
+│   ├── EGL_ANGLE_device_vulkan.txt
+│   ├── EGL_ANGLE_device_webgpu.txt
+│   ├── EGL_ANGLE_direct3d_display.txt
+│   ├── EGL_ANGLE_direct_composition.txt
+│   ├── EGL_ANGLE_display_power_preference.txt
+│   ├── EGL_ANGLE_display_semaphore_share_group.txt
+│   ├── EGL_ANGLE_display_texture_share_group.txt
+│   ├── EGL_ANGLE_experimental_present_path.txt
+│   ├── EGL_ANGLE_explicit_context.txt
+│   ├── EGL_ANGLE_external_context_and_surface.txt
+│   ├── EGL_ANGLE_feature_control.txt
+│   ├── EGL_ANGLE_global_fence_sync.txt
+│   ├── EGL_ANGLE_iosurface_client_buffer.txt
+│   ├── EGL_ANGLE_keyed_mutex.txt
+│   ├── EGL_ANGLE_memory_usage_report.txt
+│   ├── EGL_ANGLE_metal_commands_scheduled_sync.txt
+│   ├── EGL_ANGLE_metal_create_context_ownership_identity.txt
+│   ├── EGL_ANGLE_metal_shared_event_sync.txt
+│   ├── EGL_ANGLE_metal_texture_client_buffer.txt
+│   ├── EGL_ANGLE_no_error.txt
+│   ├── EGL_ANGLE_platform_angle.txt
+│   ├── EGL_ANGLE_platform_angle_d3d.txt
+│   ├── EGL_ANGLE_platform_angle_d3d11on12.txt
+│   ├── EGL_ANGLE_platform_angle_d3d_luid.txt
+│   ├── EGL_ANGLE_platform_angle_device_context_volatile_cgl.txt
+│   ├── EGL_ANGLE_platform_angle_device_context_volatile_eagl.txt
+│   ├── EGL_ANGLE_platform_angle_device_id.txt
+│   ├── EGL_ANGLE_platform_angle_device_type_egl.txt
+│   ├── EGL_ANGLE_platform_angle_device_type_swiftshader.txt
+│   ├── EGL_ANGLE_platform_angle_metal.txt
+│   ├── EGL_ANGLE_platform_angle_null.txt
+│   ├── EGL_ANGLE_platform_angle_opengl.txt
+│   ├── EGL_ANGLE_platform_angle_vulkan.txt
+│   ├── EGL_ANGLE_platform_angle_vulkan_device_uuid.txt
+│   ├── EGL_ANGLE_platform_angle_webgpu.txt
+│   ├── EGL_ANGLE_power_preference.txt
+│   ├── EGL_ANGLE_prepare_swap_buffers.txt
+│   ├── EGL_ANGLE_program_cache_control.txt
+│   ├── EGL_ANGLE_query_surface_pointer.txt
+│   ├── EGL_ANGLE_robust_resource_initialization.txt
+│   ├── EGL_ANGLE_software_display.txt
+│   ├── EGL_ANGLE_stream_producer_d3d_texture.txt
+│   ├── EGL_ANGLE_surface_d3d_texture_2d_share_handle.txt
+│   ├── EGL_ANGLE_surface_orientation.txt
+│   ├── EGL_ANGLE_sync_control_rate.txt
+│   ├── EGL_ANGLE_timestamp_surface_attribute.txt
+│   ├── EGL_ANGLE_vulkan_display.txt
+│   ├── EGL_ANGLE_vulkan_image.txt
+│   ├── EGL_ANGLE_wait_until_work_scheduled.txt
+│   ├── EGL_ANGLE_webgpu_texture_client_buffer.txt
+│   ├── EGL_ANGLE_window_fixed_size.txt
+│   ├── EGL_ANGLE_x11_visual.txt
+│   ├── EGL_CHROMIUM_create_context_bind_generates_resource.txt
+│   ├── EGL_CHROMIUM_sync_control.txt
+│   └── EGL_EXT_device_query.txt
+├── gni/
+│   └── angle.gni
+├── include/
+│   ├── CL/
+│   │   ├── .clang-format
+│   │   ├── README.md
+│   │   ├── cl.h
+│   │   ├── cl_d3d10.h
+│   │   ├── cl_d3d11.h
+│   │   ├── cl_dx9_media_sharing.h
+│   │   ├── cl_dx9_media_sharing_intel.h
+│   │   ├── cl_egl.h
+│   │   ├── cl_ext.h
+│   │   ├── cl_ext_intel.h
+│   │   ├── cl_function_types.h
+│   │   ├── cl_gl.h
+│   │   ├── cl_gl_ext.h
+│   │   ├── cl_half.h
+│   │   ├── cl_icd.h
+│   │   ├── cl_layer.h
+│   │   ├── cl_platform.h
+│   │   ├── cl_va_api_media_sharing_intel.h
+│   │   ├── cl_version.h
+│   │   └── opencl.h
+│   ├── EGL/
+│   │   ├── .clang-format
+│   │   ├── egl.h
+│   │   ├── eglext.h
+│   │   ├── eglext_angle.h
+│   │   └── eglplatform.h
+│   ├── GLES/
+│   │   ├── .clang-format
+│   │   ├── README.md
+│   │   ├── egl.h
+│   │   ├── gl.h
+│   │   ├── glext.h
+│   │   └── glplatform.h
+│   ├── GLES2/
+│   │   ├── .clang-format
+│   │   ├── gl2.h
+│   │   ├── gl2ext.h
+│   │   ├── gl2ext_angle.h
+│   │   └── gl2platform.h
+│   ├── GLES3/
+│   │   ├── .clang-format
+│   │   ├── gl3.h
+│   │   ├── gl31.h
+│   │   ├── gl32.h
+│   │   └── gl3platform.h
+│   ├── GLSLANG/
+│   │   ├── ShaderLang.h
+│   │   └── ShaderVars.h
+│   ├── GLX/
+│   │   ├── .clang-format
+│   │   └── glxext.h
+│   ├── KHR/
+│   │   ├── .clang-format
+│   │   └── khrplatform.h
+│   ├── WGL/
+│   │   ├── .clang-format
+│   │   └── wgl.h
+│   ├── platform/
+│   │   ├── autogen/
+│   │   │   ├── .clang-format
+│   │   │   ├── FeaturesD3D_autogen.h
+│   │   │   ├── FeaturesGL_autogen.h
+│   │   │   ├── FeaturesMtl_autogen.h
+│   │   │   ├── FeaturesVk_autogen.h
+│   │   │   ├── FeaturesWgpu_autogen.h
+│   │   │   └── FrontendFeatures_autogen.h
+│   │   ├── Feature.h
+│   │   ├── PlatformMethods.h
+│   │   ├── d3d_features.json
+│   │   ├── frontend_features.json
+│   │   ├── gen_features.py
+│   │   ├── gl_features.json
+│   │   ├── mtl_features.json
+│   │   ├── vk_features.json
+│   │   └── wgpu_features.json
+│   ├── vulkan/
+│   │   └── vulkan_fuchsia_ext.h
+│   ├── angle_cl.h
+│   ├── angle_gl.h
+│   ├── angle_windowsstore.h
+│   └── export.h
+├── infra/
+│   ├── config/
+│   │   ├── generated/
+│   │   │   ├── builders/
+│   │   │   │   ├── ci/
+│   │   │   │   │   └── angle-linux-x64-builder-rel/
+│   │   │   │   │       └── gn-args.json
+│   │   │   │   ├── try/
+│   │   │   │   │   ├── angle-cq-linux-x64-rel/
+│   │   │   │   │   │   └── gn-args.json
+│   │   │   │   │   └── angle-try-linux-x64-sws-rel/
+│   │   │   │   │       └── gn-args.json
+│   │   │   │   └── gn_args_locations.json
+│   │   │   ├── luci/
+│   │   │   │   ├── commit-queue.cfg
+│   │   │   │   ├── cr-buildbucket.cfg
+│   │   │   │   ├── luci-logdog.cfg
+│   │   │   │   ├── luci-milo.cfg
+│   │   │   │   ├── luci-scheduler.cfg
+│   │   │   │   ├── project.cfg
+│   │   │   │   └── realms.cfg
+│   │   │   └── project.pyl
+│   │   ├── OWNERS
+│   │   ├── PACKAGE.lock
+│   │   ├── PACKAGE.star
+│   │   ├── PRESUBMIT.py
+│   │   ├── README.md
+│   │   ├── angle_v2_ci.star
+│   │   ├── angle_v2_try.star
+│   │   ├── constants.star
+│   │   ├── gn_args.star
+│   │   ├── legacy_builders.star
+│   │   ├── main.star
+│   │   └── recipes.star
+│   ├── specs/
+│   │   ├── PRESUBMIT.py
+│   │   ├── angle.json
+│   │   ├── angle_mb_config.pyl
+│   │   ├── ci.json
+│   │   ├── generate_test_spec_json.py
+│   │   ├── gn_isolate_map.pyl
+│   │   ├── mixins.pyl
+│   │   ├── test_suite_exceptions.pyl
+│   │   ├── test_suites.pyl
+│   │   ├── trybot_analyze_config.json
+│   │   ├── variants.pyl
+│   │   └── waterfalls.pyl
+│   ├── ANGLEWrangling.md
+│   ├── README.md
+│   └── whitespace.json
+├── out/
+│   ├── Android-arm/
+│   │   └── args.gn
+│   ├── Android-arm64/
+│   │   └── args.gn
+│   ├── Android-x64/
+│   │   └── args.gn
+│   └── Android-x86/
+│       └── args.gn
+├── samples/
+│   ├── WindowTest/
+│   │   └── WindowTest.cpp
+│   ├── capture_replay/
+│   │   ├── .gitignore
+│   │   ├── BUILD.gn
+│   │   └── CaptureReplay.cpp
+│   ├── gles1/
+│   │   ├── DrawTexture.cpp
+│   │   ├── FlatShading.cpp
+│   │   ├── HelloTriangle.cpp
+│   │   ├── SimpleLighting.cpp
+│   │   └── SimpleTexture2D.cpp
+│   ├── hello_triangle/
+│   │   └── HelloTriangle.cpp
+│   ├── mip_map_2d/
+│   │   └── MipMap2D.cpp
+│   ├── multi_texture/
+│   │   ├── MultiTexture.cpp
+│   │   ├── basemap.tga
+│   │   └── lightmap.tga
+│   ├── multi_window/
+│   │   └── MultiWindow.cpp
+│   ├── multiple_contexts/
+│   │   └── MultipleContexts.cpp
+│   ├── multiple_draw_buffers/
+│   │   ├── MultipleDrawBuffers.cpp
+│   │   ├── multiple_draw_buffers_copy_fs.glsl
+│   │   ├── multiple_draw_buffers_fs.glsl
+│   │   └── multiple_draw_buffers_vs.glsl
+│   ├── multiview/
+│   │   └── Multiview.cpp
+│   ├── particle_system/
+│   │   ├── ParticleSystem.cpp
+│   │   └── smoke.tga
+│   ├── post_sub_buffer/
+│   │   └── PostSubBuffer.cpp
+│   ├── sample_util/
+│   │   ├── SampleApplication.cpp
+│   │   ├── SampleApplication.h
+│   │   ├── texture_utils.cpp
+│   │   ├── texture_utils.h
+│   │   ├── tga_utils.cpp
+│   │   └── tga_utils.h
+│   ├── shader_translator/
+│   │   └── shader_translator.cpp
+│   ├── simple_instancing/
+│   │   └── SimpleInstancing.cpp
+│   ├── simple_texture_2d/
+│   │   └── SimpleTexture2D.cpp
+│   ├── simple_texture_cubemap/
+│   │   └── SimpleTextureCubemap.cpp
+│   ├── simple_vertex_shader/
+│   │   └── SimpleVertexShader.cpp
+│   ├── stencil_operations/
+│   │   └── StencilOperations.cpp
+│   ├── tex_redef_microbench/
+│   │   └── TexRedefMicroBench.cpp
+│   ├── texture_wrap/
+│   │   └── TextureWrap.cpp
+│   ├── torus_lighting/
+│   │   ├── TorusBufferStorage.cpp
+│   │   ├── TorusLightingES1.cpp
+│   │   ├── TorusLightingES2.cpp
+│   │   └── torus.h
+│   ├── tri_fan_microbench/
+│   │   └── TriFanMicroBench.cpp
+│   └── BUILD.gn
+├── scripts/
+│   ├── code_generation_hashes/
+│   │   ├── ANGLE_format.json
+│   │   ├── ANGLE_load_functions_table.json
+│   │   ├── ANGLE_shader_preprocessor.json
+│   │   ├── ANGLE_shader_translator.json
+│   │   ├── D3D11_blit_shader_selection.json
+│   │   ├── D3D11_format.json
+│   │   ├── DXGI_format.json
+│   │   ├── DXGI_format_support.json
+│   │   ├── Emulated_HLSL_functions.json
+│   │   ├── Extension_files.json
+│   │   ├── GL_CTS_(dEQP)_build_files.json
+│   │   ├── GL_EGL_WGL_loader.json
+│   │   ├── GL_EGL_entry_points.json
+│   │   ├── GL_copy_conversion_table.json
+│   │   ├── GL_format_map.json
+│   │   ├── GLenum_value_to_string_map.json
+│   │   ├── Metal_default_shaders.json
+│   │   ├── Metal_format_table.json
+│   │   ├── OpenGL_dispatch_table.json
+│   │   ├── SPIR-V_helpers.json
+│   │   ├── Static_builtins.json
+│   │   ├── Vulkan_format.json
+│   │   ├── Vulkan_internal_shader_programs.json
+│   │   ├── Vulkan_mandatory_format_support_table.json
+│   │   ├── WebGPU_format.json
+│   │   ├── interpreter_utils.json
+│   │   ├── overlay_fonts.json
+│   │   ├── overlay_widgets.json
+│   │   ├── packed_enum.json
+│   │   ├── proc_table.json
+│   │   ├── restricted_traces.json
+│   │   └── uniform_type.json
+│   ├── extension_data/
+│   │   ├── intel_630_linux.json
+│   │   ├── intel_630_win10.json
+│   │   ├── nvidia_1660_linux.json
+│   │   ├── nvidia_1660_win10.json
+│   │   ├── pixel_4_android_11.json
+│   │   ├── pixel_6_android_13.json
+│   │   ├── swiftshader_linux.json
+│   │   ├── swiftshader_win10.json
+│   │   └── swiftshader_win10_gles1.json
+│   ├── angle_deqp_bundle.py
+│   ├── angle_deqp_test_merge.py
+│   ├── angle_presubmit_utils.py
+│   ├── angle_presubmit_utils_unittest.py
+│   ├── angle_test_wrapper.py
+│   ├── angle_trace_bundle.py
+│   ├── apply_clang_format_on_all_sources.py
+│   ├── bootstrap.py
+│   ├── egl_angle_ext.xml
+│   ├── entry_point_packed_egl_enums.json
+│   ├── entry_point_packed_gl_enums.json
+│   ├── export_targets.py
+│   ├── file_exists.py
+│   ├── gen_angle_gn_info_json.py
+│   ├── gen_gl_enum_utils.py
+│   ├── gen_interpreter_utils.py
+│   ├── gen_proc_table.py
+│   ├── gen_vk_gl_cts_build.py
+│   ├── generate_android_bp.py
+│   ├── generate_entry_points.py
+│   ├── generate_loader.py
+│   ├── gl_angle_ext.xml
+│   ├── install_target.py
+│   ├── process_angle_perf_results.py
+│   ├── registry_xml.py
+│   ├── roll_aosp.sh
+│   ├── roll_chromium_deps.py
+│   ├── run_code_generation.py
+│   ├── tracegz.py
+│   ├── trigger.bat
+│   ├── trigger.py
+│   ├── update_chrome_angle.py
+│   ├── update_extension_data.py
+│   ├── vk_mandatory_format_support_capture_to_json.js
+│   └── winappsdk_setup.py
+├── src/
+│   ├── android_system_settings/
+│   │   ├── assets/
+│   │   │   └── a4a_rules.json
+│   │   ├── res/
+│   │   │   ├── drawable/
+│   │   │   │   └── icon.png
+│   │   │   ├── values/
+│   │   │   │   ├── dimens.xml
+│   │   │   │   ├── drivers.xml
+│   │   │   │   ├── intents.xml
+│   │   │   │   ├── preference_keys.xml
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-af/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-am/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ar/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-as/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-az/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-b+sr+Latn/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-be/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-bg/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-bn/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-bs/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ca/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-cs/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-da/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-de/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-el/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-en-rAU/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-en-rCA/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-en-rGB/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-en-rIN/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-en-rXC/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-es/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-es-rUS/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-et/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-eu/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-fa/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-fi/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-fr/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-fr-rCA/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-gl/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-gu/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-hi/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-hr/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-hu/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-hy/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-in/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-is/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-it/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-iw/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ja/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ka/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-kk/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-km/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-kn/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ko/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ky/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-lo/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-lt/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-lv/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-mk/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ml/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-mn/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-mr/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ms/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-my/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-nb/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ne/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-nl/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-or/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-pa/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-pl/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-pt/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-pt-rPT/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ro/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ru/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-si/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sk/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sl/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sq/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sr/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sv/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-sw/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ta/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-te/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-th/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-tl/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-tr/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-uk/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-ur/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-uz/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-v17/
+│   │   │   │   └── styles.xml
+│   │   │   ├── values-vi/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-zh-rCN/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-zh-rHK/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-zh-rTW/
+│   │   │   │   └── strings.xml
+│   │   │   ├── values-zu/
+│   │   │   │   └── strings.xml
+│   │   │   └── xml/
+│   │   │       └── main.xml
+│   │   ├── src/
+│   │   │   └── com/
+│   │   │       └── android/
+│   │   │           └── angle/
+│   │   │               ├── common/
+│   │   │               │   ├── AngleRuleHelper.java
+│   │   │               │   ├── GlobalSettings.java
+│   │   │               │   ├── MainFragment.java
+│   │   │               │   ├── Receiver.java
+│   │   │               │   └── SearchProvider.java
+│   │   │               ├── AndroidManifest.xml
+│   │   │               ├── EmptyMainActivity.java
+│   │   │               └── MainActivity.java
+│   │   └── README.md
+│   ├── common/
+│   │   ├── apple/
+│   │   │   ├── ObjCPtr.h
+│   │   │   ├── ObjCPtr_test.mm
+│   │   │   ├── SoftLinking.h
+│   │   │   └── apple_platform.h
+│   │   ├── base/
+│   │   │   ├── anglebase/
+│   │   │   │   ├── containers/
+│   │   │   │   │   └── mru_cache.h
+│   │   │   │   ├── numerics/
+│   │   │   │   │   ├── OWNERS
+│   │   │   │   │   ├── checked_math.h
+│   │   │   │   │   ├── checked_math_impl.h
+│   │   │   │   │   ├── clamped_math.h
+│   │   │   │   │   ├── clamped_math_impl.h
+│   │   │   │   │   ├── math_constants.h
+│   │   │   │   │   ├── ranges.h
+│   │   │   │   │   ├── safe_conversions.h
+│   │   │   │   │   ├── safe_conversions_arm_impl.h
+│   │   │   │   │   ├── safe_conversions_impl.h
+│   │   │   │   │   ├── safe_math.h
+│   │   │   │   │   ├── safe_math_arm_impl.h
+│   │   │   │   │   ├── safe_math_clang_gcc_impl.h
+│   │   │   │   │   └── safe_math_shared_impl.h
+│   │   │   │   ├── trace_event/
+│   │   │   │   │   └── trace_event.h
+│   │   │   │   ├── base_export.h
+│   │   │   │   ├── logging.h
+│   │   │   │   ├── macros.h
+│   │   │   │   ├── no_destructor.h
+│   │   │   │   ├── sha1.cc
+│   │   │   │   ├── sha1.h
+│   │   │   │   └── sys_byteorder.h
+│   │   │   └── README.chromium
+│   │   ├── fuchsia_egl/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── OWNERS
+│   │   │   ├── fuchsia_egl.c
+│   │   │   ├── fuchsia_egl.h
+│   │   │   └── fuchsia_egl_backend.h
+│   │   ├── gl/
+│   │   │   └── cgl/
+│   │   │       ├── FunctionsCGL.cpp
+│   │   │       └── FunctionsCGL.h
+│   │   ├── linux/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── dma_buf_utils.cpp
+│   │   │   └── dma_buf_utils.h
+│   │   ├── serializer/
+│   │   │   ├── JsonSerializer.cpp
+│   │   │   ├── JsonSerializer.h
+│   │   │   └── JsonSerializer_unittest.cpp
+│   │   ├── spirv/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── angle_spirv_utils.cpp
+│   │   │   ├── gen_spirv_builder_and_parser.py
+│   │   │   ├── spirv_instruction_builder_autogen.cpp
+│   │   │   ├── spirv_instruction_builder_autogen.h
+│   │   │   ├── spirv_instruction_parser_autogen.cpp
+│   │   │   ├── spirv_instruction_parser_autogen.h
+│   │   │   └── spirv_types.h
+│   │   ├── third_party/
+│   │   │   └── xxhash/
+│   │   │       ├── LICENSE
+│   │   │       ├── README.chromium
+│   │   │       ├── README.md
+│   │   │       ├── xxhash.c
+│   │   │       ├── xxhash.h
+│   │   │       └── xxhash_fuzzer.cpp
+│   │   ├── vulkan/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── libvulkan_loader.cpp
+│   │   │   ├── libvulkan_loader.h
+│   │   │   ├── vk_headers.h
+│   │   │   ├── vulkan_icd.cpp
+│   │   │   └── vulkan_icd.h
+│   │   ├── BinaryStream.h
+│   │   ├── BinaryStream_unittest.cpp
+│   │   ├── CircularBuffer.h
+│   │   ├── CircularBuffer_unittest.cpp
+│   │   ├── Color.h
+│   │   ├── Color.inc
+│   │   ├── CompiledShaderState.cpp
+│   │   ├── CompiledShaderState.h
+│   │   ├── FastVector.h
+│   │   ├── FastVector_unittest.cpp
+│   │   ├── FixedQueue.h
+│   │   ├── FixedQueue_unittest.cpp
+│   │   ├── FixedVector.h
+│   │   ├── FixedVector_unittest.cpp
+│   │   ├── Float16ToFloat32.cpp
+│   │   ├── Float16ToFloat32.py
+│   │   ├── MemoryBuffer.cpp
+│   │   ├── MemoryBuffer.h
+│   │   ├── MemoryBuffer_unittest.cpp
+│   │   ├── Optional.h
+│   │   ├── Optional_unittest.cpp
+│   │   ├── PackedCLEnums_autogen.cpp
+│   │   ├── PackedCLEnums_autogen.h
+│   │   ├── PackedEGLEnums_autogen.cpp
+│   │   ├── PackedEGLEnums_autogen.h
+│   │   ├── PackedEnums.cpp
+│   │   ├── PackedEnums.h
+│   │   ├── PackedGLEnums_autogen.cpp
+│   │   ├── PackedGLEnums_autogen.h
+│   │   ├── PoolAlloc.cpp
+│   │   ├── PoolAlloc.h
+│   │   ├── PoolAlloc_unittest.cpp
+│   │   ├── SimpleMutex.cpp
+│   │   ├── SimpleMutex.h
+│   │   ├── SimpleMutex_unittest.cpp
+│   │   ├── SynchronizedValue.h
+│   │   ├── WorkerThread.cpp
+│   │   ├── WorkerThread.h
+│   │   ├── WorkerThread_unittest.cpp
+│   │   ├── aligned_memory.cpp
+│   │   ├── aligned_memory.h
+│   │   ├── aligned_memory_unittest.cpp
+│   │   ├── android_util.cpp
+│   │   ├── android_util.h
+│   │   ├── angle_version.h
+│   │   ├── angle_version_info.cpp
+│   │   ├── angle_version_info.h
+│   │   ├── angleutils.cpp
+│   │   ├── angleutils.h
+│   │   ├── angleutils_unittest.cpp
+│   │   ├── apple_platform_utils.h
+│   │   ├── apple_platform_utils.mm
+│   │   ├── backtrace_utils.h
+│   │   ├── backtrace_utils_android.cpp
+│   │   ├── backtrace_utils_noop.cpp
+│   │   ├── bitset_utils.h
+│   │   ├── bitset_utils_unittest.cpp
+│   │   ├── debug.cpp
+│   │   ├── debug.h
+│   │   ├── entry_points_enum_autogen.cpp
+│   │   ├── entry_points_enum_autogen.h
+│   │   ├── event_tracer.cpp
+│   │   ├── event_tracer.h
+│   │   ├── frame_capture_binary_data.cpp
+│   │   ├── frame_capture_binary_data.h
+│   │   ├── frame_capture_utils.cpp
+│   │   ├── frame_capture_utils.h
+│   │   ├── frame_capture_utils_autogen.cpp
+│   │   ├── frame_capture_utils_autogen.h
+│   │   ├── gen_packed_gl_enums.py
+│   │   ├── gen_uniform_type_table.py
+│   │   ├── gl_enum_utils.cpp
+│   │   ├── gl_enum_utils.h
+│   │   ├── gl_enum_utils_autogen.cpp
+│   │   ├── gl_enum_utils_autogen.h
+│   │   ├── hash_containers.h
+│   │   ├── hash_utils.h
+│   │   ├── hash_utils_unittest.cpp
+│   │   ├── log_utils.h
+│   │   ├── mathutil.cpp
+│   │   ├── mathutil.h
+│   │   ├── mathutil_unittest.cpp
+│   │   ├── matrix_utils.cpp
+│   │   ├── matrix_utils.h
+│   │   ├── matrix_utils_unittest.cpp
+│   │   ├── packed_cl_enums.json
+│   │   ├── packed_egl_enums.json
+│   │   ├── packed_gl_enums.json
+│   │   ├── platform.h
+│   │   ├── platform_helpers.cpp
+│   │   ├── platform_helpers.h
+│   │   ├── span.h
+│   │   ├── span_unittest.cpp
+│   │   ├── span_util.h
+│   │   ├── span_util_unittest.cpp
+│   │   ├── string_utils.cpp
+│   │   ├── string_utils.h
+│   │   ├── string_utils_unittest.cpp
+│   │   ├── system_utils.cpp
+│   │   ├── system_utils.h
+│   │   ├── system_utils_apple.cpp
+│   │   ├── system_utils_ios.cpp
+│   │   ├── system_utils_ios.mm
+│   │   ├── system_utils_linux.cpp
+│   │   ├── system_utils_mac.cpp
+│   │   ├── system_utils_posix.cpp
+│   │   ├── system_utils_unittest.cpp
+│   │   ├── system_utils_win.cpp
+│   │   ├── system_utils_win32.cpp
+│   │   ├── system_utils_winuwp.cpp
+│   │   ├── tls.cpp
+│   │   ├── tls.h
+│   │   ├── uniform_type_info_autogen.cpp
+│   │   ├── uniform_type_info_autogen.h
+│   │   ├── unsafe_buffers.h
+│   │   ├── utilities.cpp
+│   │   ├── utilities.h
+│   │   ├── utilities_unittest.cpp
+│   │   ├── vector_utils.h
+│   │   └── vector_utils_unittest.cpp
+│   ├── compiler/
+│   │   ├── fuzz/
+│   │   │   └── translator_fuzzer.cpp
+│   │   ├── preprocessor/
+│   │   │   ├── DiagnosticsBase.cpp
+│   │   │   ├── DiagnosticsBase.h
+│   │   │   ├── DirectiveHandlerBase.cpp
+│   │   │   ├── DirectiveHandlerBase.h
+│   │   │   ├── DirectiveParser.cpp
+│   │   │   ├── DirectiveParser.h
+│   │   │   ├── ExpressionParser.h
+│   │   │   ├── Input.cpp
+│   │   │   ├── Input.h
+│   │   │   ├── Lexer.cpp
+│   │   │   ├── Lexer.h
+│   │   │   ├── Macro.cpp
+│   │   │   ├── Macro.h
+│   │   │   ├── MacroExpander.cpp
+│   │   │   ├── MacroExpander.h
+│   │   │   ├── Preprocessor.cpp
+│   │   │   ├── Preprocessor.h
+│   │   │   ├── SourceLocation.h
+│   │   │   ├── Token.cpp
+│   │   │   ├── Token.h
+│   │   │   ├── Tokenizer.h
+│   │   │   ├── generate_parser.py
+│   │   │   ├── numeric_lex.h
+│   │   │   ├── preprocessor.l
+│   │   │   ├── preprocessor.y
+│   │   │   ├── preprocessor_lex_autogen.cpp
+│   │   │   └── preprocessor_tab_autogen.cpp
+│   │   ├── translator/
+│   │   │   ├── glsl/
+│   │   │   │   ├── BuiltInFunctionEmulatorGLSL.cpp
+│   │   │   │   ├── BuiltInFunctionEmulatorGLSL.h
+│   │   │   │   ├── ExtensionGLSL.cpp
+│   │   │   │   ├── ExtensionGLSL.h
+│   │   │   │   ├── OutputESSL.cpp
+│   │   │   │   ├── OutputESSL.h
+│   │   │   │   ├── OutputGLSL.cpp
+│   │   │   │   ├── OutputGLSL.h
+│   │   │   │   ├── OutputGLSLBase.cpp
+│   │   │   │   ├── OutputGLSLBase.h
+│   │   │   │   ├── TranslatorESSL.cpp
+│   │   │   │   ├── TranslatorESSL.h
+│   │   │   │   ├── TranslatorGLSL.cpp
+│   │   │   │   ├── TranslatorGLSL.h
+│   │   │   │   ├── VersionGLSL.cpp
+│   │   │   │   └── VersionGLSL.h
+│   │   │   ├── hlsl/
+│   │   │   │   ├── ASTMetadataHLSL.cpp
+│   │   │   │   ├── ASTMetadataHLSL.h
+│   │   │   │   ├── BuiltInFunctionEmulatorHLSL.cpp
+│   │   │   │   ├── BuiltInFunctionEmulatorHLSL.h
+│   │   │   │   ├── ImageFunctionHLSL.cpp
+│   │   │   │   ├── ImageFunctionHLSL.h
+│   │   │   │   ├── OutputHLSL.cpp
+│   │   │   │   ├── OutputHLSL.h
+│   │   │   │   ├── ResourcesHLSL.cpp
+│   │   │   │   ├── ResourcesHLSL.h
+│   │   │   │   ├── StructureHLSL.cpp
+│   │   │   │   ├── StructureHLSL.h
+│   │   │   │   ├── TextureFunctionHLSL.cpp
+│   │   │   │   ├── TextureFunctionHLSL.h
+│   │   │   │   ├── TranslatorHLSL.cpp
+│   │   │   │   ├── TranslatorHLSL.h
+│   │   │   │   ├── UtilsHLSL.cpp
+│   │   │   │   ├── UtilsHLSL.h
+│   │   │   │   ├── blocklayoutHLSL.cpp
+│   │   │   │   ├── blocklayoutHLSL.h
+│   │   │   │   ├── emulated_builtin_function_data_hlsl.json
+│   │   │   │   ├── emulated_builtin_functions_hlsl_autogen.cpp
+│   │   │   │   └── gen_emulated_builtin_function_tables.py
+│   │   │   ├── ir/
+│   │   │   │   ├── doc/
+│   │   │   │   │   └── README.md
+│   │   │   │   ├── src/
+│   │   │   │   │   ├── output/
+│   │   │   │   │   │   ├── glsl.rs
+│   │   │   │   │   │   ├── ir_to_legacy.cpp
+│   │   │   │   │   │   ├── ir_to_legacy.h
+│   │   │   │   │   │   ├── legacy.h
+│   │   │   │   │   │   └── legacy.rs
+│   │   │   │   │   ├── transform/
+│   │   │   │   │   │   ├── astify.rs
+│   │   │   │   │   │   ├── clamp_point_size.rs
+│   │   │   │   │   │   ├── dealias.rs
+│   │   │   │   │   │   ├── initialize_uninitialized_variables.rs
+│   │   │   │   │   │   ├── monomorphize_unsupported_functions.rs
+│   │   │   │   │   │   ├── propagate_precision.rs
+│   │   │   │   │   │   ├── prune_unused_variables.rs
+│   │   │   │   │   │   ├── remove_unused_framebuffer_fetch.rs
+│   │   │   │   │   │   └── rewrite_pixel_local_storage.rs
+│   │   │   │   │   ├── ast.rs
+│   │   │   │   │   ├── builder.cpp
+│   │   │   │   │   ├── builder.h
+│   │   │   │   │   ├── builder.rs
+│   │   │   │   │   ├── compile.cpp
+│   │   │   │   │   ├── compile.h
+│   │   │   │   │   ├── compile.rs
+│   │   │   │   │   ├── debug.rs
+│   │   │   │   │   ├── instruction.rs
+│   │   │   │   │   ├── ir.rs
+│   │   │   │   │   ├── lib.rs
+│   │   │   │   │   ├── output.rs
+│   │   │   │   │   ├── pool_alloc.cpp
+│   │   │   │   │   ├── pool_alloc.h
+│   │   │   │   │   ├── transform.rs
+│   │   │   │   │   ├── traverser.rs
+│   │   │   │   │   ├── util.rs
+│   │   │   │   │   └── validator.rs
+│   │   │   │   ├── .gitignore
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── msl/
+│   │   │   │   ├── AstHelpers.cpp
+│   │   │   │   ├── AstHelpers.h
+│   │   │   │   ├── ConstantNames.cpp
+│   │   │   │   ├── DebugSink.h
+│   │   │   │   ├── DiscoverDependentFunctions.cpp
+│   │   │   │   ├── DiscoverDependentFunctions.h
+│   │   │   │   ├── DiscoverEnclosingFunctionTraverser.cpp
+│   │   │   │   ├── DiscoverEnclosingFunctionTraverser.h
+│   │   │   │   ├── DriverUniformMetal.cpp
+│   │   │   │   ├── DriverUniformMetal.h
+│   │   │   │   ├── EmitMetal.cpp
+│   │   │   │   ├── EmitMetal.h
+│   │   │   │   ├── IdGen.cpp
+│   │   │   │   ├── IdGen.h
+│   │   │   │   ├── Layout.cpp
+│   │   │   │   ├── Layout.h
+│   │   │   │   ├── MapFunctionsToDefinitions.cpp
+│   │   │   │   ├── MapFunctionsToDefinitions.h
+│   │   │   │   ├── MapSymbols.cpp
+│   │   │   │   ├── MapSymbols.h
+│   │   │   │   ├── ModifyStruct.cpp
+│   │   │   │   ├── ModifyStruct.h
+│   │   │   │   ├── Pipeline.cpp
+│   │   │   │   ├── Pipeline.h
+│   │   │   │   ├── ProgramPrelude.cpp
+│   │   │   │   ├── ProgramPrelude.h
+│   │   │   │   ├── Reference.h
+│   │   │   │   ├── RewritePipelines.cpp
+│   │   │   │   ├── RewritePipelines.h
+│   │   │   │   ├── SkippingTraverser.h
+│   │   │   │   ├── SymbolEnv.cpp
+│   │   │   │   ├── SymbolEnv.h
+│   │   │   │   ├── ToposortStructs.cpp
+│   │   │   │   ├── ToposortStructs.h
+│   │   │   │   ├── TranslatorMSL.cpp
+│   │   │   │   ├── TranslatorMSL.h
+│   │   │   │   ├── UtilsMSL.cpp
+│   │   │   │   └── UtilsMSL.h
+│   │   │   ├── null/
+│   │   │   │   └── TranslatorNULL.h
+│   │   │   ├── spirv/
+│   │   │   │   ├── BuildSPIRV.cpp
+│   │   │   │   ├── BuildSPIRV.h
+│   │   │   │   ├── BuiltinsWorkaround.cpp
+│   │   │   │   ├── BuiltinsWorkaround.h
+│   │   │   │   ├── OutputSPIRV.cpp
+│   │   │   │   ├── OutputSPIRV.h
+│   │   │   │   ├── TranslatorSPIRV.cpp
+│   │   │   │   └── TranslatorSPIRV.h
+│   │   │   ├── tree_ops/
+│   │   │   │   ├── glsl/
+│   │   │   │   │   ├── apple/
+│   │   │   │   │   │   ├── AddAndTrueToLoopCondition.cpp
+│   │   │   │   │   │   ├── AddAndTrueToLoopCondition.h
+│   │   │   │   │   │   ├── RewriteRowMajorMatrices.cpp
+│   │   │   │   │   │   ├── RewriteRowMajorMatrices.h
+│   │   │   │   │   │   ├── UnfoldShortCircuitAST.cpp
+│   │   │   │   │   │   └── UnfoldShortCircuitAST.h
+│   │   │   │   │   ├── RegenerateStructNames.cpp
+│   │   │   │   │   ├── RegenerateStructNames.h
+│   │   │   │   │   ├── RewriteRepeatedAssignToSwizzled.cpp
+│   │   │   │   │   ├── RewriteRepeatedAssignToSwizzled.h
+│   │   │   │   │   ├── UseInterfaceBlockFields.cpp
+│   │   │   │   │   └── UseInterfaceBlockFields.h
+│   │   │   │   ├── hlsl/
+│   │   │   │   │   ├── AddDefaultReturnStatements.cpp
+│   │   │   │   │   ├── AddDefaultReturnStatements.h
+│   │   │   │   │   ├── ArrayReturnValueToOutParameter.cpp
+│   │   │   │   │   ├── ArrayReturnValueToOutParameter.h
+│   │   │   │   │   ├── BreakVariableAliasingInInnerLoops.cpp
+│   │   │   │   │   ├── BreakVariableAliasingInInnerLoops.h
+│   │   │   │   │   ├── ExpandIntegerPowExpressions.cpp
+│   │   │   │   │   ├── ExpandIntegerPowExpressions.h
+│   │   │   │   │   ├── RecordUniformBlocksWithLargeArrayMember.cpp
+│   │   │   │   │   ├── RecordUniformBlocksWithLargeArrayMember.h
+│   │   │   │   │   ├── RemoveSwitchFallThrough.cpp
+│   │   │   │   │   ├── RemoveSwitchFallThrough.h
+│   │   │   │   │   ├── RewriteElseBlocks.cpp
+│   │   │   │   │   ├── RewriteElseBlocks.h
+│   │   │   │   │   ├── RewriteUnaryMinusOperatorInt.cpp
+│   │   │   │   │   ├── RewriteUnaryMinusOperatorInt.h
+│   │   │   │   │   ├── SeparateArrayConstructorStatements.cpp
+│   │   │   │   │   ├── SeparateArrayConstructorStatements.h
+│   │   │   │   │   ├── SeparateArrayInitialization.cpp
+│   │   │   │   │   ├── SeparateArrayInitialization.h
+│   │   │   │   │   ├── SeparateExpressionsReturningArrays.cpp
+│   │   │   │   │   ├── SeparateExpressionsReturningArrays.h
+│   │   │   │   │   ├── UnfoldShortCircuitToIf.cpp
+│   │   │   │   │   ├── UnfoldShortCircuitToIf.h
+│   │   │   │   │   ├── WrapSwitchStatementsInBlocks.cpp
+│   │   │   │   │   └── WrapSwitchStatementsInBlocks.h
+│   │   │   │   ├── msl/
+│   │   │   │   │   ├── AddExplicitTypeCasts.cpp
+│   │   │   │   │   ├── AddExplicitTypeCasts.h
+│   │   │   │   │   ├── ConvertUnsupportedConstructorsToFunctionCalls.cpp
+│   │   │   │   │   ├── ConvertUnsupportedConstructorsToFunctionCalls.h
+│   │   │   │   │   ├── EnsureLoopForwardProgress.cpp
+│   │   │   │   │   ├── EnsureLoopForwardProgress.h
+│   │   │   │   │   ├── FixTypeConstructors.cpp
+│   │   │   │   │   ├── FixTypeConstructors.h
+│   │   │   │   │   ├── GuardFragDepthWrite.cpp
+│   │   │   │   │   ├── GuardFragDepthWrite.h
+│   │   │   │   │   ├── HoistConstants.cpp
+│   │   │   │   │   ├── HoistConstants.h
+│   │   │   │   │   ├── IntroduceVertexIndexID.cpp
+│   │   │   │   │   ├── IntroduceVertexIndexID.h
+│   │   │   │   │   ├── RescopeGlobalVariables.cpp
+│   │   │   │   │   ├── RescopeGlobalVariables.h
+│   │   │   │   │   ├── RewriteCaseDeclarations.cpp
+│   │   │   │   │   ├── RewriteCaseDeclarations.h
+│   │   │   │   │   ├── RewriteInterpolants.cpp
+│   │   │   │   │   ├── RewriteInterpolants.h
+│   │   │   │   │   ├── RewriteOutArgs.cpp
+│   │   │   │   │   ├── RewriteOutArgs.h
+│   │   │   │   │   ├── RewriteUnaddressableReferences.cpp
+│   │   │   │   │   ├── RewriteUnaddressableReferences.h
+│   │   │   │   │   ├── SeparateCompoundExpressions.cpp
+│   │   │   │   │   ├── SeparateCompoundExpressions.h
+│   │   │   │   │   ├── TransposeRowMajorMatrices.cpp
+│   │   │   │   │   ├── TransposeRowMajorMatrices.h
+│   │   │   │   │   ├── WrapMain.cpp
+│   │   │   │   │   └── WrapMain.h
+│   │   │   │   ├── spirv/
+│   │   │   │   │   ├── ClampGLLayer.cpp
+│   │   │   │   │   ├── ClampGLLayer.h
+│   │   │   │   │   ├── EmulateAdvancedBlendEquations.cpp
+│   │   │   │   │   ├── EmulateAdvancedBlendEquations.h
+│   │   │   │   │   ├── EmulateDithering.cpp
+│   │   │   │   │   ├── EmulateDithering.h
+│   │   │   │   │   ├── EmulateFragColorData.cpp
+│   │   │   │   │   ├── EmulateFragColorData.h
+│   │   │   │   │   ├── EmulateFramebufferFetch.cpp
+│   │   │   │   │   ├── EmulateFramebufferFetch.h
+│   │   │   │   │   ├── EmulateYUVBuiltIns.cpp
+│   │   │   │   │   ├── EmulateYUVBuiltIns.h
+│   │   │   │   │   ├── FlagSamplersWithTexelFetch.cpp
+│   │   │   │   │   ├── FlagSamplersWithTexelFetch.h
+│   │   │   │   │   ├── ReswizzleYUVOps.cpp
+│   │   │   │   │   ├── ReswizzleYUVOps.h
+│   │   │   │   │   ├── RewriteInterpolateAtOffset.cpp
+│   │   │   │   │   ├── RewriteInterpolateAtOffset.h
+│   │   │   │   │   ├── RewriteR32fImages.cpp
+│   │   │   │   │   ├── RewriteR32fImages.h
+│   │   │   │   │   ├── RewriteSamplerExternalTexelFetch.cpp
+│   │   │   │   │   └── RewriteSamplerExternalTexelFetch.h
+│   │   │   │   ├── wgsl/
+│   │   │   │   │   ├── EmulateMutableFunctionParams.cpp
+│   │   │   │   │   ├── EmulateMutableFunctionParams.h
+│   │   │   │   │   ├── PullExpressionsIntoFunctions.cpp
+│   │   │   │   │   ├── PullExpressionsIntoFunctions.h
+│   │   │   │   │   ├── RewriteMixedTypeMathExprs.cpp
+│   │   │   │   │   ├── RewriteMixedTypeMathExprs.h
+│   │   │   │   │   ├── RewriteMultielementSwizzleAssignment.cpp
+│   │   │   │   │   └── RewriteMultielementSwizzleAssignment.h
+│   │   │   │   ├── ClampFragDepth.cpp
+│   │   │   │   ├── ClampFragDepth.h
+│   │   │   │   ├── ClampIndirectIndices.cpp
+│   │   │   │   ├── ClampIndirectIndices.h
+│   │   │   │   ├── ClampPointSize.cpp
+│   │   │   │   ├── ClampPointSize.h
+│   │   │   │   ├── DeclareAndInitBuiltinsForInstancedMultiview.cpp
+│   │   │   │   ├── DeclareAndInitBuiltinsForInstancedMultiview.h
+│   │   │   │   ├── DeclarePerVertexBlocks.cpp
+│   │   │   │   ├── DeclarePerVertexBlocks.h
+│   │   │   │   ├── DeferGlobalInitializers.cpp
+│   │   │   │   ├── DeferGlobalInitializers.h
+│   │   │   │   ├── EmulateGLFragColorBroadcast.cpp
+│   │   │   │   ├── EmulateGLFragColorBroadcast.h
+│   │   │   │   ├── EmulateMultiDrawShaderBuiltins.cpp
+│   │   │   │   ├── EmulateMultiDrawShaderBuiltins.h
+│   │   │   │   ├── FoldExpressions.cpp
+│   │   │   │   ├── FoldExpressions.h
+│   │   │   │   ├── GatherDefaultUniforms.cpp
+│   │   │   │   ├── GatherDefaultUniforms.h
+│   │   │   │   ├── InitializeVariables.cpp
+│   │   │   │   ├── InitializeVariables.h
+│   │   │   │   ├── MonomorphizeUnsupportedFunctions.cpp
+│   │   │   │   ├── MonomorphizeUnsupportedFunctions.h
+│   │   │   │   ├── PreTransformTextureCubeGradDerivatives.cpp
+│   │   │   │   ├── PreTransformTextureCubeGradDerivatives.h
+│   │   │   │   ├── PruneEmptyCases.cpp
+│   │   │   │   ├── PruneEmptyCases.h
+│   │   │   │   ├── PruneNoOps.cpp
+│   │   │   │   ├── PruneNoOps.h
+│   │   │   │   ├── RecordConstantPrecision.cpp
+│   │   │   │   ├── RecordConstantPrecision.h
+│   │   │   │   ├── ReduceInterfaceBlocks.cpp
+│   │   │   │   ├── ReduceInterfaceBlocks.h
+│   │   │   │   ├── RemoveArrayLengthMethod.cpp
+│   │   │   │   ├── RemoveArrayLengthMethod.h
+│   │   │   │   ├── RemoveAtomicCounterBuiltins.cpp
+│   │   │   │   ├── RemoveAtomicCounterBuiltins.h
+│   │   │   │   ├── RemoveDynamicIndexing.cpp
+│   │   │   │   ├── RemoveDynamicIndexing.h
+│   │   │   │   ├── RemoveInactiveInterfaceVariables.cpp
+│   │   │   │   ├── RemoveInactiveInterfaceVariables.h
+│   │   │   │   ├── RemoveInvariantDeclaration.cpp
+│   │   │   │   ├── RemoveInvariantDeclaration.h
+│   │   │   │   ├── RemoveUnreferencedVariables.cpp
+│   │   │   │   ├── RemoveUnreferencedVariables.h
+│   │   │   │   ├── RemoveUnusedFramebufferFetch.cpp
+│   │   │   │   ├── RemoveUnusedFramebufferFetch.h
+│   │   │   │   ├── RewriteArrayOfArrayOfOpaqueUniforms.cpp
+│   │   │   │   ├── RewriteArrayOfArrayOfOpaqueUniforms.h
+│   │   │   │   ├── RewriteAtomicCounters.cpp
+│   │   │   │   ├── RewriteAtomicCounters.h
+│   │   │   │   ├── RewriteDfdy.cpp
+│   │   │   │   ├── RewriteDfdy.h
+│   │   │   │   ├── RewritePixelLocalStorage.cpp
+│   │   │   │   ├── RewritePixelLocalStorage.h
+│   │   │   │   ├── RewriteStructSamplers.cpp
+│   │   │   │   ├── RewriteStructSamplers.h
+│   │   │   │   ├── RewriteTexelFetchOffset.cpp
+│   │   │   │   ├── RewriteTexelFetchOffset.h
+│   │   │   │   ├── ScalarizeVecAndMatConstructorArgs.cpp
+│   │   │   │   ├── ScalarizeVecAndMatConstructorArgs.h
+│   │   │   │   ├── SeparateDeclarations.cpp
+│   │   │   │   ├── SeparateDeclarations.h
+│   │   │   │   ├── SeparateStructFromUniformDeclarations.cpp
+│   │   │   │   ├── SeparateStructFromUniformDeclarations.h
+│   │   │   │   ├── SimplifyLoopConditions.cpp
+│   │   │   │   ├── SimplifyLoopConditions.h
+│   │   │   │   ├── SplitSequenceOperator.cpp
+│   │   │   │   └── SplitSequenceOperator.h
+│   │   │   ├── tree_util/
+│   │   │   │   ├── BuiltIn.h
+│   │   │   │   ├── BuiltIn_autogen.h
+│   │   │   │   ├── DriverUniform.cpp
+│   │   │   │   ├── DriverUniform.h
+│   │   │   │   ├── FindFunction.cpp
+│   │   │   │   ├── FindFunction.h
+│   │   │   │   ├── FindMain.cpp
+│   │   │   │   ├── FindMain.h
+│   │   │   │   ├── FindPreciseNodes.cpp
+│   │   │   │   ├── FindPreciseNodes.h
+│   │   │   │   ├── FindSymbolNode.cpp
+│   │   │   │   ├── FindSymbolNode.h
+│   │   │   │   ├── IntermNodePatternMatcher.cpp
+│   │   │   │   ├── IntermNodePatternMatcher.h
+│   │   │   │   ├── IntermNode_util.cpp
+│   │   │   │   ├── IntermNode_util.h
+│   │   │   │   ├── IntermTraverse.cpp
+│   │   │   │   ├── IntermTraverse.h
+│   │   │   │   ├── NodeSearch.h
+│   │   │   │   ├── ReplaceArrayOfMatrixVarying.cpp
+│   │   │   │   ├── ReplaceArrayOfMatrixVarying.h
+│   │   │   │   ├── ReplaceClipCullDistanceVariable.cpp
+│   │   │   │   ├── ReplaceClipCullDistanceVariable.h
+│   │   │   │   ├── ReplaceShadowingVariables.cpp
+│   │   │   │   ├── ReplaceShadowingVariables.h
+│   │   │   │   ├── ReplaceVariable.cpp
+│   │   │   │   ├── ReplaceVariable.h
+│   │   │   │   ├── RewriteSampleMaskVariable.cpp
+│   │   │   │   ├── RewriteSampleMaskVariable.h
+│   │   │   │   ├── RunAtTheBeginningOfShader.cpp
+│   │   │   │   ├── RunAtTheBeginningOfShader.h
+│   │   │   │   ├── RunAtTheEndOfShader.cpp
+│   │   │   │   ├── RunAtTheEndOfShader.h
+│   │   │   │   ├── SpecializationConstant.cpp
+│   │   │   │   ├── SpecializationConstant.h
+│   │   │   │   └── Visit.h
+│   │   │   ├── wgsl/
+│   │   │   │   ├── OutputUniformBlocks.cpp
+│   │   │   │   ├── OutputUniformBlocks.h
+│   │   │   │   ├── RewritePipelineVariables.cpp
+│   │   │   │   ├── RewritePipelineVariables.h
+│   │   │   │   ├── TranslatorWGSL.cpp
+│   │   │   │   ├── TranslatorWGSL.h
+│   │   │   │   ├── Utils.cpp
+│   │   │   │   ├── Utils.h
+│   │   │   │   ├── WGSLProgramPrelude.cpp
+│   │   │   │   └── WGSLProgramPrelude.h
+│   │   │   ├── AsNode.h
+│   │   │   ├── BaseTypes.cpp
+│   │   │   ├── BaseTypes.h
+│   │   │   ├── BuiltInFunctionEmulator.cpp
+│   │   │   ├── BuiltInFunctionEmulator.h
+│   │   │   ├── CallDAG.cpp
+│   │   │   ├── CallDAG.h
+│   │   │   ├── CodeGen.cpp
+│   │   │   ├── CollectVariables.cpp
+│   │   │   ├── CollectVariables.h
+│   │   │   ├── Common.h
+│   │   │   ├── Compiler.cpp
+│   │   │   ├── Compiler.h
+│   │   │   ├── ConstantUnion.cpp
+│   │   │   ├── ConstantUnion.h
+│   │   │   ├── Declarator.cpp
+│   │   │   ├── Declarator.h
+│   │   │   ├── Diagnostics.cpp
+│   │   │   ├── Diagnostics.h
+│   │   │   ├── DirectiveHandler.cpp
+│   │   │   ├── DirectiveHandler.h
+│   │   │   ├── ExtensionBehavior.cpp
+│   │   │   ├── ExtensionBehavior.h
+│   │   │   ├── FlagStd140Structs.cpp
+│   │   │   ├── FlagStd140Structs.h
+│   │   │   ├── FunctionLookup.cpp
+│   │   │   ├── FunctionLookup.h
+│   │   │   ├── HashNames.cpp
+│   │   │   ├── HashNames.h
+│   │   │   ├── ImmutableString.h
+│   │   │   ├── ImmutableStringBuilder.cpp
+│   │   │   ├── ImmutableStringBuilder.h
+│   │   │   ├── ImmutableString_autogen.cpp
+│   │   │   ├── InfoSink.cpp
+│   │   │   ├── InfoSink.h
+│   │   │   ├── Initialize.cpp
+│   │   │   ├── Initialize.h
+│   │   │   ├── InitializeGlobals.h
+│   │   │   ├── IntermNode.cpp
+│   │   │   ├── IntermNode.h
+│   │   │   ├── IntermRebuild.cpp
+│   │   │   ├── IntermRebuild.h
+│   │   │   ├── IsASTDepthBelowLimit.cpp
+│   │   │   ├── IsASTDepthBelowLimit.h
+│   │   │   ├── Name.cpp
+│   │   │   ├── Name.h
+│   │   │   ├── NodeType.h
+│   │   │   ├── OWNERS
+│   │   │   ├── Operator.cpp
+│   │   │   ├── Operator_autogen.h
+│   │   │   ├── OutputTree.cpp
+│   │   │   ├── OutputTree.h
+│   │   │   ├── ParseContext.cpp
+│   │   │   ├── ParseContext.h
+│   │   │   ├── PoolAlloc.cpp
+│   │   │   ├── PoolAlloc.h
+│   │   │   ├── Pragma.h
+│   │   │   ├── QualifierTypes.cpp
+│   │   │   ├── QualifierTypes.h
+│   │   │   ├── Severity.h
+│   │   │   ├── ShaderLang.cpp
+│   │   │   ├── ShaderVars.cpp
+│   │   │   ├── SizeClipCullDistance.cpp
+│   │   │   ├── SizeClipCullDistance.h
+│   │   │   ├── StaticType.h
+│   │   │   ├── Symbol.cpp
+│   │   │   ├── Symbol.h
+│   │   │   ├── SymbolTable.cpp
+│   │   │   ├── SymbolTable.h
+│   │   │   ├── SymbolTable_autogen.cpp
+│   │   │   ├── SymbolTable_autogen.h
+│   │   │   ├── SymbolUniqueId.cpp
+│   │   │   ├── SymbolUniqueId.h
+│   │   │   ├── Types.cpp
+│   │   │   ├── Types.h
+│   │   │   ├── ValidateAST.cpp
+│   │   │   ├── ValidateAST.h
+│   │   │   ├── ValidateGlobalInitializer.cpp
+│   │   │   ├── ValidateGlobalInitializer.h
+│   │   │   ├── ValidateVaryingLocations.cpp
+│   │   │   ├── ValidateVaryingLocations.h
+│   │   │   ├── VariablePacker.cpp
+│   │   │   ├── VariablePacker.h
+│   │   │   ├── blocklayout.cpp
+│   │   │   ├── blocklayout.h
+│   │   │   ├── builtin_function_declarations.txt
+│   │   │   ├── builtin_variables.json
+│   │   │   ├── gen_builtin_symbols.py
+│   │   │   ├── generate_parser.py
+│   │   │   ├── glslang.h
+│   │   │   ├── glslang.l
+│   │   │   ├── glslang.y
+│   │   │   ├── glslang_lex_autogen.cpp
+│   │   │   ├── glslang_tab_autogen.cpp
+│   │   │   ├── glslang_tab_autogen.h
+│   │   │   ├── length_limits.h
+│   │   │   ├── util.cpp
+│   │   │   └── util.h
+│   │   └── generate_parser_tools.py
+│   ├── feature_support_util/
+│   │   ├── OWNERS
+│   │   ├── a4a_rules.json
+│   │   ├── feature_support_util.cpp
+│   │   ├── feature_support_util.h
+│   │   └── feature_support_util_unittest.cpp
+│   ├── gpu_info_util/
+│   │   ├── SystemInfo.cpp
+│   │   ├── SystemInfo.h
+│   │   ├── SystemInfo_android.cpp
+│   │   ├── SystemInfo_apple.mm
+│   │   ├── SystemInfo_fuchsia.cpp
+│   │   ├── SystemInfo_internal.h
+│   │   ├── SystemInfo_ios.cpp
+│   │   ├── SystemInfo_libpci.cpp
+│   │   ├── SystemInfo_linux.cpp
+│   │   ├── SystemInfo_macos.mm
+│   │   ├── SystemInfo_unittest.cpp
+│   │   ├── SystemInfo_vulkan.cpp
+│   │   ├── SystemInfo_vulkan.h
+│   │   ├── SystemInfo_win.cpp
+│   │   └── SystemInfo_x11.cpp
+│   ├── image_util/
+│   │   ├── AstcDecompressor.cpp
+│   │   ├── AstcDecompressor.h
+│   │   ├── AstcDecompressorNoOp.cpp
+│   │   ├── AstcDecompressorTestUtils.h
+│   │   ├── AstcDecompressor_unittest.cpp
+│   │   ├── LoadToNative_unittest.cpp
+│   │   ├── copyimage.cpp
+│   │   ├── copyimage.h
+│   │   ├── copyimage.inc
+│   │   ├── generatemip.h
+│   │   ├── generatemip.inc
+│   │   ├── imageformats.cpp
+│   │   ├── imageformats.h
+│   │   ├── loadimage.cpp
+│   │   ├── loadimage.h
+│   │   ├── loadimage.inc
+│   │   ├── loadimage_astc.cpp
+│   │   ├── loadimage_etc.cpp
+│   │   ├── loadimage_paletted.cpp
+│   │   ├── storeimage.h
+│   │   └── storeimage_paletted.cpp
+│   ├── libANGLE/
+│   │   ├── capture/
+│   │   │   ├── FrameCapture.cpp
+│   │   │   ├── FrameCapture.h
+│   │   │   ├── FrameCaptureCL.cpp
+│   │   │   ├── FrameCaptureCommon.cpp
+│   │   │   ├── FrameCapture_mock.cpp
+│   │   │   ├── OWNERS
+│   │   │   ├── capture_cl_autogen.cpp
+│   │   │   ├── capture_cl_autogen.h
+│   │   │   ├── capture_cl_params.cpp
+│   │   │   ├── capture_egl_autogen.cpp
+│   │   │   ├── capture_egl_autogen.h
+│   │   │   ├── capture_gles_1_0_autogen.cpp
+│   │   │   ├── capture_gles_1_0_autogen.h
+│   │   │   ├── capture_gles_1_0_params.cpp
+│   │   │   ├── capture_gles_2_0_autogen.cpp
+│   │   │   ├── capture_gles_2_0_autogen.h
+│   │   │   ├── capture_gles_2_0_params.cpp
+│   │   │   ├── capture_gles_3_0_autogen.cpp
+│   │   │   ├── capture_gles_3_0_autogen.h
+│   │   │   ├── capture_gles_3_0_params.cpp
+│   │   │   ├── capture_gles_3_1_autogen.cpp
+│   │   │   ├── capture_gles_3_1_autogen.h
+│   │   │   ├── capture_gles_3_1_params.cpp
+│   │   │   ├── capture_gles_3_2_autogen.cpp
+│   │   │   ├── capture_gles_3_2_autogen.h
+│   │   │   ├── capture_gles_3_2_params.cpp
+│   │   │   ├── capture_gles_ext_autogen.cpp
+│   │   │   ├── capture_gles_ext_autogen.h
+│   │   │   ├── capture_gles_ext_params.cpp
+│   │   │   ├── serialize.cpp
+│   │   │   ├── serialize.h
+│   │   │   └── serialize_mock.cpp
+│   │   ├── overlay/
+│   │   │   ├── LICENSE.txt
+│   │   │   └── RobotoMono-Bold.ttf
+│   │   ├── renderer/
+│   │   │   ├── cl/
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── CLCommandQueueCL.cpp
+│   │   │   │   ├── CLCommandQueueCL.h
+│   │   │   │   ├── CLContextCL.cpp
+│   │   │   │   ├── CLContextCL.h
+│   │   │   │   ├── CLDeviceCL.cpp
+│   │   │   │   ├── CLDeviceCL.h
+│   │   │   │   ├── CLEventCL.cpp
+│   │   │   │   ├── CLEventCL.h
+│   │   │   │   ├── CLKernelCL.cpp
+│   │   │   │   ├── CLKernelCL.h
+│   │   │   │   ├── CLMemoryCL.cpp
+│   │   │   │   ├── CLMemoryCL.h
+│   │   │   │   ├── CLPlatformCL.cpp
+│   │   │   │   ├── CLPlatformCL.h
+│   │   │   │   ├── CLProgramCL.cpp
+│   │   │   │   ├── CLProgramCL.h
+│   │   │   │   ├── CLSamplerCL.cpp
+│   │   │   │   ├── CLSamplerCL.h
+│   │   │   │   ├── cl_types.h
+│   │   │   │   ├── cl_util.cpp
+│   │   │   │   └── cl_util.h
+│   │   │   ├── d3d/
+│   │   │   │   ├── d3d11/
+│   │   │   │   │   ├── converged/
+│   │   │   │   │   │   ├── CompositorNativeWindow11.cpp
+│   │   │   │   │   │   └── CompositorNativeWindow11.h
+│   │   │   │   │   ├── shaders/
+│   │   │   │   │   │   ├── compiled/
+│   │   │   │   │   │   │   ├── buffertotexture11_gs.h
+│   │   │   │   │   │   │   ├── buffertotexture11_ps_4f.h
+│   │   │   │   │   │   │   ├── buffertotexture11_ps_4i.h
+│   │   │   │   │   │   │   ├── buffertotexture11_ps_4ui.h
+│   │   │   │   │   │   │   ├── buffertotexture11_vs.h
+│   │   │   │   │   │   │   ├── clear11multiviewgs.h
+│   │   │   │   │   │   │   ├── clear11multiviewvs.h
+│   │   │   │   │   │   │   ├── clear11vs.h
+│   │   │   │   │   │   │   ├── cleardepth11ps.h
+│   │   │   │   │   │   │   ├── clearfloat11ps1.h
+│   │   │   │   │   │   │   ├── clearfloat11ps2.h
+│   │   │   │   │   │   │   ├── clearfloat11ps3.h
+│   │   │   │   │   │   │   ├── clearfloat11ps4.h
+│   │   │   │   │   │   │   ├── clearfloat11ps5.h
+│   │   │   │   │   │   │   ├── clearfloat11ps6.h
+│   │   │   │   │   │   │   ├── clearfloat11ps7.h
+│   │   │   │   │   │   │   ├── clearfloat11ps8.h
+│   │   │   │   │   │   │   ├── clearsint11ps1.h
+│   │   │   │   │   │   │   ├── clearsint11ps2.h
+│   │   │   │   │   │   │   ├── clearsint11ps3.h
+│   │   │   │   │   │   │   ├── clearsint11ps4.h
+│   │   │   │   │   │   │   ├── clearsint11ps5.h
+│   │   │   │   │   │   │   ├── clearsint11ps6.h
+│   │   │   │   │   │   │   ├── clearsint11ps7.h
+│   │   │   │   │   │   │   ├── clearsint11ps8.h
+│   │   │   │   │   │   │   ├── clearuint11ps1.h
+│   │   │   │   │   │   │   ├── clearuint11ps2.h
+│   │   │   │   │   │   │   ├── clearuint11ps3.h
+│   │   │   │   │   │   │   ├── clearuint11ps4.h
+│   │   │   │   │   │   │   ├── clearuint11ps5.h
+│   │   │   │   │   │   │   ├── clearuint11ps6.h
+│   │   │   │   │   │   │   ├── clearuint11ps7.h
+│   │   │   │   │   │   │   ├── clearuint11ps8.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_luma_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_luma_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_luma_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_lumaalpha_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_lumaalpha_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_lumaalpha_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_565_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_565_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgb_565_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_4444_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_4444_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_4444_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_5551_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_5551_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_pm_rgba_5551_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_luma_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_luma_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_luma_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_lumaalpha_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_lumaalpha_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_lumaalpha_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_565_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_565_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgb_565_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_4444_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_4444_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_4444_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_4444_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_5551_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_5551_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_5551_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftof_um_rgba_5551_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pm_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pm_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pm_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pm_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pt_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pt_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pt_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_pt_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_um_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_um_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_um_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftoi_um_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgb_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgba_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pm_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgb_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgba_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_pt_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgb_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgb_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgb_3d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgba_2d_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgba_2darray_ps.h
+│   │   │   │   │   │   │   ├── multiplyalpha_ftou_um_rgba_3d_ps.h
+│   │   │   │   │   │   │   ├── passthrough2d11vs.h
+│   │   │   │   │   │   │   ├── passthrough3d11gs.h
+│   │   │   │   │   │   │   ├── passthrough3d11vs.h
+│   │   │   │   │   │   │   ├── passthrougha2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughdepth2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughlum2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughlum2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughlum3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughlumalpha2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughlumalpha2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughlumalpha3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2darrayi11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2darrayui11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2di11ps.h
+│   │   │   │   │   │   │   ├── passthroughr2dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughr3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughr3di11ps.h
+│   │   │   │   │   │   │   ├── passthroughr3dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2darrayi11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2darrayui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg2dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg3di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrg3dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2d_565_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2darray_565_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2darrayi11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2darrayui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb2dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb3d_565_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb3di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgb3dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2d_4444_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2d_5551_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2darray11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2darray_4444_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2darray_5551_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2darrayi11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2darrayui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2dms11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba2dui11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba3d11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba3d_4444_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba3d_5551_11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba3di11ps.h
+│   │   │   │   │   │   │   ├── passthroughrgba3dui11ps.h
+│   │   │   │   │   │   │   ├── resolvecolor2dps.h
+│   │   │   │   │   │   │   ├── resolvedepth11_ps.h
+│   │   │   │   │   │   │   ├── resolvedepthstencil11_ps.h
+│   │   │   │   │   │   │   ├── resolvedepthstencil11_vs.h
+│   │   │   │   │   │   │   ├── resolvestencil11_ps.h
+│   │   │   │   │   │   │   ├── swizzlef2darrayps.h
+│   │   │   │   │   │   │   ├── swizzlef2dps.h
+│   │   │   │   │   │   │   ├── swizzlef3dps.h
+│   │   │   │   │   │   │   ├── swizzlei2darrayps.h
+│   │   │   │   │   │   │   ├── swizzlei2dps.h
+│   │   │   │   │   │   │   ├── swizzlei3dps.h
+│   │   │   │   │   │   │   ├── swizzleui2darrayps.h
+│   │   │   │   │   │   │   ├── swizzleui2dps.h
+│   │   │   │   │   │   │   └── swizzleui3dps.h
+│   │   │   │   │   │   ├── BufferToTexture11.hlsl
+│   │   │   │   │   │   ├── Clear11.hlsl
+│   │   │   │   │   │   ├── MultiplyAlpha.hlsl
+│   │   │   │   │   │   ├── Passthrough2D11.hlsl
+│   │   │   │   │   │   ├── Passthrough2DArray11.hlsl
+│   │   │   │   │   │   ├── Passthrough3D11.hlsl
+│   │   │   │   │   │   ├── ResolveColor.hlsl
+│   │   │   │   │   │   ├── ResolveDepthStencil.hlsl
+│   │   │   │   │   │   ├── Swizzle11.hlsl
+│   │   │   │   │   │   └── generate_shaders.bat
+│   │   │   │   │   ├── win32/
+│   │   │   │   │   │   ├── NativeWindow11Win32.cpp
+│   │   │   │   │   │   └── NativeWindow11Win32.h
+│   │   │   │   │   ├── winrt/
+│   │   │   │   │   │   ├── CoreWindowNativeWindow.cpp
+│   │   │   │   │   │   ├── CoreWindowNativeWindow.h
+│   │   │   │   │   │   ├── CoreWindowNativeWindow_unittest.cpp
+│   │   │   │   │   │   ├── InspectableNativeWindow.cpp
+│   │   │   │   │   │   ├── InspectableNativeWindow.h
+│   │   │   │   │   │   ├── NativeWindow11WinRT.cpp
+│   │   │   │   │   │   ├── NativeWindow11WinRT.h
+│   │   │   │   │   │   ├── SwapChainPanelNativeWindow.cpp
+│   │   │   │   │   │   ├── SwapChainPanelNativeWindow.h
+│   │   │   │   │   │   └── SwapChainPanelNativeWindow_unittest.cpp
+│   │   │   │   │   ├── Blit11.cpp
+│   │   │   │   │   ├── Blit11.h
+│   │   │   │   │   ├── Blit11Helper_autogen.inc
+│   │   │   │   │   ├── Buffer11.cpp
+│   │   │   │   │   ├── Buffer11.h
+│   │   │   │   │   ├── Clear11.cpp
+│   │   │   │   │   ├── Clear11.h
+│   │   │   │   │   ├── Context11.cpp
+│   │   │   │   │   ├── Context11.h
+│   │   │   │   │   ├── DebugAnnotator11.cpp
+│   │   │   │   │   ├── DebugAnnotator11.h
+│   │   │   │   │   ├── Device11.cpp
+│   │   │   │   │   ├── Device11.h
+│   │   │   │   │   ├── ExternalImageSiblingImpl11.cpp
+│   │   │   │   │   ├── ExternalImageSiblingImpl11.h
+│   │   │   │   │   ├── Fence11.cpp
+│   │   │   │   │   ├── Fence11.h
+│   │   │   │   │   ├── FormatTables.md
+│   │   │   │   │   ├── Framebuffer11.cpp
+│   │   │   │   │   ├── Framebuffer11.h
+│   │   │   │   │   ├── Image11.cpp
+│   │   │   │   │   ├── Image11.h
+│   │   │   │   │   ├── IndexBuffer11.cpp
+│   │   │   │   │   ├── IndexBuffer11.h
+│   │   │   │   │   ├── InputLayoutCache.cpp
+│   │   │   │   │   ├── InputLayoutCache.h
+│   │   │   │   │   ├── MappedSubresourceVerifier11.cpp
+│   │   │   │   │   ├── MappedSubresourceVerifier11.h
+│   │   │   │   │   ├── NativeWindow11.h
+│   │   │   │   │   ├── PixelTransfer11.cpp
+│   │   │   │   │   ├── PixelTransfer11.h
+│   │   │   │   │   ├── Program11.cpp
+│   │   │   │   │   ├── Program11.h
+│   │   │   │   │   ├── ProgramPipeline11.cpp
+│   │   │   │   │   ├── ProgramPipeline11.h
+│   │   │   │   │   ├── Query11.cpp
+│   │   │   │   │   ├── Query11.h
+│   │   │   │   │   ├── RenderStateCache.cpp
+│   │   │   │   │   ├── RenderStateCache.h
+│   │   │   │   │   ├── RenderTarget11.cpp
+│   │   │   │   │   ├── RenderTarget11.h
+│   │   │   │   │   ├── Renderer11.cpp
+│   │   │   │   │   ├── Renderer11.h
+│   │   │   │   │   ├── ResourceManager11.cpp
+│   │   │   │   │   ├── ResourceManager11.h
+│   │   │   │   │   ├── ShaderExecutable11.cpp
+│   │   │   │   │   ├── ShaderExecutable11.h
+│   │   │   │   │   ├── StateManager11.cpp
+│   │   │   │   │   ├── StateManager11.h
+│   │   │   │   │   ├── StreamProducerD3DTexture.cpp
+│   │   │   │   │   ├── StreamProducerD3DTexture.h
+│   │   │   │   │   ├── SwapChain11.cpp
+│   │   │   │   │   ├── SwapChain11.h
+│   │   │   │   │   ├── TextureStorage11.cpp
+│   │   │   │   │   ├── TextureStorage11.h
+│   │   │   │   │   ├── TransformFeedback11.cpp
+│   │   │   │   │   ├── TransformFeedback11.h
+│   │   │   │   │   ├── Trim11.cpp
+│   │   │   │   │   ├── Trim11.h
+│   │   │   │   │   ├── UniformBlockToStructuredBufferTranslation.md
+│   │   │   │   │   ├── VertexArray11.cpp
+│   │   │   │   │   ├── VertexArray11.h
+│   │   │   │   │   ├── VertexBuffer11.cpp
+│   │   │   │   │   ├── VertexBuffer11.h
+│   │   │   │   │   ├── d3d11_blit_shaders_autogen.gni
+│   │   │   │   │   ├── formatutils11.cpp
+│   │   │   │   │   ├── formatutils11.h
+│   │   │   │   │   ├── gen_blit11helper.py
+│   │   │   │   │   ├── gen_texture_format_table.py
+│   │   │   │   │   ├── renderer11_utils.cpp
+│   │   │   │   │   ├── renderer11_utils.h
+│   │   │   │   │   ├── texture_format_data.json
+│   │   │   │   │   ├── texture_format_map.json
+│   │   │   │   │   ├── texture_format_table.cpp
+│   │   │   │   │   ├── texture_format_table.h
+│   │   │   │   │   ├── texture_format_table_autogen.cpp
+│   │   │   │   │   └── texture_format_table_utils.h
+│   │   │   │   ├── d3d9/
+│   │   │   │   │   ├── shaders/
+│   │   │   │   │   │   ├── compiled/
+│   │   │   │   │   │   │   ├── componentmaskpremultps.h
+│   │   │   │   │   │   │   ├── componentmaskps.h
+│   │   │   │   │   │   │   ├── componentmaskunmultps.h
+│   │   │   │   │   │   │   ├── luminancepremultps.h
+│   │   │   │   │   │   │   ├── luminanceps.h
+│   │   │   │   │   │   │   ├── luminanceunmultps.h
+│   │   │   │   │   │   │   ├── passthroughps.h
+│   │   │   │   │   │   │   └── standardvs.h
+│   │   │   │   │   │   ├── Blit.ps
+│   │   │   │   │   │   ├── Blit.vs
+│   │   │   │   │   │   └── generate_shaders.bat
+│   │   │   │   │   ├── Blit9.cpp
+│   │   │   │   │   ├── Blit9.h
+│   │   │   │   │   ├── Buffer9.cpp
+│   │   │   │   │   ├── Buffer9.h
+│   │   │   │   │   ├── Context9.cpp
+│   │   │   │   │   ├── Context9.h
+│   │   │   │   │   ├── DebugAnnotator9.cpp
+│   │   │   │   │   ├── DebugAnnotator9.h
+│   │   │   │   │   ├── Device9.cpp
+│   │   │   │   │   ├── Device9.h
+│   │   │   │   │   ├── Fence9.cpp
+│   │   │   │   │   ├── Fence9.h
+│   │   │   │   │   ├── Framebuffer9.cpp
+│   │   │   │   │   ├── Framebuffer9.h
+│   │   │   │   │   ├── Image9.cpp
+│   │   │   │   │   ├── Image9.h
+│   │   │   │   │   ├── IndexBuffer9.cpp
+│   │   │   │   │   ├── IndexBuffer9.h
+│   │   │   │   │   ├── NativeWindow9.cpp
+│   │   │   │   │   ├── NativeWindow9.h
+│   │   │   │   │   ├── Query9.cpp
+│   │   │   │   │   ├── Query9.h
+│   │   │   │   │   ├── RenderTarget9.cpp
+│   │   │   │   │   ├── RenderTarget9.h
+│   │   │   │   │   ├── Renderer9.cpp
+│   │   │   │   │   ├── Renderer9.h
+│   │   │   │   │   ├── ShaderCache.h
+│   │   │   │   │   ├── ShaderExecutable9.cpp
+│   │   │   │   │   ├── ShaderExecutable9.h
+│   │   │   │   │   ├── StateManager9.cpp
+│   │   │   │   │   ├── StateManager9.h
+│   │   │   │   │   ├── SwapChain9.cpp
+│   │   │   │   │   ├── SwapChain9.h
+│   │   │   │   │   ├── TextureStorage9.cpp
+│   │   │   │   │   ├── TextureStorage9.h
+│   │   │   │   │   ├── VertexArray9.h
+│   │   │   │   │   ├── VertexBuffer9.cpp
+│   │   │   │   │   ├── VertexBuffer9.h
+│   │   │   │   │   ├── VertexDeclarationCache.cpp
+│   │   │   │   │   ├── VertexDeclarationCache.h
+│   │   │   │   │   ├── formatutils9.cpp
+│   │   │   │   │   ├── formatutils9.h
+│   │   │   │   │   ├── renderer9_utils.cpp
+│   │   │   │   │   ├── renderer9_utils.h
+│   │   │   │   │   └── vertexconversion.h
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BufferD3D.cpp
+│   │   │   │   ├── BufferD3D.h
+│   │   │   │   ├── CompilerD3D.cpp
+│   │   │   │   ├── CompilerD3D.h
+│   │   │   │   ├── ContextD3D.h
+│   │   │   │   ├── DisplayD3D.cpp
+│   │   │   │   ├── DisplayD3D.h
+│   │   │   │   ├── DynamicHLSL.cpp
+│   │   │   │   ├── DynamicHLSL.h
+│   │   │   │   ├── DynamicImage2DHLSL.cpp
+│   │   │   │   ├── DynamicImage2DHLSL.h
+│   │   │   │   ├── EGLImageD3D.cpp
+│   │   │   │   ├── EGLImageD3D.h
+│   │   │   │   ├── FramebufferD3D.cpp
+│   │   │   │   ├── FramebufferD3D.h
+│   │   │   │   ├── HLSLCompiler.cpp
+│   │   │   │   ├── HLSLCompiler.h
+│   │   │   │   ├── ImageD3D.cpp
+│   │   │   │   ├── ImageD3D.h
+│   │   │   │   ├── IndexBuffer.cpp
+│   │   │   │   ├── IndexBuffer.h
+│   │   │   │   ├── IndexDataManager.cpp
+│   │   │   │   ├── IndexDataManager.h
+│   │   │   │   ├── NativeWindowD3D.cpp
+│   │   │   │   ├── NativeWindowD3D.h
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── ProgramD3D.cpp
+│   │   │   │   ├── ProgramD3D.h
+│   │   │   │   ├── ProgramExecutableD3D.cpp
+│   │   │   │   ├── ProgramExecutableD3D.h
+│   │   │   │   ├── RenderTargetD3D.cpp
+│   │   │   │   ├── RenderTargetD3D.h
+│   │   │   │   ├── RenderbufferD3D.cpp
+│   │   │   │   ├── RenderbufferD3D.h
+│   │   │   │   ├── RendererD3D.cpp
+│   │   │   │   ├── RendererD3D.h
+│   │   │   │   ├── SamplerD3D.h
+│   │   │   │   ├── ShaderD3D.cpp
+│   │   │   │   ├── ShaderD3D.h
+│   │   │   │   ├── ShaderExecutableD3D.cpp
+│   │   │   │   ├── ShaderExecutableD3D.h
+│   │   │   │   ├── SurfaceD3D.cpp
+│   │   │   │   ├── SurfaceD3D.h
+│   │   │   │   ├── SwapChainD3D.cpp
+│   │   │   │   ├── SwapChainD3D.h
+│   │   │   │   ├── TextureD3D.cpp
+│   │   │   │   ├── TextureD3D.h
+│   │   │   │   ├── TextureStorage.h
+│   │   │   │   ├── VertexBuffer.cpp
+│   │   │   │   ├── VertexBuffer.h
+│   │   │   │   ├── VertexDataManager.cpp
+│   │   │   │   ├── VertexDataManager.h
+│   │   │   │   ├── d3d_backend.gni
+│   │   │   │   ├── driver_utils_d3d.cpp
+│   │   │   │   ├── driver_utils_d3d.h
+│   │   │   │   └── formatutilsD3D.h
+│   │   │   ├── gl/
+│   │   │   │   ├── cgl/
+│   │   │   │   │   ├── ContextCGL.cpp
+│   │   │   │   │   ├── ContextCGL.h
+│   │   │   │   │   ├── DeviceCGL.cpp
+│   │   │   │   │   ├── DeviceCGL.h
+│   │   │   │   │   ├── DisplayCGL.h
+│   │   │   │   │   ├── DisplayCGL.mm
+│   │   │   │   │   ├── IOSurfaceSurfaceCGL.cpp
+│   │   │   │   │   ├── IOSurfaceSurfaceCGL.h
+│   │   │   │   │   ├── PbufferSurfaceCGL.cpp
+│   │   │   │   │   ├── PbufferSurfaceCGL.h
+│   │   │   │   │   ├── WindowSurfaceCGL.h
+│   │   │   │   │   └── WindowSurfaceCGL.mm
+│   │   │   │   ├── egl/
+│   │   │   │   │   ├── android/
+│   │   │   │   │   │   ├── DisplayAndroid.cpp
+│   │   │   │   │   │   ├── DisplayAndroid.h
+│   │   │   │   │   │   ├── NativeBufferImageSiblingAndroid.cpp
+│   │   │   │   │   │   └── NativeBufferImageSiblingAndroid.h
+│   │   │   │   │   ├── ContextEGL.cpp
+│   │   │   │   │   ├── ContextEGL.h
+│   │   │   │   │   ├── DeviceEGL.cpp
+│   │   │   │   │   ├── DeviceEGL.h
+│   │   │   │   │   ├── DisplayEGL.cpp
+│   │   │   │   │   ├── DisplayEGL.h
+│   │   │   │   │   ├── DmaBufImageSiblingEGL.cpp
+│   │   │   │   │   ├── DmaBufImageSiblingEGL.h
+│   │   │   │   │   ├── ExternalImageSiblingEGL.h
+│   │   │   │   │   ├── FunctionsEGL.cpp
+│   │   │   │   │   ├── FunctionsEGL.h
+│   │   │   │   │   ├── FunctionsEGLDL.cpp
+│   │   │   │   │   ├── FunctionsEGLDL.h
+│   │   │   │   │   ├── ImageEGL.cpp
+│   │   │   │   │   ├── ImageEGL.h
+│   │   │   │   │   ├── PbufferSurfaceEGL.cpp
+│   │   │   │   │   ├── PbufferSurfaceEGL.h
+│   │   │   │   │   ├── RendererEGL.cpp
+│   │   │   │   │   ├── RendererEGL.h
+│   │   │   │   │   ├── SurfaceEGL.cpp
+│   │   │   │   │   ├── SurfaceEGL.h
+│   │   │   │   │   ├── SyncEGL.cpp
+│   │   │   │   │   ├── SyncEGL.h
+│   │   │   │   │   ├── WindowSurfaceEGL.cpp
+│   │   │   │   │   ├── WindowSurfaceEGL.h
+│   │   │   │   │   ├── egl_utils.cpp
+│   │   │   │   │   ├── egl_utils.h
+│   │   │   │   │   └── functionsegl_typedefs.h
+│   │   │   │   ├── glx/
+│   │   │   │   │   ├── DisplayGLX.cpp
+│   │   │   │   │   ├── DisplayGLX.h
+│   │   │   │   │   ├── DisplayGLX_api.h
+│   │   │   │   │   ├── FBConfigCompatibility.md
+│   │   │   │   │   ├── FunctionsGLX.cpp
+│   │   │   │   │   ├── FunctionsGLX.h
+│   │   │   │   │   ├── PbufferSurfaceGLX.cpp
+│   │   │   │   │   ├── PbufferSurfaceGLX.h
+│   │   │   │   │   ├── PixmapSurfaceGLX.cpp
+│   │   │   │   │   ├── PixmapSurfaceGLX.h
+│   │   │   │   │   ├── SurfaceGLX.h
+│   │   │   │   │   ├── WindowSurfaceGLX.cpp
+│   │   │   │   │   ├── WindowSurfaceGLX.h
+│   │   │   │   │   ├── functionsglx_typedefs.h
+│   │   │   │   │   ├── glx_utils.cpp
+│   │   │   │   │   ├── glx_utils.h
+│   │   │   │   │   └── platform_glx.h
+│   │   │   │   ├── wgl/
+│   │   │   │   │   ├── ContextWGL.cpp
+│   │   │   │   │   ├── ContextWGL.h
+│   │   │   │   │   ├── D3DTextureSurfaceWGL.cpp
+│   │   │   │   │   ├── D3DTextureSurfaceWGL.h
+│   │   │   │   │   ├── DXGISwapChainWindowSurfaceWGL.cpp
+│   │   │   │   │   ├── DXGISwapChainWindowSurfaceWGL.h
+│   │   │   │   │   ├── DisplayWGL.cpp
+│   │   │   │   │   ├── DisplayWGL.h
+│   │   │   │   │   ├── FunctionsWGL.cpp
+│   │   │   │   │   ├── FunctionsWGL.h
+│   │   │   │   │   ├── PbufferSurfaceWGL.cpp
+│   │   │   │   │   ├── PbufferSurfaceWGL.h
+│   │   │   │   │   ├── RendererWGL.cpp
+│   │   │   │   │   ├── RendererWGL.h
+│   │   │   │   │   ├── SurfaceWGL.h
+│   │   │   │   │   ├── WindowSurfaceWGL.cpp
+│   │   │   │   │   ├── WindowSurfaceWGL.h
+│   │   │   │   │   ├── functionswgl_typedefs.h
+│   │   │   │   │   ├── wgl_utils.cpp
+│   │   │   │   │   └── wgl_utils.h
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BlitGL.cpp
+│   │   │   │   ├── BlitGL.h
+│   │   │   │   ├── BufferGL.cpp
+│   │   │   │   ├── BufferGL.h
+│   │   │   │   ├── ClearMultiviewGL.cpp
+│   │   │   │   ├── ClearMultiviewGL.h
+│   │   │   │   ├── CompilerGL.cpp
+│   │   │   │   ├── CompilerGL.h
+│   │   │   │   ├── ContextGL.cpp
+│   │   │   │   ├── ContextGL.h
+│   │   │   │   ├── DispatchTableGL_autogen.cpp
+│   │   │   │   ├── DispatchTableGL_autogen.h
+│   │   │   │   ├── DisplayGL.cpp
+│   │   │   │   ├── DisplayGL.h
+│   │   │   │   ├── DisplayGL_unittest.cpp
+│   │   │   │   ├── FeatureSupportGL.md
+│   │   │   │   ├── FenceNVGL.cpp
+│   │   │   │   ├── FenceNVGL.h
+│   │   │   │   ├── FramebufferGL.cpp
+│   │   │   │   ├── FramebufferGL.h
+│   │   │   │   ├── FunctionsGL.cpp
+│   │   │   │   ├── FunctionsGL.h
+│   │   │   │   ├── ImageGL.cpp
+│   │   │   │   ├── ImageGL.h
+│   │   │   │   ├── MemoryObjectGL.cpp
+│   │   │   │   ├── MemoryObjectGL.h
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── ProgramExecutableGL.cpp
+│   │   │   │   ├── ProgramExecutableGL.h
+│   │   │   │   ├── ProgramGL.cpp
+│   │   │   │   ├── ProgramGL.h
+│   │   │   │   ├── ProgramPipelineGL.cpp
+│   │   │   │   ├── ProgramPipelineGL.h
+│   │   │   │   ├── QueryGL.cpp
+│   │   │   │   ├── QueryGL.h
+│   │   │   │   ├── RenderbufferGL.cpp
+│   │   │   │   ├── RenderbufferGL.h
+│   │   │   │   ├── RendererGL.cpp
+│   │   │   │   ├── RendererGL.h
+│   │   │   │   ├── SamplerGL.cpp
+│   │   │   │   ├── SamplerGL.h
+│   │   │   │   ├── SemaphoreGL.cpp
+│   │   │   │   ├── SemaphoreGL.h
+│   │   │   │   ├── ShaderGL.cpp
+│   │   │   │   ├── ShaderGL.h
+│   │   │   │   ├── StateManagerGL.cpp
+│   │   │   │   ├── StateManagerGL.h
+│   │   │   │   ├── SurfaceGL.cpp
+│   │   │   │   ├── SurfaceGL.h
+│   │   │   │   ├── SyncGL.cpp
+│   │   │   │   ├── SyncGL.h
+│   │   │   │   ├── TextureGL.cpp
+│   │   │   │   ├── TextureGL.h
+│   │   │   │   ├── TransformFeedbackGL.cpp
+│   │   │   │   ├── TransformFeedbackGL.h
+│   │   │   │   ├── VertexArrayGL.cpp
+│   │   │   │   ├── VertexArrayGL.h
+│   │   │   │   ├── formatutilsgl.cpp
+│   │   │   │   ├── formatutilsgl.h
+│   │   │   │   ├── functionsgl_enums.h
+│   │   │   │   ├── functionsgl_typedefs.h
+│   │   │   │   ├── generate_gl_dispatch_table.py
+│   │   │   │   ├── gl_backend.gni
+│   │   │   │   ├── gl_bindings_data.json
+│   │   │   │   ├── renderergl_utils.cpp
+│   │   │   │   └── renderergl_utils.h
+│   │   │   ├── metal/
+│   │   │   │   ├── doc/
+│   │   │   │   │   ├── APPLE_clip_distance.md
+│   │   │   │   │   ├── OcclusionQueries.md
+│   │   │   │   │   ├── PackedDepthStencilSupport.md
+│   │   │   │   │   ├── TextureDataCompleteness.md
+│   │   │   │   │   ├── TransformFeedback.md
+│   │   │   │   │   └── ValidationLayers.md
+│   │   │   │   ├── file_hooking/
+│   │   │   │   │   ├── BUILD.gn
+│   │   │   │   │   └── shader_cache_file_hooking.cpp
+│   │   │   │   ├── shaders/
+│   │   │   │   │   ├── blit.metal
+│   │   │   │   │   ├── clear.metal
+│   │   │   │   │   ├── common.h
+│   │   │   │   │   ├── constants.h
+│   │   │   │   │   ├── copy_buffer.metal
+│   │   │   │   │   ├── embed_in_header.py
+│   │   │   │   │   ├── gen_indices.metal
+│   │   │   │   │   ├── gen_mipmap.metal
+│   │   │   │   │   ├── gen_mtl_internal_shaders.py
+│   │   │   │   │   ├── metal_wrapper.py
+│   │   │   │   │   ├── mtl_internal_shaders_autogen.metal
+│   │   │   │   │   ├── mtl_internal_shaders_src_autogen.h
+│   │   │   │   │   ├── rewrite_indices.metal
+│   │   │   │   │   ├── rewrite_indices_shared.h
+│   │   │   │   │   └── visibility.metal
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BufferMtl.h
+│   │   │   │   ├── BufferMtl.mm
+│   │   │   │   ├── CompilerMtl.h
+│   │   │   │   ├── CompilerMtl.mm
+│   │   │   │   ├── ContextMtl.h
+│   │   │   │   ├── ContextMtl.mm
+│   │   │   │   ├── DeviceMtl.h
+│   │   │   │   ├── DeviceMtl.mm
+│   │   │   │   ├── DisplayMtl.h
+│   │   │   │   ├── DisplayMtl.mm
+│   │   │   │   ├── DisplayMtl_api.h
+│   │   │   │   ├── FrameBufferMtl.h
+│   │   │   │   ├── FrameBufferMtl.mm
+│   │   │   │   ├── IOSurfaceSurfaceMtl.h
+│   │   │   │   ├── IOSurfaceSurfaceMtl.mm
+│   │   │   │   ├── ImageMtl.h
+│   │   │   │   ├── ImageMtl.mm
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── ProgramExecutableMtl.h
+│   │   │   │   ├── ProgramExecutableMtl.mm
+│   │   │   │   ├── ProgramMtl.h
+│   │   │   │   ├── ProgramMtl.mm
+│   │   │   │   ├── ProvokingVertexHelper.h
+│   │   │   │   ├── ProvokingVertexHelper.mm
+│   │   │   │   ├── QueryMtl.h
+│   │   │   │   ├── QueryMtl.mm
+│   │   │   │   ├── RenderBufferMtl.h
+│   │   │   │   ├── RenderBufferMtl.mm
+│   │   │   │   ├── RenderTargetMtl.h
+│   │   │   │   ├── RenderTargetMtl.mm
+│   │   │   │   ├── SamplerMtl.h
+│   │   │   │   ├── SamplerMtl.mm
+│   │   │   │   ├── ShaderMtl.h
+│   │   │   │   ├── ShaderMtl.mm
+│   │   │   │   ├── SurfaceMtl.h
+│   │   │   │   ├── SurfaceMtl.mm
+│   │   │   │   ├── SyncMtl.h
+│   │   │   │   ├── SyncMtl.mm
+│   │   │   │   ├── TextureMtl.h
+│   │   │   │   ├── TextureMtl.mm
+│   │   │   │   ├── TransformFeedbackMtl.h
+│   │   │   │   ├── TransformFeedbackMtl.mm
+│   │   │   │   ├── VertexArrayMtl.h
+│   │   │   │   ├── VertexArrayMtl.mm
+│   │   │   │   ├── blocklayoutMetal.cpp
+│   │   │   │   ├── blocklayoutMetal.h
+│   │   │   │   ├── gen_mtl_format_table.py
+│   │   │   │   ├── metal_backend.gni
+│   │   │   │   ├── mtl_buffer_manager.h
+│   │   │   │   ├── mtl_buffer_manager.mm
+│   │   │   │   ├── mtl_buffer_pool.h
+│   │   │   │   ├── mtl_buffer_pool.mm
+│   │   │   │   ├── mtl_command_buffer.h
+│   │   │   │   ├── mtl_command_buffer.mm
+│   │   │   │   ├── mtl_common.h
+│   │   │   │   ├── mtl_common.mm
+│   │   │   │   ├── mtl_context_device.h
+│   │   │   │   ├── mtl_context_device.mm
+│   │   │   │   ├── mtl_format_map.json
+│   │   │   │   ├── mtl_format_table_autogen.mm
+│   │   │   │   ├── mtl_format_utils.h
+│   │   │   │   ├── mtl_format_utils.mm
+│   │   │   │   ├── mtl_library_cache.h
+│   │   │   │   ├── mtl_library_cache.mm
+│   │   │   │   ├── mtl_msl_utils.h
+│   │   │   │   ├── mtl_msl_utils.mm
+│   │   │   │   ├── mtl_occlusion_query_pool.h
+│   │   │   │   ├── mtl_occlusion_query_pool.mm
+│   │   │   │   ├── mtl_pipeline_cache.h
+│   │   │   │   ├── mtl_pipeline_cache.mm
+│   │   │   │   ├── mtl_render_utils.h
+│   │   │   │   ├── mtl_render_utils.mm
+│   │   │   │   ├── mtl_resource_spi.h
+│   │   │   │   ├── mtl_resources.h
+│   │   │   │   ├── mtl_resources.mm
+│   │   │   │   ├── mtl_state_cache.h
+│   │   │   │   ├── mtl_state_cache.mm
+│   │   │   │   ├── mtl_utils.h
+│   │   │   │   ├── mtl_utils.mm
+│   │   │   │   ├── renderermtl_utils.cpp
+│   │   │   │   └── renderermtl_utils.h
+│   │   │   ├── null/
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BufferNULL.cpp
+│   │   │   │   ├── BufferNULL.h
+│   │   │   │   ├── CompilerNULL.cpp
+│   │   │   │   ├── CompilerNULL.h
+│   │   │   │   ├── ContextNULL.cpp
+│   │   │   │   ├── ContextNULL.h
+│   │   │   │   ├── DeviceNULL.cpp
+│   │   │   │   ├── DeviceNULL.h
+│   │   │   │   ├── DisplayNULL.cpp
+│   │   │   │   ├── DisplayNULL.h
+│   │   │   │   ├── FenceNVNULL.cpp
+│   │   │   │   ├── FenceNVNULL.h
+│   │   │   │   ├── FramebufferNULL.cpp
+│   │   │   │   ├── FramebufferNULL.h
+│   │   │   │   ├── ImageNULL.cpp
+│   │   │   │   ├── ImageNULL.h
+│   │   │   │   ├── ProgramExecutableNULL.cpp
+│   │   │   │   ├── ProgramExecutableNULL.h
+│   │   │   │   ├── ProgramNULL.cpp
+│   │   │   │   ├── ProgramNULL.h
+│   │   │   │   ├── ProgramPipelineNULL.cpp
+│   │   │   │   ├── ProgramPipelineNULL.h
+│   │   │   │   ├── QueryNULL.cpp
+│   │   │   │   ├── QueryNULL.h
+│   │   │   │   ├── RenderbufferNULL.cpp
+│   │   │   │   ├── RenderbufferNULL.h
+│   │   │   │   ├── SamplerNULL.cpp
+│   │   │   │   ├── SamplerNULL.h
+│   │   │   │   ├── ShaderNULL.cpp
+│   │   │   │   ├── ShaderNULL.h
+│   │   │   │   ├── SurfaceNULL.cpp
+│   │   │   │   ├── SurfaceNULL.h
+│   │   │   │   ├── SyncNULL.cpp
+│   │   │   │   ├── SyncNULL.h
+│   │   │   │   ├── TextureNULL.cpp
+│   │   │   │   ├── TextureNULL.h
+│   │   │   │   ├── TransformFeedbackNULL.cpp
+│   │   │   │   ├── TransformFeedbackNULL.h
+│   │   │   │   ├── VertexArrayNULL.cpp
+│   │   │   │   ├── VertexArrayNULL.h
+│   │   │   │   └── null_backend.gni
+│   │   │   ├── vulkan/
+│   │   │   │   ├── android/
+│   │   │   │   │   ├── AHBFunctions.cpp
+│   │   │   │   │   ├── AHBFunctions.h
+│   │   │   │   │   ├── DisplayVkAndroid.cpp
+│   │   │   │   │   ├── DisplayVkAndroid.h
+│   │   │   │   │   ├── HardwareBufferImageSiblingVkAndroid.cpp
+│   │   │   │   │   ├── HardwareBufferImageSiblingVkAndroid.h
+│   │   │   │   │   ├── WindowSurfaceVkAndroid.cpp
+│   │   │   │   │   ├── WindowSurfaceVkAndroid.h
+│   │   │   │   │   ├── vk_android_utils.cpp
+│   │   │   │   │   └── vk_android_utils.h
+│   │   │   │   ├── doc/
+│   │   │   │   │   ├── img/
+│   │   │   │   │   │   └── VulkanShaderTranslation.svg
+│   │   │   │   │   ├── APPLE_clip_distance.md
+│   │   │   │   │   ├── Allocators.md
+│   │   │   │   │   ├── DeferredClears.md
+│   │   │   │   │   ├── FastOpenGLStateTransitions.md
+│   │   │   │   │   ├── FormatTablesAndEmulation.md
+│   │   │   │   │   ├── PipelineCreation.md
+│   │   │   │   │   ├── PresentSemaphores.md
+│   │   │   │   │   ├── Queries.md
+│   │   │   │   │   ├── ShaderModuleCompilation.md
+│   │   │   │   │   └── TransformFeedbackViaExtension.md
+│   │   │   │   ├── fuchsia/
+│   │   │   │   │   ├── DisplayVkFuchsia.cpp
+│   │   │   │   │   ├── DisplayVkFuchsia.h
+│   │   │   │   │   ├── OWNERS
+│   │   │   │   │   ├── WindowSurfaceVkFuchsia.cpp
+│   │   │   │   │   └── WindowSurfaceVkFuchsia.h
+│   │   │   │   ├── linux/
+│   │   │   │   │   ├── display/
+│   │   │   │   │   │   ├── DisplayVkSimple.cpp
+│   │   │   │   │   │   ├── DisplayVkSimple.h
+│   │   │   │   │   │   ├── WindowSurfaceVkSimple.cpp
+│   │   │   │   │   │   └── WindowSurfaceVkSimple.h
+│   │   │   │   │   ├── gbm/
+│   │   │   │   │   │   ├── DisplayVkGbm.cpp
+│   │   │   │   │   │   └── DisplayVkGbm.h
+│   │   │   │   │   ├── headless/
+│   │   │   │   │   │   ├── DisplayVkHeadless.cpp
+│   │   │   │   │   │   ├── DisplayVkHeadless.h
+│   │   │   │   │   │   ├── WindowSurfaceVkHeadless.cpp
+│   │   │   │   │   │   └── WindowSurfaceVkHeadless.h
+│   │   │   │   │   ├── wayland/
+│   │   │   │   │   │   ├── DisplayVkWayland.cpp
+│   │   │   │   │   │   ├── DisplayVkWayland.h
+│   │   │   │   │   │   ├── WindowSurfaceVkWayland.cpp
+│   │   │   │   │   │   └── WindowSurfaceVkWayland.h
+│   │   │   │   │   ├── xcb/
+│   │   │   │   │   │   ├── DisplayVkXcb.cpp
+│   │   │   │   │   │   ├── DisplayVkXcb.h
+│   │   │   │   │   │   ├── WindowSurfaceVkXcb.cpp
+│   │   │   │   │   │   └── WindowSurfaceVkXcb.h
+│   │   │   │   │   ├── DeviceVkLinux.cpp
+│   │   │   │   │   ├── DeviceVkLinux.h
+│   │   │   │   │   ├── DisplayVkLinux.cpp
+│   │   │   │   │   ├── DisplayVkLinux.h
+│   │   │   │   │   ├── DisplayVkOffscreen.cpp
+│   │   │   │   │   ├── DisplayVkOffscreen.h
+│   │   │   │   │   ├── DmaBufImageSiblingVkLinux.cpp
+│   │   │   │   │   └── DmaBufImageSiblingVkLinux.h
+│   │   │   │   ├── mac/
+│   │   │   │   │   ├── DisplayVkMac.h
+│   │   │   │   │   ├── DisplayVkMac.mm
+│   │   │   │   │   ├── IOSurfaceSurfaceVkMac.h
+│   │   │   │   │   ├── IOSurfaceSurfaceVkMac.mm
+│   │   │   │   │   ├── WindowSurfaceVkMac.h
+│   │   │   │   │   └── WindowSurfaceVkMac.mm
+│   │   │   │   ├── null/
+│   │   │   │   │   ├── DisplayVkNull.cpp
+│   │   │   │   │   └── DisplayVkNull.h
+│   │   │   │   ├── shaders/
+│   │   │   │   │   ├── gen/
+│   │   │   │   │   │   ├── Blit3DSrc.frag.00000000.inc
+│   │   │   │   │   │   ├── Blit3DSrc.frag.00000001.inc
+│   │   │   │   │   │   ├── Blit3DSrc.frag.00000002.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000000.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000001.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000002.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000003.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000004.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000005.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000006.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000007.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000008.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000009.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000A.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000B.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000C.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000D.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000E.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.0000000F.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000010.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000011.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000012.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000013.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000014.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000015.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000016.inc
+│   │   │   │   │   │   ├── BlitResolve.frag.00000017.inc
+│   │   │   │   │   │   ├── BlitResolveStencilNoExport.comp.00000000.inc
+│   │   │   │   │   │   ├── BlitResolveStencilNoExport.comp.00000001.inc
+│   │   │   │   │   │   ├── ConvertIndex.comp.00000000.inc
+│   │   │   │   │   │   ├── ConvertIndex.comp.00000001.inc
+│   │   │   │   │   │   ├── ConvertIndex.comp.00000002.inc
+│   │   │   │   │   │   ├── ConvertIndex.comp.00000003.inc
+│   │   │   │   │   │   ├── ConvertIndexIndirectLineLoop.comp.00000000.inc
+│   │   │   │   │   │   ├── ConvertIndexIndirectLineLoop.comp.00000001.inc
+│   │   │   │   │   │   ├── ConvertIndexIndirectLineLoop.comp.00000002.inc
+│   │   │   │   │   │   ├── ConvertIndirectLineLoop.comp.00000000.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000000.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000001.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000002.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000003.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000004.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000005.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000006.inc
+│   │   │   │   │   │   ├── ConvertVertex.comp.00000007.inc
+│   │   │   │   │   │   ├── CopyImageToBuffer.comp.00000000.inc
+│   │   │   │   │   │   ├── CopyImageToBuffer.comp.00000001.inc
+│   │   │   │   │   │   ├── EtcToBc.comp.00000000.inc
+│   │   │   │   │   │   ├── EtcToBc.comp.00000001.inc
+│   │   │   │   │   │   ├── ExportStencil.frag.00000000.inc
+│   │   │   │   │   │   ├── FullScreenTri.vert.00000000.inc
+│   │   │   │   │   │   ├── GenerateFragmentShadingRate.comp.00000000.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000000.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000001.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000002.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000003.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000004.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000005.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000006.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000007.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000008.inc
+│   │   │   │   │   │   ├── GenerateMipmap.comp.00000009.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000000.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000001.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000002.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000003.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000004.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000005.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000006.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000007.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000008.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000009.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000A.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000B.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000C.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000D.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000E.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000000F.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000010.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000011.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000012.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000013.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000014.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000015.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000016.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000017.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000018.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000019.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001A.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001B.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001C.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001D.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001E.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000001F.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000020.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000021.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000022.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000023.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000024.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000025.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000026.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000027.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000028.inc
+│   │   │   │   │   │   ├── ImageClear.frag.00000029.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002A.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002B.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002C.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002D.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002E.inc
+│   │   │   │   │   │   ├── ImageClear.frag.0000002F.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000000.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000001.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000002.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000003.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000004.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000005.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000006.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000007.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000008.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000009.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000000A.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000000B.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000010.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000011.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000012.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000013.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000014.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000015.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000016.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000017.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000018.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000019.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000001A.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000001B.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000020.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000021.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000022.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000023.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000024.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000025.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000026.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000027.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000028.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.00000029.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000002A.inc
+│   │   │   │   │   │   ├── ImageCopy.frag.0000002B.inc
+│   │   │   │   │   │   ├── ImageCopyFloat.frag.00000000.inc
+│   │   │   │   │   │   ├── ImageCopyFloat.frag.00000001.inc
+│   │   │   │   │   │   ├── OverlayDraw.frag.00000000.inc
+│   │   │   │   │   │   └── OverlayDraw.vert.00000000.inc
+│   │   │   │   │   ├── src/
+│   │   │   │   │   │   ├── third_party/
+│   │   │   │   │   │   │   ├── etc_decoder/
+│   │   │   │   │   │   │   │   ├── LICENSE
+│   │   │   │   │   │   │   │   ├── README.chromium
+│   │   │   │   │   │   │   │   └── etc_decoder.h
+│   │   │   │   │   │   │   ├── ffx_spd/
+│   │   │   │   │   │   │   │   ├── LICENSE
+│   │   │   │   │   │   │   │   ├── README.chromium
+│   │   │   │   │   │   │   │   ├── ffx_a.h
+│   │   │   │   │   │   │   │   └── ffx_spd.h
+│   │   │   │   │   │   │   └── .clang-format
+│   │   │   │   │   │   ├── Blit3DSrc.frag
+│   │   │   │   │   │   ├── Blit3DSrc.frag.json
+│   │   │   │   │   │   ├── BlitResolve.frag
+│   │   │   │   │   │   ├── BlitResolve.frag.json
+│   │   │   │   │   │   ├── BlitResolve.inc
+│   │   │   │   │   │   ├── BlitResolveStencilNoExport.comp
+│   │   │   │   │   │   ├── BlitResolveStencilNoExport.comp.json
+│   │   │   │   │   │   ├── ConvertIndex.comp
+│   │   │   │   │   │   ├── ConvertIndex.comp.json
+│   │   │   │   │   │   ├── ConvertIndexIndirectLineLoop.comp
+│   │   │   │   │   │   ├── ConvertIndexIndirectLineLoop.comp.json
+│   │   │   │   │   │   ├── ConvertIndirectLineLoop.comp
+│   │   │   │   │   │   ├── ConvertIndirectLineLoop.comp.json
+│   │   │   │   │   │   ├── ConvertVertex.comp
+│   │   │   │   │   │   ├── ConvertVertex.comp.json
+│   │   │   │   │   │   ├── CopyImageToBuffer.comp
+│   │   │   │   │   │   ├── CopyImageToBuffer.comp.json
+│   │   │   │   │   │   ├── EtcToBc.comp
+│   │   │   │   │   │   ├── EtcToBc.comp.json
+│   │   │   │   │   │   ├── ExportStencil.frag
+│   │   │   │   │   │   ├── FullScreenTri.vert
+│   │   │   │   │   │   ├── GenerateFragmentShadingRate.comp
+│   │   │   │   │   │   ├── GenerateFragmentShadingRate.comp.json
+│   │   │   │   │   │   ├── GenerateMipmap.comp
+│   │   │   │   │   │   ├── GenerateMipmap.comp.json
+│   │   │   │   │   │   ├── ImageClear.frag
+│   │   │   │   │   │   ├── ImageClear.frag.json
+│   │   │   │   │   │   ├── ImageCopy.frag
+│   │   │   │   │   │   ├── ImageCopy.frag.json
+│   │   │   │   │   │   ├── ImageCopy.inc
+│   │   │   │   │   │   ├── ImageCopyFloat.frag
+│   │   │   │   │   │   ├── ImageCopyFloat.frag.json
+│   │   │   │   │   │   ├── OverlayDraw.frag
+│   │   │   │   │   │   ├── OverlayDraw.inc
+│   │   │   │   │   │   └── OverlayDraw.vert
+│   │   │   │   │   └── README.md
+│   │   │   │   ├── win32/
+│   │   │   │   │   ├── DisplayVkWin32.cpp
+│   │   │   │   │   ├── DisplayVkWin32.h
+│   │   │   │   │   ├── WindowSurfaceVkWin32.cpp
+│   │   │   │   │   └── WindowSurfaceVkWin32.h
+│   │   │   │   ├── AllocatorHelperPool.cpp
+│   │   │   │   ├── AllocatorHelperPool.h
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BufferVk.cpp
+│   │   │   │   ├── BufferVk.h
+│   │   │   │   ├── CLCommandQueueVk.cpp
+│   │   │   │   ├── CLCommandQueueVk.h
+│   │   │   │   ├── CLContextVk.cpp
+│   │   │   │   ├── CLContextVk.h
+│   │   │   │   ├── CLDeviceVk.cpp
+│   │   │   │   ├── CLDeviceVk.h
+│   │   │   │   ├── CLEventVk.cpp
+│   │   │   │   ├── CLEventVk.h
+│   │   │   │   ├── CLKernelVk.cpp
+│   │   │   │   ├── CLKernelVk.h
+│   │   │   │   ├── CLMemoryVk.cpp
+│   │   │   │   ├── CLMemoryVk.h
+│   │   │   │   ├── CLPlatformVk.cpp
+│   │   │   │   ├── CLPlatformVk.h
+│   │   │   │   ├── CLProgramVk.cpp
+│   │   │   │   ├── CLProgramVk.h
+│   │   │   │   ├── CLSamplerVk.cpp
+│   │   │   │   ├── CLSamplerVk.h
+│   │   │   │   ├── CommandQueue.cpp
+│   │   │   │   ├── CommandQueue.h
+│   │   │   │   ├── CompilerVk.cpp
+│   │   │   │   ├── CompilerVk.h
+│   │   │   │   ├── ContextVk.cpp
+│   │   │   │   ├── ContextVk.h
+│   │   │   │   ├── DebugAnnotatorVk.cpp
+│   │   │   │   ├── DebugAnnotatorVk.h
+│   │   │   │   ├── DeviceVk.cpp
+│   │   │   │   ├── DeviceVk.h
+│   │   │   │   ├── DisplayVk.cpp
+│   │   │   │   ├── DisplayVk.h
+│   │   │   │   ├── DisplayVk_api.h
+│   │   │   │   ├── DriverUniforms.h
+│   │   │   │   ├── FenceNVVk.cpp
+│   │   │   │   ├── FenceNVVk.h
+│   │   │   │   ├── FramebufferVk.cpp
+│   │   │   │   ├── FramebufferVk.h
+│   │   │   │   ├── ImageVk.cpp
+│   │   │   │   ├── ImageVk.h
+│   │   │   │   ├── MemoryObjectVk.cpp
+│   │   │   │   ├── MemoryObjectVk.h
+│   │   │   │   ├── MemoryTracking.cpp
+│   │   │   │   ├── MemoryTracking.h
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── OverlayVk.cpp
+│   │   │   │   ├── OverlayVk.h
+│   │   │   │   ├── PersistentCommandPool.cpp
+│   │   │   │   ├── PersistentCommandPool.h
+│   │   │   │   ├── ProgramExecutableVk.cpp
+│   │   │   │   ├── ProgramExecutableVk.h
+│   │   │   │   ├── ProgramPipelineVk.cpp
+│   │   │   │   ├── ProgramPipelineVk.h
+│   │   │   │   ├── ProgramVk.cpp
+│   │   │   │   ├── ProgramVk.h
+│   │   │   │   ├── QueryVk.cpp
+│   │   │   │   ├── QueryVk.h
+│   │   │   │   ├── README.md
+│   │   │   │   ├── RenderTargetVk.cpp
+│   │   │   │   ├── RenderTargetVk.h
+│   │   │   │   ├── RenderbufferVk.cpp
+│   │   │   │   ├── RenderbufferVk.h
+│   │   │   │   ├── SamplerVk.cpp
+│   │   │   │   ├── SamplerVk.h
+│   │   │   │   ├── SecondaryCommandBuffer.cpp
+│   │   │   │   ├── SecondaryCommandBuffer.h
+│   │   │   │   ├── SecondaryCommandPool.cpp
+│   │   │   │   ├── SecondaryCommandPool.h
+│   │   │   │   ├── SemaphoreVk.cpp
+│   │   │   │   ├── SemaphoreVk.h
+│   │   │   │   ├── ShaderInterfaceVariableInfoMap.cpp
+│   │   │   │   ├── ShaderInterfaceVariableInfoMap.h
+│   │   │   │   ├── ShaderVk.cpp
+│   │   │   │   ├── ShaderVk.h
+│   │   │   │   ├── ShareGroupVk.cpp
+│   │   │   │   ├── ShareGroupVk.h
+│   │   │   │   ├── Suballocation.cpp
+│   │   │   │   ├── Suballocation.h
+│   │   │   │   ├── SurfaceVk.cpp
+│   │   │   │   ├── SurfaceVk.h
+│   │   │   │   ├── SyncVk.cpp
+│   │   │   │   ├── SyncVk.h
+│   │   │   │   ├── TextureVk.cpp
+│   │   │   │   ├── TextureVk.h
+│   │   │   │   ├── TransformFeedbackVk.cpp
+│   │   │   │   ├── TransformFeedbackVk.h
+│   │   │   │   ├── UtilsVk.cpp
+│   │   │   │   ├── UtilsVk.h
+│   │   │   │   ├── VertexArrayVk.cpp
+│   │   │   │   ├── VertexArrayVk.h
+│   │   │   │   ├── VkImageImageSiblingVk.cpp
+│   │   │   │   ├── VkImageImageSiblingVk.h
+│   │   │   │   ├── VulkanSecondaryCommandBuffer.cpp
+│   │   │   │   ├── VulkanSecondaryCommandBuffer.h
+│   │   │   │   ├── cl_types.h
+│   │   │   │   ├── clspv_utils.cpp
+│   │   │   │   ├── clspv_utils.h
+│   │   │   │   ├── gen_vk_format_table.py
+│   │   │   │   ├── gen_vk_internal_shaders.py
+│   │   │   │   ├── gen_vk_mandatory_format_support_table.py
+│   │   │   │   ├── spv_utils.cpp
+│   │   │   │   ├── spv_utils.h
+│   │   │   │   ├── vk_barrier_data.cpp
+│   │   │   │   ├── vk_barrier_data.h
+│   │   │   │   ├── vk_cache_utils.cpp
+│   │   │   │   ├── vk_cache_utils.h
+│   │   │   │   ├── vk_caps_utils.cpp
+│   │   │   │   ├── vk_caps_utils.h
+│   │   │   │   ├── vk_cl_utils.cpp
+│   │   │   │   ├── vk_cl_utils.h
+│   │   │   │   ├── vk_command_buffer_utils.h
+│   │   │   │   ├── vk_format_map.json
+│   │   │   │   ├── vk_format_table_autogen.cpp
+│   │   │   │   ├── vk_format_utils.cpp
+│   │   │   │   ├── vk_format_utils.h
+│   │   │   │   ├── vk_helpers.cpp
+│   │   │   │   ├── vk_helpers.h
+│   │   │   │   ├── vk_internal_shaders_autogen.cpp
+│   │   │   │   ├── vk_internal_shaders_autogen.gni
+│   │   │   │   ├── vk_internal_shaders_autogen.h
+│   │   │   │   ├── vk_mandatory_format_support_data.json
+│   │   │   │   ├── vk_mandatory_format_support_table_autogen.cpp
+│   │   │   │   ├── vk_mem_alloc_wrapper.cpp
+│   │   │   │   ├── vk_mem_alloc_wrapper.h
+│   │   │   │   ├── vk_ref_counted_event.cpp
+│   │   │   │   ├── vk_ref_counted_event.h
+│   │   │   │   ├── vk_renderer.cpp
+│   │   │   │   ├── vk_renderer.h
+│   │   │   │   ├── vk_resource.cpp
+│   │   │   │   ├── vk_resource.h
+│   │   │   │   ├── vk_utils.cpp
+│   │   │   │   ├── vk_utils.h
+│   │   │   │   ├── vk_wrapper.h
+│   │   │   │   └── vulkan_backend.gni
+│   │   │   ├── wgpu/
+│   │   │   │   ├── linux/
+│   │   │   │   │   └── x11/
+│   │   │   │   │       ├── WindowSurfaceWgpuX11.cpp
+│   │   │   │   │       └── WindowSurfaceWgpuX11.h
+│   │   │   │   ├── mac/
+│   │   │   │   │   ├── WindowSurfaceWgpuMetalLayer.h
+│   │   │   │   │   └── WindowSurfaceWgpuMetalLayer.mm
+│   │   │   │   ├── win32/
+│   │   │   │   │   ├── WindowSurfaceWgpuWin32.cpp
+│   │   │   │   │   └── WindowSurfaceWgpuWin32.h
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   ├── BufferWgpu.cpp
+│   │   │   │   ├── BufferWgpu.h
+│   │   │   │   ├── CompilerWgpu.cpp
+│   │   │   │   ├── CompilerWgpu.h
+│   │   │   │   ├── ContextWgpu.cpp
+│   │   │   │   ├── ContextWgpu.h
+│   │   │   │   ├── DeviceWgpu.cpp
+│   │   │   │   ├── DeviceWgpu.h
+│   │   │   │   ├── DisplayWgpu.cpp
+│   │   │   │   ├── DisplayWgpu.h
+│   │   │   │   ├── DisplayWgpu_api.h
+│   │   │   │   ├── FenceNVWgpu.cpp
+│   │   │   │   ├── FenceNVWgpu.h
+│   │   │   │   ├── FramebufferWgpu.cpp
+│   │   │   │   ├── FramebufferWgpu.h
+│   │   │   │   ├── ImageWgpu.cpp
+│   │   │   │   ├── ImageWgpu.h
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── ProgramExecutableWgpu.cpp
+│   │   │   │   ├── ProgramExecutableWgpu.h
+│   │   │   │   ├── ProgramPipelineWgpu.cpp
+│   │   │   │   ├── ProgramPipelineWgpu.h
+│   │   │   │   ├── ProgramWgpu.cpp
+│   │   │   │   ├── ProgramWgpu.h
+│   │   │   │   ├── QueryWgpu.cpp
+│   │   │   │   ├── QueryWgpu.h
+│   │   │   │   ├── RenderTargetWgpu.cpp
+│   │   │   │   ├── RenderTargetWgpu.h
+│   │   │   │   ├── RenderbufferWgpu.cpp
+│   │   │   │   ├── RenderbufferWgpu.h
+│   │   │   │   ├── SamplerWgpu.cpp
+│   │   │   │   ├── SamplerWgpu.h
+│   │   │   │   ├── ShaderWgpu.cpp
+│   │   │   │   ├── ShaderWgpu.h
+│   │   │   │   ├── SurfaceWgpu.cpp
+│   │   │   │   ├── SurfaceWgpu.h
+│   │   │   │   ├── SyncWgpu.cpp
+│   │   │   │   ├── SyncWgpu.h
+│   │   │   │   ├── TextureWgpu.cpp
+│   │   │   │   ├── TextureWgpu.h
+│   │   │   │   ├── TransformFeedbackWgpu.cpp
+│   │   │   │   ├── TransformFeedbackWgpu.h
+│   │   │   │   ├── UtilsWgpu.cpp
+│   │   │   │   ├── UtilsWgpu.h
+│   │   │   │   ├── VertexArrayWgpu.cpp
+│   │   │   │   ├── VertexArrayWgpu.h
+│   │   │   │   ├── gen_wgpu_format_table.py
+│   │   │   │   ├── wgpu_command_buffer.cpp
+│   │   │   │   ├── wgpu_command_buffer.h
+│   │   │   │   ├── wgpu_format_map.json
+│   │   │   │   ├── wgpu_format_table_autogen.cpp
+│   │   │   │   ├── wgpu_format_utils.cpp
+│   │   │   │   ├── wgpu_format_utils.h
+│   │   │   │   ├── wgpu_helpers.cpp
+│   │   │   │   ├── wgpu_helpers.h
+│   │   │   │   ├── wgpu_pipeline_state.cpp
+│   │   │   │   ├── wgpu_pipeline_state.h
+│   │   │   │   ├── wgpu_proc_utils.cpp
+│   │   │   │   ├── wgpu_proc_utils.h
+│   │   │   │   ├── wgpu_sources.gni
+│   │   │   │   ├── wgpu_utils.cpp
+│   │   │   │   ├── wgpu_utils.h
+│   │   │   │   ├── wgpu_wgsl_util.cpp
+│   │   │   │   └── wgpu_wgsl_util.h
+│   │   │   ├── BufferImpl.cpp
+│   │   │   ├── BufferImpl.h
+│   │   │   ├── BufferImpl_mock.h
+│   │   │   ├── CLCommandQueueImpl.cpp
+│   │   │   ├── CLCommandQueueImpl.h
+│   │   │   ├── CLContextImpl.cpp
+│   │   │   ├── CLContextImpl.h
+│   │   │   ├── CLDeviceImpl.cpp
+│   │   │   ├── CLDeviceImpl.h
+│   │   │   ├── CLEventImpl.cpp
+│   │   │   ├── CLEventImpl.h
+│   │   │   ├── CLExtensions.cpp
+│   │   │   ├── CLExtensions.h
+│   │   │   ├── CLKernelImpl.cpp
+│   │   │   ├── CLKernelImpl.h
+│   │   │   ├── CLMemoryImpl.cpp
+│   │   │   ├── CLMemoryImpl.h
+│   │   │   ├── CLPlatformImpl.cpp
+│   │   │   ├── CLPlatformImpl.h
+│   │   │   ├── CLProgramImpl.cpp
+│   │   │   ├── CLProgramImpl.h
+│   │   │   ├── CLSamplerImpl.cpp
+│   │   │   ├── CLSamplerImpl.h
+│   │   │   ├── CompilerImpl.h
+│   │   │   ├── ContextImpl.cpp
+│   │   │   ├── ContextImpl.h
+│   │   │   ├── DeviceImpl.cpp
+│   │   │   ├── DeviceImpl.h
+│   │   │   ├── DisplayImpl.cpp
+│   │   │   ├── DisplayImpl.h
+│   │   │   ├── EGLImplFactory.h
+│   │   │   ├── EGLReusableSync.cpp
+│   │   │   ├── EGLReusableSync.h
+│   │   │   ├── EGLSyncImpl.cpp
+│   │   │   ├── EGLSyncImpl.h
+│   │   │   ├── FenceNVImpl.h
+│   │   │   ├── Format.h
+│   │   │   ├── FormatID_autogen.h
+│   │   │   ├── Format_table_autogen.cpp
+│   │   │   ├── FramebufferAttachmentObjectImpl.h
+│   │   │   ├── FramebufferImpl.cpp
+│   │   │   ├── FramebufferImpl.h
+│   │   │   ├── FramebufferImpl_mock.h
+│   │   │   ├── GLImplFactory.h
+│   │   │   ├── ImageImpl.cpp
+│   │   │   ├── ImageImpl.h
+│   │   │   ├── ImageImpl_mock.h
+│   │   │   ├── MemoryObjectImpl.h
+│   │   │   ├── OverlayImpl.h
+│   │   │   ├── ProgramExecutableImpl.h
+│   │   │   ├── ProgramImpl.cpp
+│   │   │   ├── ProgramImpl.h
+│   │   │   ├── ProgramImpl_mock.h
+│   │   │   ├── ProgramPipelineImpl.cpp
+│   │   │   ├── ProgramPipelineImpl.h
+│   │   │   ├── QueryImpl.cpp
+│   │   │   ├── QueryImpl.h
+│   │   │   ├── README.md
+│   │   │   ├── RenderTargetCache.h
+│   │   │   ├── RenderbufferImpl.cpp
+│   │   │   ├── RenderbufferImpl.h
+│   │   │   ├── RenderbufferImpl_mock.h
+│   │   │   ├── SamplerImpl.h
+│   │   │   ├── SemaphoreImpl.h
+│   │   │   ├── ShaderImpl.cpp
+│   │   │   ├── ShaderImpl.h
+│   │   │   ├── ShareGroupImpl.h
+│   │   │   ├── StreamProducerImpl.h
+│   │   │   ├── SurfaceImpl.cpp
+│   │   │   ├── SurfaceImpl.h
+│   │   │   ├── SyncImpl.h
+│   │   │   ├── TextureImpl.cpp
+│   │   │   ├── TextureImpl.h
+│   │   │   ├── TextureImpl_mock.h
+│   │   │   ├── TransformFeedbackImpl.cpp
+│   │   │   ├── TransformFeedbackImpl.h
+│   │   │   ├── TransformFeedbackImpl_mock.h
+│   │   │   ├── VertexArrayImpl.cpp
+│   │   │   ├── VertexArrayImpl.h
+│   │   │   ├── angle_cl_format_map.json
+│   │   │   ├── angle_format.py
+│   │   │   ├── angle_format_data.json
+│   │   │   ├── angle_format_map.json
+│   │   │   ├── cl_types.h
+│   │   │   ├── copyvertex.h
+│   │   │   ├── copyvertex.inc.h
+│   │   │   ├── d3d_format.cpp
+│   │   │   ├── d3d_format.h
+│   │   │   ├── driver_utils.cpp
+│   │   │   ├── driver_utils.h
+│   │   │   ├── driver_utils_ios.mm
+│   │   │   ├── driver_utils_mac.mm
+│   │   │   ├── dxgi_format_data.json
+│   │   │   ├── dxgi_format_map.h
+│   │   │   ├── dxgi_format_map_autogen.cpp
+│   │   │   ├── dxgi_support_data.json
+│   │   │   ├── dxgi_support_table.h
+│   │   │   ├── dxgi_support_table_autogen.cpp
+│   │   │   ├── gen_angle_format_table.py
+│   │   │   ├── gen_dxgi_format_table.py
+│   │   │   ├── gen_dxgi_support_tables.py
+│   │   │   ├── gen_load_functions_table.py
+│   │   │   ├── load_functions_data.json
+│   │   │   ├── load_functions_table.h
+│   │   │   ├── load_functions_table_autogen.cpp
+│   │   │   ├── renderer_utils.cpp
+│   │   │   ├── renderer_utils.h
+│   │   │   ├── serial_utils.h
+│   │   │   └── serial_utils_unittest.cpp
+│   │   ├── AttributeMap.cpp
+│   │   ├── AttributeMap.h
+│   │   ├── BlendStateExt_unittest.cpp
+│   │   ├── BlobCache.cpp
+│   │   ├── BlobCache.h
+│   │   ├── BlobCache_unittest.cpp
+│   │   ├── Buffer.cpp
+│   │   ├── Buffer.h
+│   │   ├── CLBitField.h
+│   │   ├── CLBuffer.cpp
+│   │   ├── CLBuffer.h
+│   │   ├── CLCommandQueue.cpp
+│   │   ├── CLCommandQueue.h
+│   │   ├── CLContext.cpp
+│   │   ├── CLContext.h
+│   │   ├── CLDevice.cpp
+│   │   ├── CLDevice.h
+│   │   ├── CLEvent.cpp
+│   │   ├── CLEvent.h
+│   │   ├── CLImage.cpp
+│   │   ├── CLImage.h
+│   │   ├── CLKernel.cpp
+│   │   ├── CLKernel.h
+│   │   ├── CLMemory.cpp
+│   │   ├── CLMemory.h
+│   │   ├── CLObject.cpp
+│   │   ├── CLObject.h
+│   │   ├── CLPlatform.cpp
+│   │   ├── CLPlatform.h
+│   │   ├── CLProgram.cpp
+│   │   ├── CLProgram.h
+│   │   ├── CLRefPointer.h
+│   │   ├── CLSampler.cpp
+│   │   ├── CLSampler.h
+│   │   ├── Caps.cpp
+│   │   ├── Caps.h
+│   │   ├── Compiler.cpp
+│   │   ├── Compiler.h
+│   │   ├── Config.cpp
+│   │   ├── Config.h
+│   │   ├── Config_unittest.cpp
+│   │   ├── Constants.h
+│   │   ├── Context.cpp
+│   │   ├── Context.h
+│   │   ├── Context.inl.h
+│   │   ├── ContextMutex.cpp
+│   │   ├── ContextMutex.h
+│   │   ├── ContextMutex_unittest.cpp
+│   │   ├── Context_gles_1_0.cpp
+│   │   ├── Context_gles_1_0_autogen.h
+│   │   ├── Context_gles_2_0_autogen.h
+│   │   ├── Context_gles_3_0_autogen.h
+│   │   ├── Context_gles_3_1_autogen.h
+│   │   ├── Context_gles_3_2_autogen.h
+│   │   ├── Context_gles_ext_autogen.h
+│   │   ├── Debug.cpp
+│   │   ├── Debug.h
+│   │   ├── Decompress_unittest.cpp
+│   │   ├── Device.cpp
+│   │   ├── Device.h
+│   │   ├── Display.cpp
+│   │   ├── Display.h
+│   │   ├── EGLSync.cpp
+│   │   ├── EGLSync.h
+│   │   ├── Error.cpp
+│   │   ├── Error.h
+│   │   ├── Error.inc
+│   │   ├── ErrorStrings.h
+│   │   ├── Fence.cpp
+│   │   ├── Fence.h
+│   │   ├── Fence_unittest.cpp
+│   │   ├── Framebuffer.cpp
+│   │   ├── Framebuffer.h
+│   │   ├── FramebufferAttachment.cpp
+│   │   ├── FramebufferAttachment.h
+│   │   ├── GLES1Renderer.cpp
+│   │   ├── GLES1Renderer.h
+│   │   ├── GLES1Shaders.inc
+│   │   ├── GLES1State.cpp
+│   │   ├── GLES1State.h
+│   │   ├── GlobalMutex.cpp
+│   │   ├── GlobalMutex.h
+│   │   ├── GlobalMutex_unittest.cpp
+│   │   ├── HandleAllocator.cpp
+│   │   ├── HandleAllocator.h
+│   │   ├── HandleAllocator_unittest.cpp
+│   │   ├── Image.cpp
+│   │   ├── Image.h
+│   │   ├── ImageIndex.cpp
+│   │   ├── ImageIndex.h
+│   │   ├── ImageIndexIterator_unittest.cpp
+│   │   ├── Image_unittest.cpp
+│   │   ├── IndexRangeCache.cpp
+│   │   ├── IndexRangeCache.h
+│   │   ├── InfoLog.h
+│   │   ├── LoggingAnnotator.cpp
+│   │   ├── LoggingAnnotator.h
+│   │   ├── MemoryObject.cpp
+│   │   ├── MemoryObject.h
+│   │   ├── MemoryProgramCache.cpp
+│   │   ├── MemoryProgramCache.h
+│   │   ├── MemoryShaderCache.cpp
+│   │   ├── MemoryShaderCache.h
+│   │   ├── Observer.cpp
+│   │   ├── Observer.h
+│   │   ├── Observer_unittest.cpp
+│   │   ├── Overlay.cpp
+│   │   ├── Overlay.h
+│   │   ├── OverlayWidgets.cpp
+│   │   ├── OverlayWidgets.h
+│   │   ├── Overlay_autogen.cpp
+│   │   ├── Overlay_autogen.h
+│   │   ├── Overlay_font_autogen.cpp
+│   │   ├── Overlay_font_autogen.h
+│   │   ├── PixelLocalStorage.cpp
+│   │   ├── PixelLocalStorage.h
+│   │   ├── Platform.cpp
+│   │   ├── Program.cpp
+│   │   ├── Program.h
+│   │   ├── ProgramExecutable.cpp
+│   │   ├── ProgramExecutable.h
+│   │   ├── ProgramLinkedResources.cpp
+│   │   ├── ProgramLinkedResources.h
+│   │   ├── ProgramPipeline.cpp
+│   │   ├── ProgramPipeline.h
+│   │   ├── Program_unittest.cpp
+│   │   ├── Query.cpp
+│   │   ├── Query.h
+│   │   ├── RefCountObject.h
+│   │   ├── Renderbuffer.cpp
+│   │   ├── Renderbuffer.h
+│   │   ├── ResourceManager.cpp
+│   │   ├── ResourceManager.h
+│   │   ├── ResourceManager_unittest.cpp
+│   │   ├── ResourceMap.h
+│   │   ├── ResourceMap_unittest.cpp
+│   │   ├── Sampler.cpp
+│   │   ├── Sampler.h
+│   │   ├── Semaphore.cpp
+│   │   ├── Semaphore.h
+│   │   ├── Shader.cpp
+│   │   ├── Shader.h
+│   │   ├── ShareGroup.cpp
+│   │   ├── ShareGroup.h
+│   │   ├── SizedMRUCache.h
+│   │   ├── SizedMRUCache_unittest.cpp
+│   │   ├── State.cpp
+│   │   ├── State.h
+│   │   ├── Stream.cpp
+│   │   ├── Stream.h
+│   │   ├── Surface.cpp
+│   │   ├── Surface.h
+│   │   ├── Surface_unittest.cpp
+│   │   ├── Texture.cpp
+│   │   ├── Texture.h
+│   │   ├── Thread.cpp
+│   │   ├── Thread.h
+│   │   ├── TransformFeedback.cpp
+│   │   ├── TransformFeedback.h
+│   │   ├── TransformFeedback_unittest.cpp
+│   │   ├── Uniform.cpp
+│   │   ├── Uniform.h
+│   │   ├── UnlockedTailCall_unittest.cpp
+│   │   ├── VaryingPacking.cpp
+│   │   ├── VaryingPacking.h
+│   │   ├── VaryingPacking_unittest.cpp
+│   │   ├── Version.h
+│   │   ├── VertexArray.cpp
+│   │   ├── VertexArray.h
+│   │   ├── VertexArray_unittest.cpp
+│   │   ├── VertexAttribute.cpp
+│   │   ├── VertexAttribute.h
+│   │   ├── VertexAttribute.inc
+│   │   ├── angletypes.cpp
+│   │   ├── angletypes.h
+│   │   ├── angletypes.inc
+│   │   ├── cl_types.h
+│   │   ├── cl_utils.cpp
+│   │   ├── cl_utils.h
+│   │   ├── context_private_call.inl.h
+│   │   ├── context_private_call_autogen.h
+│   │   ├── entry_points_utils.h
+│   │   ├── es3_copy_conversion_formats.json
+│   │   ├── es3_copy_conversion_table_autogen.cpp
+│   │   ├── es3_format_type_combinations.json
+│   │   ├── features.h
+│   │   ├── format_map_autogen.cpp
+│   │   ├── format_map_data.json
+│   │   ├── formatutils.cpp
+│   │   ├── formatutils.h
+│   │   ├── gen_copy_conversion_table.py
+│   │   ├── gen_extensions.py
+│   │   ├── gen_format_map.py
+│   │   ├── gen_overlay_fonts.py
+│   │   ├── gen_overlay_widgets.py
+│   │   ├── gles_extensions_autogen.cpp
+│   │   ├── gles_extensions_autogen.h
+│   │   ├── histogram_macros.h
+│   │   ├── overlay_widgets.json
+│   │   ├── queryconversions.cpp
+│   │   ├── queryconversions.h
+│   │   ├── queryutils.cpp
+│   │   ├── queryutils.h
+│   │   ├── trace.h
+│   │   ├── validationCL.cpp
+│   │   ├── validationCL.h
+│   │   ├── validationCL_autogen.h
+│   │   ├── validationEGL.cpp
+│   │   ├── validationEGL.h
+│   │   ├── validationEGL_autogen.h
+│   │   ├── validationES.cpp
+│   │   ├── validationES.h
+│   │   ├── validationES1.cpp
+│   │   ├── validationES1.h
+│   │   ├── validationES1_autogen.h
+│   │   ├── validationES2.cpp
+│   │   ├── validationES2.h
+│   │   ├── validationES2_autogen.h
+│   │   ├── validationES3.cpp
+│   │   ├── validationES3.h
+│   │   ├── validationES31.cpp
+│   │   ├── validationES31.h
+│   │   ├── validationES31_autogen.h
+│   │   ├── validationES32.cpp
+│   │   ├── validationES32.h
+│   │   ├── validationES32_autogen.h
+│   │   ├── validationES3_autogen.h
+│   │   ├── validationESEXT.cpp
+│   │   ├── validationESEXT.h
+│   │   └── validationESEXT_autogen.h
+│   ├── libEGL/
+│   │   ├── egl_loader_autogen.cpp
+│   │   ├── egl_loader_autogen.h
+│   │   ├── libEGL.rc
+│   │   ├── libEGL_autogen.cpp
+│   │   ├── libEGL_autogen.def
+│   │   ├── libEGL_vulkan_secondaries_autogen.def
+│   │   └── resource.h
+│   ├── libGLESv1_CM/
+│   │   ├── libGLESv1_CM.cpp
+│   │   ├── libGLESv1_CM.def
+│   │   ├── libGLESv1_CM.rc
+│   │   └── resource.h
+│   ├── libGLESv2/
+│   │   ├── cl_dispatch_table.cpp
+│   │   ├── cl_dispatch_table.h
+│   │   ├── cl_stubs.cpp
+│   │   ├── cl_stubs_autogen.h
+│   │   ├── egl_context_lock_autogen.h
+│   │   ├── egl_context_lock_impl.h
+│   │   ├── egl_ext_stubs.cpp
+│   │   ├── egl_ext_stubs_autogen.h
+│   │   ├── egl_get_labeled_object_data.json
+│   │   ├── egl_stubs.cpp
+│   │   ├── egl_stubs_autogen.h
+│   │   ├── egl_stubs_getprocaddress_autogen.cpp
+│   │   ├── entry_points_cl_autogen.cpp
+│   │   ├── entry_points_cl_autogen.h
+│   │   ├── entry_points_cl_utils.cpp
+│   │   ├── entry_points_cl_utils.h
+│   │   ├── entry_points_egl_autogen.cpp
+│   │   ├── entry_points_egl_autogen.h
+│   │   ├── entry_points_egl_ext_autogen.cpp
+│   │   ├── entry_points_egl_ext_autogen.h
+│   │   ├── entry_points_gles_1_0_autogen.cpp
+│   │   ├── entry_points_gles_1_0_autogen.h
+│   │   ├── entry_points_gles_2_0_autogen.cpp
+│   │   ├── entry_points_gles_2_0_autogen.h
+│   │   ├── entry_points_gles_3_0_autogen.cpp
+│   │   ├── entry_points_gles_3_0_autogen.h
+│   │   ├── entry_points_gles_3_1_autogen.cpp
+│   │   ├── entry_points_gles_3_1_autogen.h
+│   │   ├── entry_points_gles_3_2_autogen.cpp
+│   │   ├── entry_points_gles_3_2_autogen.h
+│   │   ├── entry_points_gles_ext_autogen.cpp
+│   │   ├── entry_points_gles_ext_autogen.h
+│   │   ├── global_state.cpp
+│   │   ├── global_state.h
+│   │   ├── libGLESv2.rc
+│   │   ├── libGLESv2_autogen.cpp
+│   │   ├── libGLESv2_autogen.def
+│   │   ├── libGLESv2_no_capture_autogen.def
+│   │   ├── libGLESv2_vulkan_secondaries_autogen.def
+│   │   ├── libGLESv2_with_capture_autogen.def
+│   │   ├── proc_table_cl.h
+│   │   ├── proc_table_cl_autogen.cpp
+│   │   └── resource.h
+│   ├── libOpenCL/
+│   │   ├── BUILD.gn
+│   │   ├── dispatch.cpp
+│   │   ├── dispatch.h
+│   │   ├── libOpenCL_autogen.cpp
+│   │   └── libOpenCL_autogen.map
+│   ├── tests/
+│   │   ├── capture_replay_tests/
+│   │   │   ├── .gitignore
+│   │   │   ├── BUILD.gn
+│   │   │   ├── CaptureReplayTests.cpp
+│   │   │   └── capture_replay_expectations.txt
+│   │   ├── capture_tests/
+│   │   │   ├── expected/
+│   │   │   │   ├── .clang-format
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan.angledata
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan.cpp
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan.h
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan.json
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan_0001.cpp
+│   │   │   │   ├── CapturedTestCL_MultiFrameCL_ES3_Vulkan_OpenCL_info.json
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan.angledata
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan.cpp
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan.h
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan.json
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan_0001.cpp
+│   │   │   │   ├── CapturedTest_ActiveTextures_ES3_Vulkan_shared.cpp
+│   │   │   │   ├── CapturedTest_MultiFrame_ES3_Vulkan.angledata
+│   │   │   │   ├── CapturedTest_MultiFrame_ES3_Vulkan.cpp
+│   │   │   │   ├── CapturedTest_MultiFrame_ES3_Vulkan.h
+│   │   │   │   ├── CapturedTest_MultiFrame_ES3_Vulkan.json
+│   │   │   │   ├── CapturedTest_MultiFrame_ES3_Vulkan_0001.cpp
+│   │   │   │   └── CapturedTest_MultiFrame_ES3_Vulkan_shared.cpp
+│   │   │   ├── BUILD.gn
+│   │   │   ├── CapturedTest.cpp
+│   │   │   ├── CapturedTestCL.cpp
+│   │   │   └── capture_tests.py
+│   │   ├── cl_support/
+│   │   │   ├── ancle.icd
+│   │   │   ├── angle_oclcts_gtest.cpp
+│   │   │   ├── openclcts_expectations.txt
+│   │   │   └── openclcts_mustpass.txt
+│   │   ├── compiler_tests/
+│   │   │   ├── API_test.cpp
+│   │   │   ├── CollectVariables_test.cpp
+│   │   │   ├── ConstructCompiler_test.cpp
+│   │   │   ├── ExpressionLimit_test.cpp
+│   │   │   ├── FloatLex_test.cpp
+│   │   │   ├── GLSLCompatibilityOutput_test.cpp
+│   │   │   ├── GeometryShader_test.cpp
+│   │   │   ├── GlFragDataNotModified_test.cpp
+│   │   │   ├── HLSLOutput_test.cpp
+│   │   │   ├── ImmutableString_test.cpp
+│   │   │   ├── ImmutableString_test_autogen.cpp
+│   │   │   ├── IntermNode_test.cpp
+│   │   │   ├── MSLOutput_test.cpp
+│   │   │   ├── NV_draw_buffers_test.cpp
+│   │   │   ├── Parse_test.cpp
+│   │   │   ├── Precise_test.cpp
+│   │   │   ├── PruneEmptyCases_test.cpp
+│   │   │   ├── PruneEmptyDeclarations_test.cpp
+│   │   │   ├── PruneNoOps_test.cpp
+│   │   │   ├── PrunePureLiteralStatements_test.cpp
+│   │   │   ├── PruneUnusedFunctions_test.cpp
+│   │   │   ├── QualificationOrderESSL31_test.cpp
+│   │   │   ├── QualificationOrder_test.cpp
+│   │   │   ├── RecordConstantPrecision_test.cpp
+│   │   │   ├── RegenerateStructNames_test.cpp
+│   │   │   ├── RemoveUnreferencedVariables_test.cpp
+│   │   │   ├── SamplerMultisample_test.cpp
+│   │   │   ├── SeparateDeclarations_test.cpp
+│   │   │   ├── ShCompile_test.cpp
+│   │   │   ├── ShaderValidation_test.cpp
+│   │   │   ├── ShaderVariable_test.cpp
+│   │   │   ├── SimplifyLoopConditions_test.cpp
+│   │   │   ├── TextureFunction_test.cpp
+│   │   │   ├── TypeTracking_test.cpp
+│   │   │   ├── Type_test.cpp
+│   │   │   ├── UnfoldShortCircuitAST_test.cpp
+│   │   │   ├── UnrollFlatten_test.cpp
+│   │   │   ├── VariablePacker_test.cpp
+│   │   │   ├── WGSLOutput_test.cpp
+│   │   │   └── WorkGroupSize_test.cpp
+│   │   ├── deqp_support/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── README.md
+│   │   │   ├── angle_deqp_gtest.cpp
+│   │   │   ├── angle_deqp_libtester.h
+│   │   │   ├── angle_deqp_libtester_main.cpp
+│   │   │   ├── angle_deqp_tests_main.cpp
+│   │   │   ├── deqp.gni
+│   │   │   ├── deqp_data_autogen.gni
+│   │   │   ├── deqp_egl_test_expectations.txt
+│   │   │   ├── deqp_gles2_test_expectations.txt
+│   │   │   ├── deqp_gles31_565_no_depth_no_stencil_test_expectations.txt
+│   │   │   ├── deqp_gles31_multisample_test_expectations.txt
+│   │   │   ├── deqp_gles31_rotate_test_expectations.txt
+│   │   │   ├── deqp_gles31_test_expectations.txt
+│   │   │   ├── deqp_gles3_565_no_depth_no_stencil_test_expectations.txt
+│   │   │   ├── deqp_gles3_multisample_test_expectations.txt
+│   │   │   ├── deqp_gles3_rotate_test_expectations.txt
+│   │   │   ├── deqp_gles3_test_expectations.txt
+│   │   │   ├── deqp_khr_gles2_test_expectations.txt
+│   │   │   ├── deqp_khr_gles31_test_expectations.txt
+│   │   │   ├── deqp_khr_gles32_test_expectations.txt
+│   │   │   ├── deqp_khr_gles3_test_expectations.txt
+│   │   │   ├── deqp_khr_glesext_test_expectations.txt
+│   │   │   ├── deqp_khr_noctx_gles2_test_expectations.txt
+│   │   │   ├── deqp_khr_noctx_gles32_test_expectations.txt
+│   │   │   ├── deqp_khr_single_gles32_test_expectations.txt
+│   │   │   ├── glcTestPackageEntry_override.cpp
+│   │   │   ├── tcuANGLENativeDisplayFactory.cpp
+│   │   │   ├── tcuANGLENativeDisplayFactory.h
+│   │   │   ├── tcuANGLEPlatform.cpp
+│   │   │   ├── tcuANGLEPlatform.h
+│   │   │   ├── tcuRandomOrderExecutor.cpp
+│   │   │   └── tcuRandomOrderExecutor.h
+│   │   ├── egl_tests/
+│   │   │   ├── media/
+│   │   │   │   └── yuvtest.inl
+│   │   │   ├── EGLAndroidFrameBufferTargetTest.cpp
+│   │   │   ├── EGLBackwardsCompatibleContextTest.cpp
+│   │   │   ├── EGLBlobCacheTest.cpp
+│   │   │   ├── EGLBufferAgeTest.cpp
+│   │   │   ├── EGLChooseConfigTest.cpp
+│   │   │   ├── EGLContextASANTest.cpp
+│   │   │   ├── EGLContextCompatibilityTest.cpp
+│   │   │   ├── EGLContextPassthroughShadersTest.cpp
+│   │   │   ├── EGLContextSharingTest.cpp
+│   │   │   ├── EGLCreateContextAttribsTest.cpp
+│   │   │   ├── EGLDebugTest.cpp
+│   │   │   ├── EGLDeviceCGLTest.cpp
+│   │   │   ├── EGLDeviceTest.cpp
+│   │   │   ├── EGLDirectCompositionTest.cpp
+│   │   │   ├── EGLDisplayLuidTest.cpp
+│   │   │   ├── EGLDisplaySelectionTest.cpp
+│   │   │   ├── EGLDisplayTest.cpp
+│   │   │   ├── EGLFeatureControlTest.cpp
+│   │   │   ├── EGLIOSurfaceClientBufferTest.cpp
+│   │   │   ├── EGLLockSurface3Test.cpp
+│   │   │   ├── EGLMemoryUsageReportTest.cpp
+│   │   │   ├── EGLMultiContextTest.cpp
+│   │   │   ├── EGLNoConfigContextTest.cpp
+│   │   │   ├── EGLNoErrorTest.cpp
+│   │   │   ├── EGLPowerPreferenceTest.cpp
+│   │   │   ├── EGLPreRotationTest.cpp
+│   │   │   ├── EGLPresentPathD3D11Test.cpp
+│   │   │   ├── EGLPrintEGLinfoTest.cpp
+│   │   │   ├── EGLProgramCacheControlTest.cpp
+│   │   │   ├── EGLProtectedContentTest.cpp
+│   │   │   ├── EGLQueryContextTest.cpp
+│   │   │   ├── EGLReadinessCheckTest.cpp
+│   │   │   ├── EGLRecordableTest.cpp
+│   │   │   ├── EGLRobustnessTest.cpp
+│   │   │   ├── EGLStreamTest.cpp
+│   │   │   ├── EGLSurfaceTest.cpp
+│   │   │   ├── EGLSurfaceTestMac.mm
+│   │   │   ├── EGLSurfacelessContextTest.cpp
+│   │   │   ├── EGLSyncControlTest.cpp
+│   │   │   ├── EGLSyncTest.cpp
+│   │   │   ├── EGLSyncTestMetalCommandsScheduled.mm
+│   │   │   ├── EGLSyncTestMetalSharedEvent.mm
+│   │   │   ├── EGLWaitUntilWorkScheduledTest.cpp
+│   │   │   ├── EGLWaylandTest.cpp
+│   │   │   └── EGLX11VisualTest.cpp
+│   │   ├── gl_tests/
+│   │   │   ├── gles1/
+│   │   │   │   ├── AlphaFuncTest.cpp
+│   │   │   │   ├── BGRATextureTest.cpp
+│   │   │   │   ├── BasicDrawTest.cpp
+│   │   │   │   ├── BootAnimationTest.cpp
+│   │   │   │   ├── ClientActiveTextureTest.cpp
+│   │   │   │   ├── ClientStateEnable.cpp
+│   │   │   │   ├── ClipPlaneTest.cpp
+│   │   │   │   ├── ColorMaterialTest.cpp
+│   │   │   │   ├── CurrentColorTest.cpp
+│   │   │   │   ├── CurrentNormalTest.cpp
+│   │   │   │   ├── CurrentTextureCoordsTest.cpp
+│   │   │   │   ├── DrawTextureTest.cpp
+│   │   │   │   ├── FogTest.cpp
+│   │   │   │   ├── FramebufferObjectTest.cpp
+│   │   │   │   ├── LightsTest.cpp
+│   │   │   │   ├── MaterialsTest.cpp
+│   │   │   │   ├── MatrixBuiltinsTest.cpp
+│   │   │   │   ├── MatrixLoadTest.cpp
+│   │   │   │   ├── MatrixModeTest.cpp
+│   │   │   │   ├── MatrixMultTest.cpp
+│   │   │   │   ├── MatrixStackTest.cpp
+│   │   │   │   ├── PointParameterTest.cpp
+│   │   │   │   ├── PointSpriteTest.cpp
+│   │   │   │   ├── QueryTest.cpp
+│   │   │   │   ├── ShadeModelTest.cpp
+│   │   │   │   ├── TextureEnvTest.cpp
+│   │   │   │   ├── TextureParameterTest.cpp
+│   │   │   │   ├── TextureTargetEnableTest.cpp
+│   │   │   │   └── VertexPointerTest.cpp
+│   │   │   ├── media/
+│   │   │   │   ├── etc2bc_srgb8_alpha8.inc
+│   │   │   │   └── pixel.inc
+│   │   │   ├── ActiveTextureCacheTest.cpp
+│   │   │   ├── AdvancedBlendTest.cpp
+│   │   │   ├── AtomicCounterBufferTest.cpp
+│   │   │   ├── AttributeLayoutTest.cpp
+│   │   │   ├── BPTCCompressedTextureTest.cpp
+│   │   │   ├── BindGeneratesResourceTest.cpp
+│   │   │   ├── BindUniformLocationTest.cpp
+│   │   │   ├── BlendFuncExtendedTest.cpp
+│   │   │   ├── BlendIntegerTest.cpp
+│   │   │   ├── BlendMinMaxTest.cpp
+│   │   │   ├── BlendPackedTest.cpp
+│   │   │   ├── BlitFramebufferANGLETest.cpp
+│   │   │   ├── BlobCacheTest.cpp
+│   │   │   ├── BufferDataTest.cpp
+│   │   │   ├── BuiltinVariableTest.cpp
+│   │   │   ├── ClearTest.cpp
+│   │   │   ├── ClientArraysTest.cpp
+│   │   │   ├── ClipControlTest.cpp
+│   │   │   ├── ClipDistanceTest.cpp
+│   │   │   ├── ColorMaskTest.cpp
+│   │   │   ├── CompressedTextureFormatsTest.cpp
+│   │   │   ├── ComputeShaderTest.cpp
+│   │   │   ├── ContextLostTest.cpp
+│   │   │   ├── ContextNoErrorTest.cpp
+│   │   │   ├── CopyCompressedTextureTest.cpp
+│   │   │   ├── CopyTexImageTest.cpp
+│   │   │   ├── CopyTexture3DTest.cpp
+│   │   │   ├── CopyTextureTest.cpp
+│   │   │   ├── CubeMapTextureTest.cpp
+│   │   │   ├── D3D11FormatTablesTest.cpp
+│   │   │   ├── D3D11InputLayoutCacheTest.cpp
+│   │   │   ├── D3DImageFormatConversionTest.cpp
+│   │   │   ├── D3DTextureTest.cpp
+│   │   │   ├── DXT1CompressedTextureTest.cpp
+│   │   │   ├── DXTSRGBCompressedTextureTest.cpp
+│   │   │   ├── DXTSRGBCompressedTextureTestData.inl
+│   │   │   ├── DebugMarkerTest.cpp
+│   │   │   ├── DebugTest.cpp
+│   │   │   ├── DepthStencilFormatsTest.cpp
+│   │   │   ├── DepthStencilTest.cpp
+│   │   │   ├── DepthWriteTest.cpp
+│   │   │   ├── DifferentStencilMasksTest.cpp
+│   │   │   ├── DiscardFramebufferEXTTest.cpp
+│   │   │   ├── DrawBaseVertexBaseInstanceTest.cpp
+│   │   │   ├── DrawBaseVertexVariantsTest.cpp
+│   │   │   ├── DrawBuffersTest.cpp
+│   │   │   ├── DrawElementsIndirectTest.cpp
+│   │   │   ├── DrawElementsTest.cpp
+│   │   │   ├── DrawRangeElementsTest.cpp
+│   │   │   ├── EGLImageMECFriendlyTest.cpp
+│   │   │   ├── ETCTextureTest.cpp
+│   │   │   ├── ErrorMessages.cpp
+│   │   │   ├── ExternalBufferTest.cpp
+│   │   │   ├── ExternalWrapTest.cpp
+│   │   │   ├── FenceSyncTests.cpp
+│   │   │   ├── FloatingPointSurfaceTest.cpp
+│   │   │   ├── FormatPrintTest.cpp
+│   │   │   ├── FragDepthTest.cpp
+│   │   │   ├── FramebufferFetchTest.cpp
+│   │   │   ├── FramebufferMixedSamplesTest.cpp
+│   │   │   ├── FramebufferMultiviewTest.cpp
+│   │   │   ├── FramebufferRenderMipmapTest.cpp
+│   │   │   ├── FramebufferTest.cpp
+│   │   │   ├── GLSLConstantFoldingTest.cpp
+│   │   │   ├── GLSLOutputTest.cpp
+│   │   │   ├── GLSLTest.cpp
+│   │   │   ├── GLSLValidationTest.cpp
+│   │   │   ├── GeometryShaderTest.cpp
+│   │   │   ├── GetImageTest.cpp
+│   │   │   ├── GetTexLevelParameterTest.cpp
+│   │   │   ├── ImageTest.cpp
+│   │   │   ├── ImageTestMetal.mm
+│   │   │   ├── IncompatibleTextureTest.cpp
+│   │   │   ├── IncompleteTextureTest.cpp
+│   │   │   ├── IndexBufferOffsetTest.cpp
+│   │   │   ├── IndexedPointsTest.cpp
+│   │   │   ├── InstancingTest.cpp
+│   │   │   ├── KTXCompressedTextureTest.cpp
+│   │   │   ├── LineLoopTest.cpp
+│   │   │   ├── LinkAndRelinkTest.cpp
+│   │   │   ├── MatrixTest.cpp
+│   │   │   ├── MaxTextureSizeTest.cpp
+│   │   │   ├── MemoryBarrierTest.cpp
+│   │   │   ├── MemoryObjectTest.cpp
+│   │   │   ├── MemorySizeTest.cpp
+│   │   │   ├── MipmapTest.cpp
+│   │   │   ├── MultiDrawTest.cpp
+│   │   │   ├── MultisampleCompatibilityTest.cpp
+│   │   │   ├── MultisampleTest.cpp
+│   │   │   ├── MultisampledRenderToTextureTest.cpp
+│   │   │   ├── MultithreadingTest.cpp
+│   │   │   ├── MultiviewDrawTest.cpp
+│   │   │   ├── MultiviewMultisampledRenderToTextureTest.cpp
+│   │   │   ├── ObjectAllocationTest.cpp
+│   │   │   ├── OcclusionQueriesTest.cpp
+│   │   │   ├── PBOExtensionTest.cpp
+│   │   │   ├── PVRTCCompressedTextureTest.cpp
+│   │   │   ├── PackUnpackTest.cpp
+│   │   │   ├── PalettedTextureTest.cpp
+│   │   │   ├── ParallelShaderCompileTest.cpp
+│   │   │   ├── PbufferTest.cpp
+│   │   │   ├── PixelLocalStorageTest.cpp
+│   │   │   ├── PixmapTest.cpp
+│   │   │   ├── PointSpritesTest.cpp
+│   │   │   ├── PolygonModeTest.cpp
+│   │   │   ├── PolygonOffsetClampTest.cpp
+│   │   │   ├── ProgramBinaryTest.cpp
+│   │   │   ├── ProgramInterfaceTest.cpp
+│   │   │   ├── ProgramParameterTest.cpp
+│   │   │   ├── ProgramPipelineTest.cpp
+│   │   │   ├── ProvokingVertexTest.cpp
+│   │   │   ├── QueryObjectValidation.cpp
+│   │   │   ├── ReadOnlyFeedbackLoopTest.cpp
+│   │   │   ├── ReadPixelsTest.cpp
+│   │   │   ├── RenderbufferMultisampleTest.cpp
+│   │   │   ├── RendererTest.cpp
+│   │   │   ├── RequestExtensionTest.cpp
+│   │   │   ├── RobustBufferAccessBehaviorTest.cpp
+│   │   │   ├── RobustClientMemoryTest.cpp
+│   │   │   ├── RobustFragmentShaderOutputTest.cpp
+│   │   │   ├── RobustResourceInitTest.cpp
+│   │   │   ├── S3TCTextureSizesTest.cpp
+│   │   │   ├── SRGBFramebufferTest.cpp
+│   │   │   ├── SRGBTextureTest.cpp
+│   │   │   ├── SampleVariablesTest.cpp
+│   │   │   ├── SamplersTest.cpp
+│   │   │   ├── SemaphoreTest.cpp
+│   │   │   ├── ShaderAlgorithmTest.cpp
+│   │   │   ├── ShaderBinaryTest.cpp
+│   │   │   ├── ShaderInterpTest.cpp
+│   │   │   ├── ShaderMultisampleInterpolation.cpp
+│   │   │   ├── ShaderNonConstGlobalInitializerTest.cpp
+│   │   │   ├── ShaderOpTest.cpp
+│   │   │   ├── ShaderStorageBufferTest.cpp
+│   │   │   ├── ShadingRateEXTTest.cpp
+│   │   │   ├── ShadingRateQcomTest.cpp
+│   │   │   ├── ShadowSamplerFunctionsTest.cpp
+│   │   │   ├── SimpleOperationTest.cpp
+│   │   │   ├── SixteenBppTextureTest.cpp
+│   │   │   ├── StateChangeTest.cpp
+│   │   │   ├── SwizzleTest.cpp
+│   │   │   ├── TextureExternalUpdateTest.cpp
+│   │   │   ├── TextureFixedRateCompressionTest.cpp
+│   │   │   ├── TextureMultisampleTest.cpp
+│   │   │   ├── TextureRectangleTest.cpp
+│   │   │   ├── TextureTest.cpp
+│   │   │   ├── TextureUploadFormatTest.cpp
+│   │   │   ├── TiledRenderingTest.cpp
+│   │   │   ├── TimeoutDrawTest.cpp
+│   │   │   ├── TimerQueriesTest.cpp
+│   │   │   ├── TransformFeedbackTest.cpp
+│   │   │   ├── UniformBufferTest.cpp
+│   │   │   ├── UniformTest.cpp
+│   │   │   ├── UnpackAlignmentTest.cpp
+│   │   │   ├── UnpackRowLength.cpp
+│   │   │   ├── VertexAttributeTest.cpp
+│   │   │   ├── ViewportTest.cpp
+│   │   │   ├── VulkanDescriptorSetTest.cpp
+│   │   │   ├── VulkanExternalImageTest.cpp
+│   │   │   ├── VulkanFormatTablesTest.cpp
+│   │   │   ├── VulkanFramebufferTest.cpp
+│   │   │   ├── VulkanImageTest.cpp
+│   │   │   ├── VulkanMultithreadingTest.cpp
+│   │   │   ├── VulkanPerformanceCounterTest.cpp
+│   │   │   ├── VulkanUniformUpdatesTest.cpp
+│   │   │   ├── WEBGLVideoTextureTest.cpp
+│   │   │   ├── WebGLCompatibilityTest.cpp
+│   │   │   ├── WebGLCompressedTextureAvailabilityTest.cpp
+│   │   │   ├── WebGLFramebufferTest.cpp
+│   │   │   └── WebGLReadOutsideFramebufferTest.cpp
+│   │   ├── gles1_conformance_tests/
+│   │   │   ├── ConformanceTests.cpp
+│   │   │   ├── CovglTests.cpp
+│   │   │   └── PrimtestTests.cpp
+│   │   ├── gles_conformance_tests/
+│   │   │   ├── generate_gles_conformance_tests.py
+│   │   │   ├── gles_conformance_tests.cpp
+│   │   │   ├── gles_conformance_tests.h
+│   │   │   └── gles_conformance_tests_main.cpp
+│   │   ├── perf_tests/
+│   │   │   ├── media/
+│   │   │   │   └── etc2bc_rgba8.inc
+│   │   │   ├── third_party/
+│   │   │   │   └── perf/
+│   │   │   │       ├── angle-mods.patch
+│   │   │   │       ├── perf_result_reporter.cc
+│   │   │   │       ├── perf_result_reporter.h
+│   │   │   │       ├── perf_test.cc
+│   │   │   │       └── perf_test.h
+│   │   │   ├── ANGLEComputeTestCL.cpp
+│   │   │   ├── ANGLEComputeTestCL.h
+│   │   │   ├── ANGLEPerfTest.cpp
+│   │   │   ├── ANGLEPerfTest.h
+│   │   │   ├── ANGLEPerfTestArgs.cpp
+│   │   │   ├── ANGLEPerfTestArgs.h
+│   │   │   ├── AstcDecompressorPerf.cpp
+│   │   │   ├── BindingPerf.cpp
+│   │   │   ├── BitSetIteratorPerf.cpp
+│   │   │   ├── BlitFramebufferPerf.cpp
+│   │   │   ├── BufferSubData.cpp
+│   │   │   ├── ClearPerf.cpp
+│   │   │   ├── CompilerPerf.cpp
+│   │   │   ├── DispatchComputePerf.cpp
+│   │   │   ├── DrawCallPerf.cpp
+│   │   │   ├── DrawCallPerfParams.cpp
+│   │   │   ├── DrawCallPerfParams.h
+│   │   │   ├── DrawElementsPerf.cpp
+│   │   │   ├── DynamicPromotionPerfTest.cpp
+│   │   │   ├── EGLInitializePerf.cpp
+│   │   │   ├── EGLMakeCurrentPerf.cpp
+│   │   │   ├── FormatUploadDrawPerf.cpp
+│   │   │   ├── FramebufferAttachmentPerfTest.cpp
+│   │   │   ├── GenerateMipmapPerf.cpp
+│   │   │   ├── ImagelessFramebufferPerfTest.cpp
+│   │   │   ├── IndexConversionPerf.cpp
+│   │   │   ├── IndexDataManagerTest.cpp
+│   │   │   ├── InstancingPerf.cpp
+│   │   │   ├── InterleavedAttributeData.cpp
+│   │   │   ├── LinkProgramPerfTest.cpp
+│   │   │   ├── MapBufferRange.cpp
+│   │   │   ├── MultisampleResolvePerf.cpp
+│   │   │   ├── MultisampledRenderToTexturePerf.cpp
+│   │   │   ├── MultisampledSwapchainResolve.cpp
+│   │   │   ├── MultiviewPerf.cpp
+│   │   │   ├── ParallelLinkProgramPerfTest.cpp
+│   │   │   ├── PointSprites.cpp
+│   │   │   ├── PreRotationPerf.cpp
+│   │   │   ├── ProgramPipelineObjectPerfTest.cpp
+│   │   │   ├── README.md
+│   │   │   ├── RGBImageAllocation.cpp
+│   │   │   ├── ResultPerf.cpp
+│   │   │   ├── TextureSampling.cpp
+│   │   │   ├── TextureUploadPerf.cpp
+│   │   │   ├── TexturesPerf.cpp
+│   │   │   ├── TracePerfTest.cpp
+│   │   │   ├── TracePerfTest.h
+│   │   │   ├── TracePerfTestCL.cpp
+│   │   │   ├── UniformsPerf.cpp
+│   │   │   ├── VertexArrayPerfTest.cpp
+│   │   │   ├── VulkanBarriersPerf.cpp
+│   │   │   ├── VulkanCommandBufferPerf.cpp
+│   │   │   ├── VulkanPipelineCachePerf.cpp
+│   │   │   ├── angle_trace_tests_expectations.txt
+│   │   │   └── glmark2Benchmark.cpp
+│   │   ├── preprocessor_tests/
+│   │   │   ├── MockDiagnostics.h
+│   │   │   ├── MockDirectiveHandler.h
+│   │   │   ├── PreprocessorTest.cpp
+│   │   │   ├── PreprocessorTest.h
+│   │   │   ├── char_test.cpp
+│   │   │   ├── comment_test.cpp
+│   │   │   ├── define_test.cpp
+│   │   │   ├── error_test.cpp
+│   │   │   ├── extension_test.cpp
+│   │   │   ├── identifier_test.cpp
+│   │   │   ├── if_test.cpp
+│   │   │   ├── input_test.cpp
+│   │   │   ├── location_test.cpp
+│   │   │   ├── number_test.cpp
+│   │   │   ├── operator_test.cpp
+│   │   │   ├── pragma_test.cpp
+│   │   │   ├── space_test.cpp
+│   │   │   ├── token_test.cpp
+│   │   │   └── version_test.cpp
+│   │   ├── py_utils/
+│   │   │   ├── skia_gold/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── angle_skia_gold_properties.py
+│   │   │   │   ├── angle_skia_gold_session.py
+│   │   │   │   └── angle_skia_gold_session_manager.py
+│   │   │   ├── android_helper.py
+│   │   │   ├── angle_metrics.py
+│   │   │   ├── angle_path_util.py
+│   │   │   └── angle_test_util.py
+│   │   ├── restricted_traces/
+│   │   │   ├── .gitignore
+│   │   │   ├── BUILD.gn
+│   │   │   ├── OWNERS
+│   │   │   ├── README.md
+│   │   │   ├── check_trace_diffs.py
+│   │   │   ├── compare_trace_screenshots.py
+│   │   │   ├── gen_restricted_traces.py
+│   │   │   ├── gpumem.sh
+│   │   │   ├── power_denoising.sh
+│   │   │   ├── restricted_trace_gold_tests.py
+│   │   │   ├── restricted_trace_perf.py
+│   │   │   ├── restricted_traces.json
+│   │   │   ├── retrace_restricted_traces.py
+│   │   │   └── sync_restricted_traces_to_cipd.py
+│   │   ├── test_expectations/
+│   │   │   ├── GPUTestConfig.cpp
+│   │   │   ├── GPUTestConfig.h
+│   │   │   ├── GPUTestConfig_ios.h
+│   │   │   ├── GPUTestConfig_ios.mm
+│   │   │   ├── GPUTestConfig_mac.h
+│   │   │   ├── GPUTestConfig_mac.mm
+│   │   │   ├── GPUTestExpectationsParser.cpp
+│   │   │   ├── GPUTestExpectationsParser.h
+│   │   │   ├── GPUTestExpectationsParser_unittest.cpp
+│   │   │   └── GPUTestExpectationsTest.cpp
+│   │   ├── test_utils/
+│   │   │   ├── runner/
+│   │   │   │   ├── android/
+│   │   │   │   │   ├── java/
+│   │   │   │   │   │   ├── src/
+│   │   │   │   │   │   │   └── com/
+│   │   │   │   │   │   │       └── android/
+│   │   │   │   │   │   │           └── angle/
+│   │   │   │   │   │   │               └── test/
+│   │   │   │   │   │   │                   ├── AngleNativeTest.java
+│   │   │   │   │   │   │                   ├── AngleUnitTestActivity.java
+│   │   │   │   │   │   │                   ├── StandaloneBenchmarkActivity.java
+│   │   │   │   │   │   │                   └── TestStatusReporter.java
+│   │   │   │   │   │   ├── AndroidManifest.xml.jinja2
+│   │   │   │   │   │   └── StandaloneBenchmarkAndroidManifest.xml.jinja2
+│   │   │   │   │   └── AngleNativeTest.cpp
+│   │   │   │   ├── HistogramWriter.cpp
+│   │   │   │   ├── HistogramWriter.h
+│   │   │   │   ├── README.md
+│   │   │   │   ├── TestSuite.cpp
+│   │   │   │   ├── TestSuite.h
+│   │   │   │   └── TestSuite_unittest.cpp
+│   │   │   ├── third_party/
+│   │   │   │   ├── LICENSE
+│   │   │   │   ├── OWNERS
+│   │   │   │   ├── README.chromium
+│   │   │   │   ├── vulkan_command_buffer_utils.cpp
+│   │   │   │   └── vulkan_command_buffer_utils.h
+│   │   │   ├── ANGLETest.cpp
+│   │   │   ├── ANGLETest.h
+│   │   │   ├── ANGLETestCL.cpp
+│   │   │   ├── ANGLETestCL.h
+│   │   │   ├── CompilerTest.cpp
+│   │   │   ├── CompilerTest.h
+│   │   │   ├── MultiThreadSteps.cpp
+│   │   │   ├── MultiThreadSteps.h
+│   │   │   ├── MultiviewTest.cpp
+│   │   │   ├── MultiviewTest.h
+│   │   │   ├── RenderDoc.cpp
+│   │   │   ├── RenderDoc.h
+│   │   │   ├── ShaderCompileTreeTest.cpp
+│   │   │   ├── ShaderCompileTreeTest.h
+│   │   │   ├── VulkanHelper.cpp
+│   │   │   ├── VulkanHelper.h
+│   │   │   ├── angle_test_configs.cpp
+│   │   │   ├── angle_test_configs.h
+│   │   │   ├── angle_test_instantiate.cpp
+│   │   │   ├── angle_test_instantiate.h
+│   │   │   ├── angle_test_instantiate_apple.h
+│   │   │   ├── angle_test_instantiate_apple.mm
+│   │   │   ├── angle_test_platform.cpp
+│   │   │   ├── angle_test_platform.h
+│   │   │   ├── compiler_test.cpp
+│   │   │   ├── compiler_test.h
+│   │   │   ├── draw_call_perf_utils.cpp
+│   │   │   ├── draw_call_perf_utils.h
+│   │   │   ├── gl_raii.h
+│   │   │   ├── system_info_util.cpp
+│   │   │   └── system_info_util.h
+│   │   ├── util_tests/
+│   │   │   └── PrintSystemInfoTest.cpp
+│   │   ├── BUILD.gn
+│   │   ├── DIR_METADATA
+│   │   ├── OWNERS
+│   │   ├── angle_android_test_runner.py
+│   │   ├── angle_deqp_tests_main.cpp
+│   │   ├── angle_end2end_tests.gni
+│   │   ├── angle_end2end_tests_expectations.txt
+│   │   ├── angle_end2end_tests_main.cpp
+│   │   ├── angle_generic_tests_main.cpp
+│   │   ├── angle_perftests.gni
+│   │   ├── angle_perftests_main.cpp
+│   │   ├── angle_system_info_tests_main.cpp
+│   │   ├── angle_trace_tests_main.cpp
+│   │   ├── angle_traces.gni
+│   │   ├── angle_unittest_main.cpp
+│   │   ├── angle_unittests.gni
+│   │   ├── angle_unittests_utils.h
+│   │   ├── angle_white_box_tests.gni
+│   │   ├── angle_white_box_tests_main.cpp
+│   │   ├── capture_replay_tests.py
+│   │   ├── run_angle_android_test.py
+│   │   └── run_perf_tests.py
+│   ├── third_party/
+│   │   ├── ceval/
+│   │   │   ├── patches/
+│   │   │   │   └── 0001-remove-sprintf.patch
+│   │   │   ├── .clang-format
+│   │   │   ├── LICENSE
+│   │   │   ├── README.chromium
+│   │   │   ├── README.md
+│   │   │   ├── ceval.h
+│   │   │   └── package.json
+│   │   ├── khronos/
+│   │   │   └── GL/
+│   │   │       └── wglext.h
+│   │   ├── libXNVCtrl/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── LICENSE
+│   │   │   ├── NVCtrl.c
+│   │   │   ├── NVCtrl.h
+│   │   │   ├── NVCtrlLib.h
+│   │   │   ├── README.chromium
+│   │   │   ├── libXNVCtrl.gyp
+│   │   │   └── nv_control.h
+│   │   └── volk/
+│   │       ├── BUILD.gn
+│   │       ├── LICENSE.md
+│   │       ├── README.chromium
+│   │       ├── README.md
+│   │       ├── volk.c
+│   │       └── volk.h
+│   ├── angle_program_serialize_data_version.gni
+│   ├── commit_id.py
+│   ├── compiler.gni
+│   ├── copy_compiler_dll.bat
+│   ├── libGLESv2.gni
+│   └── program_serialize_data_version.py
+├── third_party/
+│   ├── EGL-Registry/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── OpenCL-CTS/
+│   │   ├── gn/
+│   │   │   ├── SVM/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── allocations/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── api/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── atomics/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── basic/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── buffers/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── c11_atomics/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── commonfns/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── compiler/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── computeinfo/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── contractions/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── conversions/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── device_execution/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── device_partition/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── device_timer/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── events/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── extensions/
+│   │   │   │   ├── cl_ext_cxx_for_opencl/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── cl_khr_command_buffer/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   └── cl_khr_semaphore/
+│   │   │   │       └── BUILD.gn
+│   │   │   ├── generic_address_space/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── geometrics/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── half/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── images/
+│   │   │   │   ├── clCopyImage/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── clFillImage/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── clGetInfo/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── clReadWriteImage/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── kernel_image_methods/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── kernel_read_write/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   └── samplerlessReads/
+│   │   │   │       └── BUILD.gn
+│   │   │   ├── integer_ops/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── math_brute_force/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── mem_host_flags/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── multiple_device_context/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── non_uniform_work_group/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── pipes/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── printf/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── profiling/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── relationals/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── select/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── spir/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── spirv_new/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── subgroups/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── thread_dimensions/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── vectors/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── workgroups/
+│   │   │   │   └── BUILD.gn
+│   │   │   ├── BUILD.gn
+│   │   │   └── angle_ocl_cts.gni
+│   │   └── src
+│   ├── OpenCL-Docs/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── OpenCL-ICD-Loader/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   ├── icd_cmake_config.h
+│   │   └── src
+│   ├── OpenGL-Registry/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── VK-GL-CTS/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── android_system_sdk/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── cipd.yaml
+│   ├── astc-encoder/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── bazel/
+│   │   ├── desugar/
+│   │   │   ├── BUILD.gn
+│   │   │   ├── README.chromium
+│   │   │   ├── proguard.flags
+│   │   │   └── stateful-lambdas.patch
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── cipd.yaml
+│   ├── clang-format/
+│   │   └── script
+│   ├── clspv/
+│   │   ├── gn/
+│   │   │   ├── build/
+│   │   │   │   ├── BUILD.gn
+│   │   │   │   └── llvm_buildflags.gni
+│   │   │   ├── llvm/
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── clang/
+│   │   │   │   │   │   └── BUILD.gn
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── sources/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── tablegen/
+│   │   │   │   │   ├── BUILD.gn
+│   │   │   │   │   ├── clang_tablegen.gni
+│   │   │   │   │   └── tablegen.gni
+│   │   │   │   ├── target/
+│   │   │   │   │   ├── targets.gni
+│   │   │   │   │   ├── targets_string.gni
+│   │   │   │   │   ├── targets_with_asm_parsers.gni
+│   │   │   │   │   ├── targets_with_disassemblers.gni
+│   │   │   │   │   ├── targets_with_exegesis.gni
+│   │   │   │   │   └── targets_with_mcas.gni
+│   │   │   │   ├── tools/
+│   │   │   │   │   └── BUILD.gn
+│   │   │   │   ├── compiled_action.gni
+│   │   │   │   ├── write_cmake_config.gni
+│   │   │   │   └── write_vcsrevision.gni
+│   │   │   ├── README.md
+│   │   │   ├── clspv--.bc
+│   │   │   ├── clspv64--.bc
+│   │   │   └── triples.gni
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── colorama/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── cpu_features/
+│   │   ├── BUILD.gn
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── flatbuffers/
+│   │   ├── generated/
+│   │   │   └── tests/
+│   │   │       ├── alignment_test_generated.h
+│   │   │       └── arrays_test_generated.h
+│   │   ├── BUILD.gn
+│   │   ├── DEPS
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   ├── flatbuffer.gni
+│   │   └── src
+│   ├── glmark2/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── glslang/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── googletest/
+│   │   ├── custom/
+│   │   │   └── gtest/
+│   │   │       └── internal/
+│   │   │           └── custom/
+│   │   │               ├── DEPS
+│   │   │               ├── chrome_custom_temp_dir.cc
+│   │   │               ├── chrome_custom_temp_dir.h
+│   │   │               ├── gtest.h
+│   │   │               ├── gtest_port_wrapper.cc
+│   │   │               ├── stack_trace_getter.cc
+│   │   │               └── stack_trace_getter.h
+│   │   ├── .gitignore
+│   │   ├── BUILD.gn
+│   │   ├── DEPS
+│   │   ├── DIR_METADATA
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── jdk/
+│   │   ├── BUILD.gn
+│   │   ├── OWNERS
+│   │   └── README.chromium
+│   ├── kotlin_stdlib/
+│   │   └── BUILD.gn
+│   ├── libc++/
+│   │   └── src
+│   ├── libc++abi/
+│   │   └── src
+│   ├── libdrm/
+│   │   ├── BUILD.gn
+│   │   ├── DIR_METADATA
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── libpng/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── libunwind/
+│   │   └── src
+│   ├── llvm/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── llvm-libc/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── logdog/
+│   │   ├── logdog/
+│   │   │   ├── OWNERS
+│   │   │   ├── __init__.py
+│   │   │   ├── bootstrap.py
+│   │   │   ├── stream.py
+│   │   │   ├── streamname.py
+│   │   │   └── varint.py
+│   │   ├── OWNERS
+│   │   ├── README.md
+│   │   └── get.sh
+│   ├── lunarg-vulkantools/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── mesa/
+│   │   ├── .gitignore
+│   │   ├── BUILD.gn
+│   │   ├── angle_cross.ini
+│   │   ├── mesa_autogen.gni
+│   │   ├── mesa_build.py
+│   │   └── src
+│   ├── minigbm/
+│   │   └── BUILD.gn
+│   ├── proguard/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── cipd.yaml
+│   ├── r8/
+│   │   ├── playground/
+│   │   │   ├── .gitignore
+│   │   │   ├── Playground.java
+│   │   │   ├── build.sh
+│   │   │   └── playground.pgcfg
+│   │   ├── BUILD.gn
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   ├── backported_methods.txt
+│   │   ├── cipd.yaml
+│   │   ├── custom_d8.jar
+│   │   └── desugar_jdk_libs.json
+│   ├── rapidjson/
+│   │   ├── BUILD.gn
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── re2/
+│   │   ├── BUILD.gn
+│   │   ├── DEPS
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── renderdoc/
+│   │   ├── src/
+│   │   │   └── renderdoc_app.h
+│   │   └── README.chromium
+│   ├── requests/
+│   │   └── src
+│   ├── spirv-cross/
+│   │   ├── DIR_METADATA
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── spirv-headers/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── spirv-tools/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── turbine/
+│   │   ├── LICENSE
+│   │   ├── OWNERS
+│   │   ├── README.chromium
+│   │   └── cipd.yaml
+│   ├── vulkan-headers/
+│   │   ├── DIR_METADATA
+│   │   ├── LICENSE.txt
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── vulkan-loader/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── vulkan-tools/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── vulkan-utility-libraries/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── vulkan-validation-layers/
+│   │   ├── README.chromium
+│   │   └── src
+│   ├── BUILD.gn
+│   ├── Python-Markdown
+│   ├── SwiftShader
+│   ├── abseil-cpp
+│   ├── android_build_tools
+│   ├── android_deps
+│   ├── android_platform
+│   ├── android_sdk
+│   ├── catapult
+│   ├── cherry
+│   ├── dawn
+│   ├── depot_tools
+│   ├── gles1_conform
+│   ├── ijar
+│   ├── jinja2
+│   ├── jsoncpp
+│   ├── libjpeg.gni
+│   ├── libjpeg_turbo
+│   ├── markupsafe
+│   ├── meson
+│   ├── nasm
+│   ├── perfetto
+│   ├── protobuf
+│   ├── rust
+│   ├── six
+│   ├── vulkan-deps
+│   ├── vulkan_memory_allocator
+│   ├── wayland
+│   └── zlib
+├── tools/
+│   ├── flex-bison/
+│   │   ├── linux/
+│   │   │   ├── bison.sha1
+│   │   │   └── flex.sha1
+│   │   ├── mac/
+│   │   │   ├── bison.sha1
+│   │   │   └── flex.sha1
+│   │   ├── third_party/
+│   │   │   ├── m4sugar/
+│   │   │   │   ├── LICENSE
+│   │   │   │   ├── README.chromium
+│   │   │   │   ├── foreach.m4
+│   │   │   │   └── m4sugar.m4
+│   │   │   ├── skeletons/
+│   │   │   │   ├── LICENSE
+│   │   │   │   ├── README.chromium
+│   │   │   │   ├── bison.m4
+│   │   │   │   ├── c++-skel.m4
+│   │   │   │   ├── c++.m4
+│   │   │   │   ├── c-like.m4
+│   │   │   │   ├── c-skel.m4
+│   │   │   │   ├── c.m4
+│   │   │   │   ├── d-skel.m4
+│   │   │   │   ├── d.m4
+│   │   │   │   ├── glr.c
+│   │   │   │   ├── glr.cc
+│   │   │   │   ├── glr2.cc
+│   │   │   │   ├── java-skel.m4
+│   │   │   │   ├── java.m4
+│   │   │   │   ├── lalr1.cc
+│   │   │   │   ├── lalr1.d
+│   │   │   │   ├── lalr1.java
+│   │   │   │   ├── location.cc
+│   │   │   │   ├── stack.hh
+│   │   │   │   ├── traceon.m4
+│   │   │   │   ├── variant.hh
+│   │   │   │   └── yacc.c
+│   │   │   └── .gitattributes
+│   │   ├── windows/
+│   │   │   ├── bison.exe.sha1
+│   │   │   ├── flex.exe.sha1
+│   │   │   ├── m4.exe.sha1
+│   │   │   ├── msys-2.0.dll.sha1
+│   │   │   ├── msys-iconv-2.dll.sha1
+│   │   │   └── msys-intl-8.dll.sha1
+│   │   ├── README.md
+│   │   └── update_flex_bison_binaries.py
+│   ├── glslang/
+│   │   ├── README.md
+│   │   ├── glslang_validator.exe.sha1
+│   │   ├── glslang_validator.sha1
+│   │   └── update_glslang_binary.py
+│   ├── ubsan/
+│   │   ├── ignorelist.txt
+│   │   └── vptr_ignorelist.txt
+│   ├── variations/
+│   │   └── fieldtrial_util.py
+│   ├── android
+│   ├── angle_tools.py
+│   ├── clang
+│   ├── mb
+│   ├── md_browser
+│   ├── memory
+│   ├── perf
+│   ├── protoc_wrapper
+│   ├── python
+│   ├── rust
+│   ├── valgrind
+│   └── win
+├── util/
+│   ├── android/
+│   │   ├── third_party/
+│   │   │   ├── LICENSE
+│   │   │   ├── README.chromium
+│   │   │   ├── android_native_app_glue.c
+│   │   │   └── android_native_app_glue.h
+│   │   ├── AndroidPixmap.cpp
+│   │   ├── AndroidWindow.cpp
+│   │   ├── AndroidWindow.h
+│   │   └── android_backtrace.cpp
+│   ├── autogen/
+│   │   ├── .clang-format
+│   │   ├── angle_features_autogen.cpp
+│   │   └── angle_features_autogen.h
+│   ├── capture/
+│   │   ├── angle_trace_gl.h
+│   │   ├── frame_capture_replay_autogen.cpp
+│   │   ├── frame_capture_test_utils.cpp
+│   │   ├── frame_capture_test_utils.h
+│   │   ├── trace_egl_loader_autogen.cpp
+│   │   ├── trace_egl_loader_autogen.h
+│   │   ├── trace_fixture.cpp
+│   │   ├── trace_fixture.h
+│   │   ├── trace_fixture_cl.cpp
+│   │   ├── trace_fixture_cl.h
+│   │   ├── trace_gles_loader_autogen.cpp
+│   │   ├── trace_gles_loader_autogen.h
+│   │   ├── trace_interface.h
+│   │   ├── trace_interpreter.cpp
+│   │   ├── trace_interpreter.h
+│   │   ├── trace_interpreter_autogen.cpp
+│   │   └── traces_export.h
+│   ├── display/
+│   │   ├── DisplayPixmap.cpp
+│   │   ├── DisplayWindow.cpp
+│   │   └── DisplayWindow.h
+│   ├── fuchsia/
+│   │   ├── FuchsiaPixmap.cpp
+│   │   ├── FuchsiaPixmap.h
+│   │   ├── ScenicWindow.cpp
+│   │   ├── ScenicWindow.h
+│   │   └── fuchsia_backtrace.cpp
+│   ├── ios/
+│   │   ├── IOSPixmap.h
+│   │   ├── IOSPixmap.mm
+│   │   ├── IOSWindow.h
+│   │   ├── IOSWindow.mm
+│   │   ├── Info.plist
+│   │   ├── ios_backtrace.cpp
+│   │   └── ios_main.mm
+│   ├── linux/
+│   │   ├── wayland/
+│   │   │   ├── WaylandWindow.cpp
+│   │   │   └── WaylandWindow.h
+│   │   ├── x11/
+│   │   │   ├── X11Pixmap.cpp
+│   │   │   ├── X11Pixmap.h
+│   │   │   ├── X11Window.cpp
+│   │   │   └── X11Window.h
+│   │   ├── LinuxWindow.cpp
+│   │   └── linux_backtrace.cpp
+│   ├── osx/
+│   │   ├── OSXPixmap.h
+│   │   ├── OSXPixmap.mm
+│   │   ├── OSXWindow.h
+│   │   ├── OSXWindow.mm
+│   │   ├── osx_backtrace.cpp
+│   │   └── supports_automatic_graphics_switching.plist
+│   ├── ozone/
+│   │   ├── OzonePixmap.cpp
+│   │   ├── OzoneWindow.cpp
+│   │   └── OzoneWindow.h
+│   ├── posix/
+│   │   ├── crash_handler_posix.cpp
+│   │   └── test_utils_posix.cpp
+│   ├── windows/
+│   │   ├── third_party/
+│   │   │   └── StackWalker/
+│   │   │       ├── src/
+│   │   │       │   ├── .clang-format
+│   │   │       │   ├── StackWalker.cpp
+│   │   │       │   └── StackWalker.h
+│   │   │       ├── LICENSE
+│   │   │       └── README.chromium
+│   │   ├── win32/
+│   │   │   ├── Win32Pixmap.cpp
+│   │   │   ├── Win32Pixmap.h
+│   │   │   ├── Win32Window.cpp
+│   │   │   ├── Win32Window.h
+│   │   │   └── test_utils_win32.cpp
+│   │   ├── WGLWindow.cpp
+│   │   ├── WGLWindow.h
+│   │   ├── test_utils_win.cpp
+│   │   ├── test_utils_winuwp.cpp
+│   │   ├── wgl_backtrace.cpp
+│   │   ├── wgl_loader_autogen.cpp
+│   │   └── wgl_loader_autogen.h
+│   ├── BUILD.gn
+│   ├── EGLPlatformParameters.h
+│   ├── EGLWindow.cpp
+│   ├── EGLWindow.h
+│   ├── Event.h
+│   ├── Matrix.cpp
+│   ├── Matrix.h
+│   ├── OSPixmap.h
+│   ├── OSWindow.cpp
+│   ├── OSWindow.h
+│   ├── Timer.cpp
+│   ├── Timer.h
+│   ├── com_utils.h
+│   ├── egl_loader_autogen.cpp
+│   ├── egl_loader_autogen.h
+│   ├── geometry_utils.cpp
+│   ├── geometry_utils.h
+│   ├── gles_loader_autogen.cpp
+│   ├── gles_loader_autogen.h
+│   ├── keyboard.h
+│   ├── mouse.h
+│   ├── png_utils.cpp
+│   ├── png_utils.h
+│   ├── random_utils.cpp
+│   ├── random_utils.h
+│   ├── shader_utils.cpp
+│   ├── shader_utils.h
+│   ├── test_utils.cpp
+│   ├── test_utils.h
+│   ├── test_utils_unittest.cpp
+│   ├── test_utils_unittest_helper.cpp
+│   ├── test_utils_unittest_helper.h
+│   ├── util_export.h
+│   └── util_gl.h
+├── .clang-format
+├── .clang-format-ignore
+├── .git-blame-ignore-revs
+├── .gitattributes
+├── .gitignore
+├── .gitmodules
+├── .gn
+├── .rustfmt.toml
+├── .style.yapf
+├── .vpython3
+├── .yapfignore
+├── AUTHORS
+├── Android.mk
+├── BUILD.gn
+├── CONTRIBUTORS
+├── DEPS
+├── DIR_METADATA
+├── LICENSE
+├── OWNERS
+├── PRESUBMIT.py
+├── README.chromium
+├── README.md
+├── WATCHLISTS
+├── additional_readme_paths.json
+├── build
+├── buildtools
+├── codereview.settings
+├── dotfile_settings.gni
+├── testing
+└── unsafe_buffers_paths.txt

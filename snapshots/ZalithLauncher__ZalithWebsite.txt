@@ -1,0 +1,118 @@
+# Repository: ZalithLauncher/ZalithWebsite
+# Default branch: main
+# Total entries: 112
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       ├── deploy-to-vps.yml
+│       └── pr-test.yml
+├── content/
+│   └── blog/
+│       ├── en/
+│       │   ├── 2026-03-27-welcome/
+│       │   │   └── index.md
+│       │   ├── 2026-08-12-download-page-update/
+│       │   │   └── index.md
+│       │   └── .gitkeep
+│       ├── zh/
+│       │   ├── 2026-03-27-welcome/
+│       │   │   └── index.md
+│       │   ├── 2026-08-12-download-page-update/
+│       │   │   └── index.md
+│       │   └── .gitkeep
+│       └── authors.yml
+├── public/
+│   ├── image/
+│   │   ├── backgrounds/
+│   │   │   ├── lush-caves.png
+│   │   │   └── underwater-moonlight.png
+│   │   ├── en/
+│   │   │   ├── download_game.jpg
+│   │   │   ├── download_modpack.jpg
+│   │   │   ├── download_mods.jpg
+│   │   │   ├── download_resourcepack.jpg
+│   │   │   ├── download_shaderpack.jpg
+│   │   │   ├── home.jpg
+│   │   │   ├── launcher_settings.jpg
+│   │   │   ├── multiplayer.jpg
+│   │   │   ├── renderer.jpg
+│   │   │   └── version_management.jpg
+│   │   ├── zh/
+│   │   │   ├── download_game.jpg
+│   │   │   ├── download_modpack.jpg
+│   │   │   ├── download_mods.jpg
+│   │   │   ├── download_resourcepack.jpg
+│   │   │   ├── download_shaderpack.jpg
+│   │   │   ├── home.jpg
+│   │   │   ├── launcher_settings.jpg
+│   │   │   ├── multiplayer.jpg
+│   │   │   ├── renderer.jpg
+│   │   │   └── version_management.jpg
+│   │   └── MovTery.png
+│   ├── CNAME
+│   ├── build-info.json
+│   ├── version.json
+│   ├── version2.json
+│   ├── vite.svg
+│   └── zl_icon.webp
+├── scripts/
+│   ├── build-blog.ts
+│   └── build-info.ts
+├── src/
+│   ├── assets/
+│   │   └── react.svg
+│   ├── components/
+│   │   ├── blog/
+│   │   │   ├── AuthorCard.tsx
+│   │   │   ├── BlogCard.tsx
+│   │   │   ├── RelatedPosts.tsx
+│   │   │   └── TOC.tsx
+│   │   ├── icons/
+│   │   │   └── GithubIcon.tsx
+│   │   ├── sections/
+│   │   │   ├── FeaturesSection.tsx
+│   │   │   └── HeroSection.tsx
+│   │   ├── Download.tsx
+│   │   ├── Footer.tsx
+│   │   ├── InAppBrowserNotice.tsx
+│   │   └── Navbar.tsx
+│   ├── data/
+│   │   └── blog-index.json
+│   ├── hooks/
+│   │   ├── useLatestRelease.ts
+│   │   └── usePageMeta.ts
+│   ├── i18n/
+│   │   ├── locales/
+│   │   │   ├── en.ts
+│   │   │   └── zh.ts
+│   │   └── config.ts
+│   ├── lib/
+│   │   ├── blog.ts
+│   │   └── utils.ts
+│   ├── pages/
+│   │   ├── BlogListPage.tsx
+│   │   ├── BlogPostPage.tsx
+│   │   ├── DownloadPage.tsx
+│   │   ├── Home.tsx
+│   │   ├── NotFoundPage.tsx
+│   │   ├── PrivacyPage.tsx
+│   │   └── TermsPage.tsx
+│   ├── types/
+│   │   └── blog.ts
+│   ├── App.tsx
+│   ├── index.css
+│   └── main.tsx
+├── .gitignore
+├── LICENSE
+├── README.md
+├── eslint.config.js
+├── index.html
+├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts

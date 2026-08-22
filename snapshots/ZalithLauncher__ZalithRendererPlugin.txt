@@ -1,0 +1,2 @@
+# Repository: ZalithLauncher/ZalithRendererPlugin
+# Status: ACCESS BLOCKED (HTTP 451) by GitHub — directory structure unavailable via API.

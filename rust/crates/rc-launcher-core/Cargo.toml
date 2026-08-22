@@ -1,0 +1,81 @@
+[package]
+name = "rc-launcher-core"
+description = "Rust core for RC Launcher (Minecraft Java launcher for Android)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# `cdylib` -> libcrc_launcher.so (consumed by :core via JNI).
+# `rlib`   -> enables `cargo test` of the internal subsystems on the host.
+name = "rc_launcher"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# --- Task 2: async, resumable, chunked download manager ---
+# tokio provides the async runtime, filesystem + IO + timing primitives used by
+# the downloader. Only the features we actually need are enabled. `net` is
+# required by the DoH/system resolver in the `net` module (task 3).
+# `process` is required by the task-7 launch engine (spawning + supervising the
+# game process, streaming its stdout/stderr).
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "time", "sync", "net", "process"] }
+# reqwest with rustls (no OpenSSL) so it cross-compiles cleanly to Android via
+# cargo-ndk. We deliberately avoid the default `native-tls` feature.
+# `hickory-dns` enables Happy Eyeballs (IPv4/IPv6 racing) at the resolver layer.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "hickory-dns", "json", "stream"] }
+# Cryptographic hashes for post-download verification.
+sha1 = "0.10"
+md-5 = "0.10"
+# Trait objects with async methods (HttpSource) without hand-rolling futures.
+async-trait = "0.1"
+# Streaming HTTP response bodies into files without buffering the whole chunk in RAM
+# (task 25: large-file streaming download). `StreamExt` drives `reqwest`'s
+# `bytes_stream()` so each chunk is written to disk as it arrives.
+futures-util = "0.3"
+
+# --- Task 3: China-mainland network optimisation (mirrors / DNS / proxy) ---
+# Robust URL parsing for mirror rewrites.
+url = "2"
+
+# --- Task 5: account & authentication (secure token storage) ---
+# AES-256-GCM for encrypting the on-disk account/token store (sealed by a
+# SecretVault; on Android the key is held in the Android Keystore).
+aes-gcm = "0.11"
+# CSPRNG for the AES-GCM nonce.
+getrandom = "0.2"
+
+# --- Task 6: JRE / JDK supply (Android OpenJDK packaging / extraction) ---
+# Pure-Rust tar + xz so the JRE archives (FCL's prebuilt `bin-<abi>.tar.xz` and
+# `universal.tar.xz`) decompress cleanly on Android without a C toolchain.
+tar = "0.4"
+lzma-rs = "0.3"
+
+# --- Task 7: launch engine (graceful process termination) ---
+# `libc::kill` lets us send SIGTERM (so Minecraft saves the world) before
+# escalating to SIGKILL. Unix-only: Android/Linux are the platforms we launch on.
+# --- Task 8: mod / resource-pack / shader management (jar/zip metadata reading) ---
+# Pure-Rust zip so we can read `fabric.mod.json` / `META-INF/mods.toml` /
+# `mcmod.info` / `pack.mcmeta` out of .jar / .litemod / .zip mod archives on
+# Android without a C toolchain. `deflate` (not bzip2) keeps the dependency
+# pure-Rust so it cross-compiles via cargo-ndk.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# Forge (1.13+) writes `META-INF/mods.toml`; reading it needs a TOML parser.
+toml = "0.8"
+# Mod `depends` / `breaks` / `recommends` use Minecraft-style version ranges;
+# `semver` (with the `serde` feature) models and compares them.
+semver = { version = "1", features = ["serde"] }
+# Recursive, sorted directory scanning of the per-instance mods folder.
+walkdir = "2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+# Used by the runtime (task 6) end-to-end tests to get a scratch dir.
+tempfile = "3"

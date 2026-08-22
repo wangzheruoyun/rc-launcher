@@ -1,0 +1,43 @@
+# EditorConfig — the lowest-friction layer of the unified code style.
+# Supported by every major editor/IDE; keeps whitespace, line endings and
+# charset consistent before rustfmt / detekt / ktlint even run.
+# See https://editorconfig.org
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# Kotlin / Gradle / Kotlin DSL — 4 spaces (matches ktlint default).
+[*.{kt,kts}]
+indent_size = 4
+max_line_length = 120
+ktlint_disabled_rules = final-newline, package-name, filename, no-wildcard-imports
+
+# Rust — rustfmt owns the layout (max_width = 100); just keep the basics tidy.
+[*.rs]
+indent_size = 4
+
+# Markdown — don't reflow prose; let the docs stay human-editable.
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# YAML / TOML / JSON / shell / XML.
+[*.{yml,yaml,toml,json}]
+indent_size = 2
+
+[*.{sh,bash}]
+indent_size = 2
+
+[*.{xml,html}]
+indent_size = 4
+
+# Gradle wrapper / properties.
+[*.properties]
+indent_size = 2

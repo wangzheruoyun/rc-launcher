@@ -1,0 +1,414 @@
+# Repository: FCL-Team/NG-GL4ES
+# Default branch: main
+# Total entries: 408
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── build.yml
+├── 3rdparty/
+│   ├── SPIRV-Cross
+│   └── glslang
+├── debian/
+│   ├── patches/
+│   │   ├── fix_lintian_error
+│   │   └── series
+│   ├── source/
+│   │   └── format
+│   ├── README.Debian
+│   ├── README.source
+│   ├── changelog
+│   ├── compat
+│   ├── control
+│   ├── copyright
+│   ├── libgl4es-dev.install
+│   ├── libgl4es.install
+│   └── rules
+├── external/
+│   └── MetalANGLE.framework/
+│       ├── Info.plist
+│       └── MetalANGLE.tbd
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── include/
+│   ├── EGL/
+│   │   ├── egl.h
+│   │   ├── eglext.h
+│   │   └── eglplatform.h
+│   ├── GL/
+│   │   ├── internal/
+│   │   │   └── dri_interface.h
+│   │   ├── gl.h
+│   │   ├── gl_mangle.h
+│   │   ├── glcorearb.h
+│   │   ├── glext.h
+│   │   ├── glu.h
+│   │   ├── glu_mangle.h
+│   │   ├── glx.h
+│   │   ├── glx_mangle.h
+│   │   ├── glxext.h
+│   │   ├── wgl.h
+│   │   └── wglext.h
+│   ├── GLES/
+│   │   ├── 1.0/
+│   │   │   └── gl.h
+│   │   ├── egl.h
+│   │   ├── gl.h
+│   │   ├── gl2.h
+│   │   ├── gl2ext.h
+│   │   ├── gl2platform.h
+│   │   ├── gl3.h
+│   │   ├── gl3ext.h
+│   │   ├── gl3platform.h
+│   │   ├── glext.h
+│   │   └── glplatform.h
+│   ├── GLES3/
+│   │   ├── gl3.h
+│   │   ├── gl31.h
+│   │   ├── gl32.h
+│   │   └── gl3platform.h
+│   ├── KHR/
+│   │   └── khrplatform.h
+│   ├── glslang/
+│   │   ├── Include/
+│   │   │   ├── BaseTypes.h
+│   │   │   ├── Common.h
+│   │   │   ├── ConstantUnion.h
+│   │   │   ├── InfoSink.h
+│   │   │   ├── InitializeGlobals.h
+│   │   │   ├── PoolAlloc.h
+│   │   │   ├── ResourceLimits.h
+│   │   │   ├── ShHandle.h
+│   │   │   ├── SpirvIntrinsics.h
+│   │   │   ├── Types.h
+│   │   │   ├── arrays.h
+│   │   │   ├── glslang_c_interface.h
+│   │   │   ├── glslang_c_shader_types.h
+│   │   │   ├── intermediate.h
+│   │   │   └── visibility.h
+│   │   ├── MachineIndependent/
+│   │   │   ├── Initialize.h
+│   │   │   ├── LiveTraverser.h
+│   │   │   ├── ParseHelper.h
+│   │   │   ├── RemoveTree.h
+│   │   │   ├── Scan.h
+│   │   │   ├── ScanContext.h
+│   │   │   ├── SymbolTable.h
+│   │   │   ├── Versions.h
+│   │   │   ├── attribute.h
+│   │   │   ├── gl_types.h
+│   │   │   ├── glslang_tab.cpp.h
+│   │   │   ├── iomapper.h
+│   │   │   ├── localintermediate.h
+│   │   │   ├── parseVersions.h
+│   │   │   ├── pch.h
+│   │   │   ├── propagateNoContraction.h
+│   │   │   ├── reflection.h
+│   │   │   └── span.h
+│   │   ├── Public/
+│   │   │   ├── ResourceLimits.h
+│   │   │   ├── ShaderLang.h
+│   │   │   └── resource_limits_c.h
+│   │   ├── SPIRV/
+│   │   │   ├── GlslangToSpv.h
+│   │   │   ├── Logger.h
+│   │   │   ├── SPVRemapper.h
+│   │   │   ├── SpvTools.h
+│   │   │   ├── disassemble.h
+│   │   │   └── spirv.hpp11
+│   │   └── build_info.h
+│   ├── spirv_cross/
+│   │   ├── GLSL.std.450.h
+│   │   ├── spirv.h
+│   │   ├── spirv.hpp
+│   │   ├── spirv_cfg.hpp
+│   │   ├── spirv_common.hpp
+│   │   ├── spirv_cpp.hpp
+│   │   ├── spirv_cross.hpp
+│   │   ├── spirv_cross_c.h
+│   │   ├── spirv_cross_containers.hpp
+│   │   ├── spirv_cross_error_handling.hpp
+│   │   ├── spirv_cross_parsed_ir.hpp
+│   │   ├── spirv_cross_util.hpp
+│   │   ├── spirv_glsl.hpp
+│   │   ├── spirv_hlsl.hpp
+│   │   ├── spirv_msl.hpp
+│   │   ├── spirv_parser.hpp
+│   │   └── spirv_reflect.hpp
+│   ├── android_debug.h
+│   ├── gl4eshint.h
+│   ├── gl4esinit.h
+│   └── khash.h
+├── media/
+│   ├── assaultcube.jpg
+│   └── minecraft.png
+├── refs/
+│   ├── descent3.0000284192.png
+│   ├── foobillardplus.0000014748.png
+│   ├── glsl_lighting.0000505393.png
+│   ├── glxgears.0000008203.png
+│   ├── neverball.0000078749.png
+│   ├── neverball.0000078750.png
+│   ├── openra.0000031249.png
+│   ├── pointsprite.0000248810.png
+│   └── stuntcarracer.0000118817.png
+├── spec/
+│   ├── template/
+│   │   ├── base/
+│   │   │   ├── base.j2
+│   │   │   ├── copy_packed_call.j2
+│   │   │   ├── fprint.j2
+│   │   │   ├── header.j2
+│   │   │   ├── headers.j2
+│   │   │   ├── indexed_call.j2
+│   │   │   ├── packed_call.j2
+│   │   │   ├── wrap.c.j2
+│   │   │   └── wrap.h.j2
+│   │   ├── client.c.j2
+│   │   ├── eglwrap.c.j2
+│   │   ├── gleswrap.c.j2
+│   │   ├── glextwrap.c.j2
+│   │   ├── glwrap.h.j2
+│   │   ├── glxfuncs.j2
+│   │   ├── host.c.j2
+│   │   └── proxy.h.j2
+│   ├── xml/
+│   │   ├── egl.xml
+│   │   ├── gles-2.0.xml
+│   │   ├── glx.xml
+│   │   ├── glxext.xml
+│   │   ├── opengl.xml
+│   │   ├── toyml.py
+│   │   └── wgl.xml
+│   ├── yml/
+│   │   ├── alsa.yml
+│   │   ├── egl.yml
+│   │   ├── gles-1.1.yml
+│   │   ├── gles-2.0.yml
+│   │   ├── glext-1.1.yml
+│   │   ├── glext-es2-1.1.yml
+│   │   ├── glx.yml
+│   │   ├── glxext.yml
+│   │   ├── my_glx.yml
+│   │   ├── opengl.yml
+│   │   └── wgl.yml
+│   ├── build
+│   ├── gen.py
+│   └── requirements.txt
+├── src/
+│   ├── agl/
+│   │   ├── agl.c
+│   │   ├── agl.h
+│   │   ├── amigaos.c
+│   │   ├── amigaos.h
+│   │   └── lookup.c
+│   ├── egl/
+│   │   ├── egl.c
+│   │   ├── egl.h
+│   │   └── lookup.c
+│   ├── gl/
+│   │   ├── glsl/
+│   │   │   ├── glsl_for_es.cpp
+│   │   │   └── glsl_for_es.h
+│   │   ├── math/
+│   │   │   ├── eval.h
+│   │   │   └── matheval.c
+│   │   ├── vgpu/
+│   │   │   ├── shaderconv.c
+│   │   │   └── shaderconv.h
+│   │   ├── wrap/
+│   │   │   ├── gl4es.h
+│   │   │   ├── gl4eswraps.c
+│   │   │   ├── gles.c
+│   │   │   ├── gles.h
+│   │   │   ├── glesnative.cpp
+│   │   │   ├── glstub.c
+│   │   │   ├── skips.h
+│   │   │   └── stub.h
+│   │   ├── arbconverter.c
+│   │   ├── arbconverter.h
+│   │   ├── arbgenerator.c
+│   │   ├── arbgenerator.h
+│   │   ├── arbhelper.c
+│   │   ├── arbhelper.h
+│   │   ├── arbparser.c
+│   │   ├── arbparser.h
+│   │   ├── array.c
+│   │   ├── array.h
+│   │   ├── attributes.h
+│   │   ├── blend.c
+│   │   ├── blend.h
+│   │   ├── blit.c
+│   │   ├── blit.h
+│   │   ├── buffers.c
+│   │   ├── buffers.h
+│   │   ├── build_info.c
+│   │   ├── build_info.h
+│   │   ├── cJSON.c
+│   │   ├── cJSON.h
+│   │   ├── config.c
+│   │   ├── config.h
+│   │   ├── const.h
+│   │   ├── debug.c
+│   │   ├── debug.h
+│   │   ├── decompress.c
+│   │   ├── decompress.h
+│   │   ├── depth.c
+│   │   ├── depth.h
+│   │   ├── directstate.c
+│   │   ├── directstate.h
+│   │   ├── drawing.c
+│   │   ├── enable.c
+│   │   ├── enum_info.h
+│   │   ├── envvars.c
+│   │   ├── envvars.h
+│   │   ├── eval.c
+│   │   ├── eval.h
+│   │   ├── face.c
+│   │   ├── face.h
+│   │   ├── fog.c
+│   │   ├── fog.h
+│   │   ├── fpe.c
+│   │   ├── fpe.h
+│   │   ├── fpe_cache.c
+│   │   ├── fpe_cache.h
+│   │   ├── fpe_shader.c
+│   │   ├── fpe_shader.h
+│   │   ├── framebuffers.c
+│   │   ├── framebuffers.h
+│   │   ├── getter.cpp
+│   │   ├── gl4es.c
+│   │   ├── gl4es.h
+│   │   ├── gl_lookup.c
+│   │   ├── gl_lookup.h
+│   │   ├── glcase.h
+│   │   ├── gles.h
+│   │   ├── glesfuncs.inc
+│   │   ├── glstate.c
+│   │   ├── glstate.h
+│   │   ├── hint.c
+│   │   ├── hint.h
+│   │   ├── init.c
+│   │   ├── init.h
+│   │   ├── light.c
+│   │   ├── light.h
+│   │   ├── line.c
+│   │   ├── line.h
+│   │   ├── list.c
+│   │   ├── list.h
+│   │   ├── listdraw.c
+│   │   ├── listrl.c
+│   │   ├── loader.c
+│   │   ├── loader.h
+│   │   ├── logs.c
+│   │   ├── logs.h
+│   │   ├── matrix.c
+│   │   ├── matrix.h
+│   │   ├── matvec.c
+│   │   ├── matvec.h
+│   │   ├── ng_gl4es.h
+│   │   ├── oldprogram.c
+│   │   ├── oldprogram.h
+│   │   ├── pixel.c
+│   │   ├── pixel.h
+│   │   ├── planes.c
+│   │   ├── planes.h
+│   │   ├── pointsprite.c
+│   │   ├── pointsprite.h
+│   │   ├── preproc.c
+│   │   ├── preproc.h
+│   │   ├── program.c
+│   │   ├── program.h
+│   │   ├── queries.c
+│   │   ├── queries.h
+│   │   ├── raster.c
+│   │   ├── raster.h
+│   │   ├── render.c
+│   │   ├── render.h
+│   │   ├── samplers.c
+│   │   ├── samplers.h
+│   │   ├── shader.c
+│   │   ├── shader.h
+│   │   ├── shader_hacks.c
+│   │   ├── shader_hacks.h
+│   │   ├── shaderconv.c
+│   │   ├── shaderconv.h
+│   │   ├── stack.c
+│   │   ├── stack.h
+│   │   ├── state.h
+│   │   ├── stb_dxt_104.h
+│   │   ├── stencil.c
+│   │   ├── stencil.h
+│   │   ├── string_utils.c
+│   │   ├── string_utils.h
+│   │   ├── stubs.c
+│   │   ├── texenv.c
+│   │   ├── texenv.h
+│   │   ├── texgen.c
+│   │   ├── texgen.h
+│   │   ├── texture.c
+│   │   ├── texture.h
+│   │   ├── texture_3d.c
+│   │   ├── texture_compressed.c
+│   │   ├── texture_params.c
+│   │   ├── texture_read.c
+│   │   ├── uniform.c
+│   │   ├── uniform.h
+│   │   ├── vertexattrib.c
+│   │   └── vertexattrib.h
+│   ├── glx/
+│   │   ├── drmfunc.h
+│   │   ├── gbm.c
+│   │   ├── gbmfunc.h
+│   │   ├── glx.c
+│   │   ├── glx.h
+│   │   ├── glx_gbm.h
+│   │   ├── glx_stubs.c
+│   │   ├── hardext.c
+│   │   ├── hardext.h
+│   │   ├── lookup.c
+│   │   ├── rpi.c
+│   │   ├── rpi.h
+│   │   ├── streaming.c
+│   │   ├── streaming.h
+│   │   ├── utils.c
+│   │   └── utils.h
+│   └── config.h
+├── tests/
+│   ├── test.sh
+│   └── tests.sh
+├── traces/
+│   ├── descent3.tgz
+│   ├── foobillardplus.tgz
+│   ├── glsl_lighting.tgz
+│   ├── glxgears.tgz
+│   ├── neverball.tgz
+│   ├── openra.tgz
+│   ├── pointsprite.tgz
+│   └── stuntcarracer.tgz
+├── .clang-format
+├── .gitignore
+├── .gitmodules
+├── .travis.yml
+├── CHANGELOG.md
+├── CMakeLists.txt
+├── COMPILE.md
+├── GL4ES.cbp
+├── LICENSE
+├── MEDIA.md
+├── README.md
+├── README_GL4ES.md
+├── USAGE.md
+├── _config.yml
+├── bc_cat.h
+├── build.gradle.kts
+├── gl4es.png
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+├── settings.gradle.kts
+├── test.cmake
+└── version.h

@@ -1,0 +1,114 @@
+# com.rc.launcher — scheduled health audit (GitHub Actions).
+#
+# Task 24: 镜像源健康度与依赖审计
+#   * 定时任务测速各镜像源   — probe BMCLAPI / MCBBS / Aliyun and measure
+#                             reachability, response time and throughput
+#                             (mirrors the Rust `MirrorProvider::measure`).
+#   * 校验清单哈希          — re-check `jre_manifest.json` (SHA-1 + size) and
+#                             the `generate_jre_manifest.py --check` gate so a
+#                             drifted/corrupt JRE slice fails loudly.
+#   * 扫描依赖许可证        — enumerate every third-party crate via
+#                             `cargo metadata` + every Gradle dependency, bucket
+#                             them by SPDX license (cuberite `ThirdPartyLicenses`
+#                             style) and flag unknown / AGPL licenses that may be
+#                             incompatible with GPL-3.0-or-later.
+#   * 输出健康度报告        — aggregate everything into a JSON + Markdown report
+#                             (also echoed to the job summary) and upload it as
+#                             an artifact; an unhealthy run opens/refreshes a
+#                             tracking issue.
+#
+# Runs daily (off-peak) and on manual dispatch. Modeled after the cuberite
+# StyleCheck / FUNDING CI jobs: a non-build gate that keeps an eye on supply-chain
+# health and fails loudly when something drifts.
+
+name: Health Audit
+
+on:
+  schedule:
+    # Daily at 03:17 UTC — deterministic off-peak minute (avoids the :00 storm).
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      skip_mirrors:
+        description: 'Skip the network mirror speed test (offline audit).'
+        type: boolean
+        default: false
+
+# Fail the run loudly on an unhealthy report; never run two audits for one ref.
+concurrency:
+  group: health-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write      # used only to open/refresh the health-tracking issue
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # --------------------------------------------------------------------------- #
+  # Run the full audit: mirrors + manifest hashes + license scan.
+  # --------------------------------------------------------------------------- #
+  audit:
+    name: Mirror / manifest / license audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # `cargo metadata` feeds the license audit; the lockfile is committed so
+      # this works without re-resolving the whole index.
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run health audit
+        # The script exits 2 on an "unhealthy" report (manifest drift / AGPL /
+        # all mirrors down) — which fails this step and triggers the issue below.
+        # `GITHUB_STEP_SUMMARY` is forwarded so the report shows up on the run page.
+        env:
+          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
+        run: |
+          python3 scripts/health_audit.py \
+            ${{ github.event.inputs.skip_mirrors == 'true' && '--skip-mirrors' || '' }} \
+            --out build/reports
+
+      - name: Upload health report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-report
+          path: build/reports
+          if-no-files-found: warn
+
+      - name: Open / refresh health issue on unhealthy status
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const md = fs.readFileSync('build/reports/health-report.md', 'utf8');
+            const title = '🩺 Health audit: unhealthy';
+            const body = md + '\n\n---\n_Automated by the Health Audit workflow._';
+            const { owner, repo } = context.repo;
+            // Try to refresh an existing open issue with the same title.
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', per_page: 100,
+            });
+            const found = existing.data.find(i => i.title === title);
+            if (found) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: found.number, body:
+                  '_Health audit still unhealthy — refreshing report._\n\n' + md,
+              });
+              console.log('Updated existing health issue #' + found.number);
+            } else {
+              await github.rest.issues.create({
+                owner, repo, title, body, labels: ['health-audit', 'bug'],
+              });
+              console.log('Opened new health issue.');
+            }

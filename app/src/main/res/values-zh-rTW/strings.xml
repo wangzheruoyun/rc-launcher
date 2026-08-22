@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GENERATED FILE — DO NOT EDIT.
+
+  Source of truth: rust/crates/rc-launcher-core/i18n/zh-Hant.properties
+  Regenerate with: python3 scripts/gen_android_strings.py
+  Verified in CI : python3 scripts/check_i18n.py
+
+  Translation of the zh-CN base catalogue; missing keys fall back to values/.
+-->
+<resources>
+    <!-- app -->
+    <string name="app_name">RC 啟動器</string>
+    <string name="app_tagline">高效能 Minecraft Java 版啟動器</string>
+
+    <!-- common -->
+    <string name="common_add">新增</string>
+    <string name="common_apply">套用</string>
+    <string name="common_back">返回</string>
+    <string name="common_cancel">取消</string>
+    <string name="common_close">關閉</string>
+    <string name="common_default">預設</string>
+    <string name="common_delete">刪除</string>
+    <string name="common_edit">編輯</string>
+    <string name="common_loading">載入中…</string>
+    <string name="common_next">下一步</string>
+    <string name="common_ok">確定</string>
+    <string name="common_previous">上一步</string>
+    <string name="common_refresh">重新整理</string>
+    <string name="common_retry">重試</string>
+    <string name="common_save">儲存</string>
+    <string name="common_unavailable">不可用</string>
+
+    <!-- crash -->
+    <string name="crash_authentication_failure_advice">帳號工作階段失效：請重新登入帳號；僅單人遊戲可改用離線帳號。</string>
+    <string name="crash_authentication_failure_summary">帳號工作階段被拒絕</string>
+    <string name="crash_clean_exit_advice">遊戲正常結束，無需處理。</string>
+    <string name="crash_clean_exit_summary">遊戲正常結束</string>
+    <string name="crash_corrupted_file_advice">檔案損毀或不完整：請重新下載該版本（及出錯的模組/相依程式庫），通常是下載中斷所致。</string>
+    <string name="crash_corrupted_file_summary">遊戲檔案損毀或不完整</string>
+    <string name="crash_disk_full_advice">儲存空間不足：請清理空間後重新啟動。</string>
+    <string name="crash_disk_full_summary">裝置儲存空間不足</string>
+    <string name="crash_game_error_advice">遊戲拋出未處理例外：請查看日誌堆疊；通常移除最近新增的模組或資源包即可復原。</string>
+    <string name="crash_game_error_summary">遊戲拋出未處理例外</string>
+    <string name="crash_graphics_failure_advice">渲染器或顯示卡驅動程式異常：請嘗試更換渲染器（GL4ES/Zink/ANGLE）、關閉光影並降低解析度。</string>
+    <string name="crash_graphics_failure_summary">渲染器 / 顯示卡驅動程式異常</string>
+    <string name="crash_killed_by_system_advice">系統記憶體不足終止了遊戲行程：請降低記憶體配置、關閉背景應用程式，並讓啟動器保持在前景執行。</string>
+    <string name="crash_killed_by_system_summary">Android 終止了遊戲行程</string>
+    <string name="crash_missing_main_class_advice">主類別缺失：請修復或重新安裝該版本，用戶端 JAR 或載入器相依項未在類別路徑中。</string>
+    <string name="crash_missing_main_class_summary">遊戲主類別缺失</string>
+    <string name="crash_missing_native_library_advice">原生程式庫載入失敗：請重新安裝執行階段元件（LWJGL/渲染器），並確認實例 ABI 與裝置一致。</string>
+    <string name="crash_missing_native_library_summary">原生程式庫載入失敗</string>
+    <string name="crash_mod_loader_failure_advice">模組或載入器啟動失敗：請查看日誌中的模組清單，缺少相依項或版本不符的模組需要更新或刪除。</string>
+    <string name="crash_mod_loader_failure_summary">模組或模組載入器啟動失敗</string>
+    <string name="crash_native_crash_advice">Java 虛擬機當機：回報時請附上 hs_err_pid 日誌；可嘗試更換渲染器、停用模組/光影並降低記憶體配置。</string>
+    <string name="crash_native_crash_summary">Java 虛擬機當機</string>
+    <string name="crash_out_of_memory_advice">記憶體不足：裝置記憶體充裕時可調高 -Xmx；否則請降低視距、移除大型模組/光影並降低解析度縮放。</string>
+    <string name="crash_out_of_memory_summary">遊戲記憶體耗盡</string>
+    <string name="crash_permission_denied_advice">沒有檔案存取權限：請授予儲存權限，或將遊戲目錄遷移到應用程式私有目錄。</string>
+    <string name="crash_permission_denied_summary">啟動器缺少檔案系統權限</string>
+    <string name="crash_unknown_advice">當機原因不明：請匯出完整日誌回報；可先在無模組狀態下啟動以縮小範圍。</string>
+    <string name="crash_unknown_summary">遊戲因未知原因當機</string>
+    <string name="crash_unsupported_java_version_advice">Java 版本不相符：請切換到該版本所需的 Java（1.16 及更早用 Java 8，1.17-1.20.4 用 Java 17，1.20.5+ 用 Java 21）。</string>
+    <string name="crash_unsupported_java_version_summary">所選 Java 版本不相容</string>
+    <string name="crash_user_terminated_advice">遊戲已被啟動器停止，可隨時重新啟動。</string>
+    <string name="crash_user_terminated_summary">遊戲已被啟動器停止</string>
+
+    <!-- download -->
+    <string name="download_files_one">共 {count} 個檔案</string>
+    <string name="download_files_other">共 {count} 個檔案</string>
+
+    <!-- error -->
+    <string name="error_auth">帳號驗證失敗：{detail}</string>
+    <string name="error_checksum">檔案校驗失敗：{path}</string>
+    <string name="error_launch">啟動失敗：{detail}</string>
+    <string name="error_missing_file">檔案缺失：{path}</string>
+    <string name="error_network">網路錯誤：{detail}</string>
+    <string name="error_offline">網路無法連線，已切換到離線模式：{detail}</string>
+    <string name="error_rate_limited">請求過於頻繁，請稍後再試</string>
+    <string name="error_retry_scheduled">第 {attempt} 次重試將在 {delay_secs} 秒後開始</string>
+    <string name="error_severity_fatal">嚴重錯誤</string>
+    <string name="error_severity_recoverable">可復原</string>
+    <string name="error_severity_transient">暫時性故障</string>
+    <string name="error_timeout">請求逾時：{detail}</string>
+    <string name="error_unknown">未知錯誤：{detail}</string>
+
+    <!-- language -->
+    <string name="language_en">English</string>
+    <string name="language_system">跟隨系統</string>
+    <string name="language_zh_cn">簡體中文</string>
+    <string name="language_zh_hant">繁體中文</string>
+
+    <!-- launch -->
+    <string name="launch_state_crashed">已當機</string>
+    <string name="launch_state_idle">閒置</string>
+    <string name="launch_state_launching">正在啟動</string>
+    <string name="launch_state_preparing">準備中</string>
+    <string name="launch_state_running">執行中</string>
+    <string name="launch_state_stopped">已停止</string>
+
+    <!-- nav -->
+    <string name="nav_accounts">帳戶</string>
+    <string name="nav_downloads">下載</string>
+    <string name="nav_home">主頁</string>
+    <string name="nav_instances">實例</string>
+    <string name="nav_settings">設定</string>
+
+    <!-- screen -->
+    <string name="screen_awt_title">AWT / Swing 相容層</string>
+    <string name="screen_controller_title">按鍵對應</string>
+    <string name="screen_install_title">安裝新實例</string>
+    <string name="screen_instance_detail_title">實例詳情</string>
+
+    <!-- settings -->
+    <string name="settings_language_applied">介面語言已切換為{language}</string>
+    <string name="settings_language_follow_system">跟隨系統語言</string>
+    <string name="settings_language_subtitle">切換後立即生效，無需重新啟動</string>
+    <string name="settings_language_title">介面語言</string>
+    <string name="settings_section_about">關於</string>
+    <string name="settings_section_appearance">外觀設定</string>
+    <string name="settings_section_controller">控制器</string>
+    <string name="settings_section_directory">目錄與日誌</string>
+    <string name="settings_section_java">Java 與記憶體</string>
+    <string name="settings_section_language">語言與地區</string>
+    <string name="settings_section_network">網路最佳化（中國大陸加速）</string>
+    <string name="settings_section_renderer">渲染器與畫面</string>
+
+    <!-- theme -->
+    <string name="theme_night_dark">深色</string>
+    <string name="theme_night_light">淺色</string>
+    <string name="theme_night_system">跟隨系統</string>
+    <string name="theme_night_toggle">切換夜間模式</string>
+</resources>

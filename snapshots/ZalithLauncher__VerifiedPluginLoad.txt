@@ -1,0 +1,82 @@
+# Repository: ZalithLauncher/VerifiedPluginLoad
+# Default branch: main
+# Total entries: 76
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── sync2gitee.yml
+├── docs/
+│   ├── api-results.md
+│   ├── build-and-testing.md
+│   ├── integration.md
+│   ├── trust-list.md
+│   └── trust-model.md
+├── gradle/
+│   ├── wrapper/
+│   │   ├── gradle-wrapper.jar
+│   │   └── gradle-wrapper.properties
+│   └── libs.versions.toml
+├── src/
+│   ├── androidTest/
+│   │   └── java/
+│   │       └── com/
+│   │           └── vpl/
+│   │               └── verifiedpluginload/
+│   │                   ├── truststore/
+│   │                   │   └── TrustListStoreInstrumentedTest.kt
+│   │                   └── ApkSignatureReaderInstrumentedTest.kt
+│   ├── main/
+│   │   ├── assets/
+│   │   │   ├── trusted-authors.json
+│   │   │   └── trusted-authors.json.sig
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── vpl/
+│   │   │           └── verifiedpluginload/
+│   │   │               ├── api/
+│   │   │               │   └── VerifiedPluginLoad.kt
+│   │   │               ├── internal/
+│   │   │               │   └── VerifiedPluginLoadImpl.kt
+│   │   │               ├── model/
+│   │   │               │   └── Models.kt
+│   │   │               ├── signature/
+│   │   │               │   └── ApkSignatureReader.kt
+│   │   │               ├── storage/
+│   │   │               │   └── AtomicFiles.kt
+│   │   │               ├── truststore/
+│   │   │               │   ├── Ed25519Verifier.kt
+│   │   │               │   ├── TrustListParser.kt
+│   │   │               │   └── TrustListStore.kt
+│   │   │               ├── update/
+│   │   │               │   ├── ParallelMirrorRace.kt
+│   │   │               │   └── TrustListUpdater.kt
+│   │   │               ├── userstore/
+│   │   │               │   └── UserTrustStore.kt
+│   │   │               └── verification/
+│   │   │                   └── PluginVerifier.kt
+│   │   └── AndroidManifest.xml
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── vpl/
+│                   └── verifiedpluginload/
+│                       ├── truststore/
+│                       │   └── TrustListParserTest.kt
+│                       ├── update/
+│                       │   └── ParallelMirrorRaceTest.kt
+│                       ├── userstore/
+│                       │   └── UserTrustStoreTest.kt
+│                       └── verification/
+│                           └── PluginVerifierTest.kt
+├── .gitignore
+├── LICENSE
+├── README.md
+├── TODO.md
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+├── jitpack.yml
+└── settings.gradle.kts

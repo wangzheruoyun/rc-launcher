@@ -1,0 +1,44 @@
+# Repository: ZalithLauncher/ZalithJars
+# Default branch: master
+# Total entries: 38
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .idea/
+│   ├── artifacts/
+│   │   ├── ZalithJars_AWTBlockerAgent_jar.xml
+│   │   └── ZalithJars_JarExceptionCatcher_jar.xml
+│   ├── .gitignore
+│   ├── gradle.xml
+│   ├── misc.xml
+│   └── vcs.xml
+├── AWTBlockerAgent/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── movtery/
+│   │       │       ├── MainAgent.java
+│   │       │       └── NoGuiTransformer.java
+│   │       └── resources/
+│   │           └── META-INF/
+│   │               └── MANIFEST.MF
+│   └── build.gradle
+├── JarExceptionCatcher/
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── movtery/
+│   │       │       └── JarExceptionCatcher.java
+│   │       └── resources/
+│   │           └── META-INF/
+│   │               └── MANIFEST.MF
+│   └── build.gradle
+├── gradle/
+│   └── wrapper/
+│       ├── gradle-wrapper.jar
+│       └── gradle-wrapper.properties
+├── .gitignore
+├── LICENSE
+├── gradlew
+├── gradlew.bat
+└── settings.gradle

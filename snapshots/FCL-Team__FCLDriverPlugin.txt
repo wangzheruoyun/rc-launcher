@@ -1,0 +1,38 @@
+# Repository: FCL-Team/FCLDriverPlugin
+# Default branch: main
+# Total entries: 32
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── app/
+│   ├── release/
+│   │   └── output-metadata.json
+│   ├── src/
+│   │   └── main/
+│   │       ├── java/
+│   │       │   └── com/
+│   │       │       └── mio/
+│   │       │           └── plugin/
+│   │       │               └── renderer/
+│   │       │                   └── MainActivity.kt
+│   │       ├── jniLibs/
+│   │       │   └── arm64-v8a/
+│   │       │       └── libvulkan_freedreno.so
+│   │       ├── res/
+│   │       │   └── drawable/
+│   │       │       └── img_app.png
+│   │       └── AndroidManifest.xml
+│   ├── .gitignore
+│   └── build.gradle.kts
+├── gradle/
+│   ├── wrapper/
+│   │   ├── gradle-wrapper.jar
+│   │   └── gradle-wrapper.properties
+│   └── libs.versions.toml
+├── .gitattributes
+├── .gitignore
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+└── settings.gradle.kts

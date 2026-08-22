@@ -1,0 +1,37 @@
+# Build outputs
+/app/build/
+/core/build/
+/runtime/build/
+.gradle/
+build/
+
+# Rust
+/rust/target/
+**/Cargo.lock.orig
+
+# Native libs (produced by cargo-ndk in CI; not committed)
+/core/src/main/jniLibs/
+
+# Local config / secrets
+local.properties
+*.jks
+*.keystore
+captures/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Python tooling (scripts/*.py)
+__pycache__/
+*.pyc
+
+# CI scratch
+/rust-artifacts/
+
+# Reference prebuilt APK (not required to build)
+/fcl-apk/
+
+# Local cache (not needed to build)
+/.cache/

@@ -1,0 +1,16 @@
+# Unified Rust formatting rules for com.rc.launcher (Rust core).
+# Applied via `cargo fmt --all` and enforced by .github/workflows/stylecheck.yml.
+# Goal: one deterministic layout so every contributor's diff reads the same —
+# mirroring cuberite's StyleCheck philosophy (one style, one gate).
+# Only stable rustfmt options are used so the gate works on the stable
+# toolchain pinned in rust-toolchain.toml.
+
+edition = "2021"
+max_width = 100
+use_small_heuristics = "Default"
+newline_style = "Unix"
+reorder_imports = true
+reorder_modules = true
+merge_derives = true
+use_field_init_shorthand = true
+use_try_shorthand = true

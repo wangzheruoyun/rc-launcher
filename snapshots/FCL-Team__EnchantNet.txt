@@ -1,0 +1,97 @@
+# Repository: FCL-Team/EnchantNet
+# Default branch: main
+# Total entries: 91
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── app/
+│   ├── src/
+│   │   ├── androidTest/
+│   │   │   └── java/
+│   │   │       └── org/
+│   │   │           └── fcl/
+│   │   │               └── enchantnet/
+│   │   │                   └── ExampleInstrumentedTest.kt
+│   │   ├── main/
+│   │   │   ├── java/
+│   │   │   │   └── org/
+│   │   │   │       └── fcl/
+│   │   │   │           └── enchantnet/
+│   │   │   │               ├── EnchantNetApplication.kt
+│   │   │   │               ├── GuestActivity.kt
+│   │   │   │               ├── HostActivity.kt
+│   │   │   │               └── MainActivity.kt
+│   │   │   ├── res/
+│   │   │   │   ├── drawable/
+│   │   │   │   │   ├── baseline_connected_24.xml
+│   │   │   │   │   ├── baseline_exit_room_24.xml
+│   │   │   │   │   ├── baseline_guest_24.xml
+│   │   │   │   │   ├── baseline_host_24.xml
+│   │   │   │   │   └── outline_info_24.xml
+│   │   │   │   ├── layout/
+│   │   │   │   │   ├── activity_guest.xml
+│   │   │   │   │   ├── activity_host.xml
+│   │   │   │   │   └── activity_main.xml
+│   │   │   │   ├── layout-land/
+│   │   │   │   │   ├── activity_guest.xml
+│   │   │   │   │   ├── activity_host.xml
+│   │   │   │   │   └── activity_main.xml
+│   │   │   │   ├── menu/
+│   │   │   │   │   └── menu_main.xml
+│   │   │   │   ├── mipmap-anydpi-v26/
+│   │   │   │   │   ├── ic_launcher.xml
+│   │   │   │   │   └── ic_launcher_round.xml
+│   │   │   │   ├── mipmap-hdpi/
+│   │   │   │   │   ├── ic_launcher.webp
+│   │   │   │   │   ├── ic_launcher_foreground.webp
+│   │   │   │   │   └── ic_launcher_round.webp
+│   │   │   │   ├── mipmap-mdpi/
+│   │   │   │   │   ├── ic_launcher.webp
+│   │   │   │   │   ├── ic_launcher_foreground.webp
+│   │   │   │   │   └── ic_launcher_round.webp
+│   │   │   │   ├── mipmap-xhdpi/
+│   │   │   │   │   ├── ic_launcher.webp
+│   │   │   │   │   ├── ic_launcher_foreground.webp
+│   │   │   │   │   └── ic_launcher_round.webp
+│   │   │   │   ├── mipmap-xxhdpi/
+│   │   │   │   │   ├── ic_launcher.webp
+│   │   │   │   │   ├── ic_launcher_foreground.webp
+│   │   │   │   │   └── ic_launcher_round.webp
+│   │   │   │   ├── mipmap-xxxhdpi/
+│   │   │   │   │   ├── ic_launcher.webp
+│   │   │   │   │   ├── ic_launcher_foreground.webp
+│   │   │   │   │   └── ic_launcher_round.webp
+│   │   │   │   ├── values/
+│   │   │   │   │   ├── ic_launcher_background.xml
+│   │   │   │   │   ├── strings.xml
+│   │   │   │   │   └── themes.xml
+│   │   │   │   ├── values-zh/
+│   │   │   │   │   └── strings.xml
+│   │   │   │   └── xml/
+│   │   │   │       ├── backup_rules.xml
+│   │   │   │       └── data_extraction_rules.xml
+│   │   │   └── AndroidManifest.xml
+│   │   └── test/
+│   │       └── java/
+│   │           └── org/
+│   │               └── fcl/
+│   │                   └── enchantnet/
+│   │                       └── ExampleUnitTest.kt
+│   ├── .gitignore
+│   ├── build.gradle.kts
+│   └── proguard-rules.pro
+├── gradle/
+│   ├── wrapper/
+│   │   ├── gradle-wrapper.jar
+│   │   └── gradle-wrapper.properties
+│   └── libs.versions.toml
+├── .gitattributes
+├── .gitignore
+├── .gitmodules
+├── EnchantNetCore
+├── README.md
+├── build.gradle.kts
+├── gradle.properties
+├── gradlew
+├── gradlew.bat
+└── settings.gradle.kts

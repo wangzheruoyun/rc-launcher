@@ -1,0 +1,532 @@
+# Repository: pmh1314520/MCTier
+# Default branch: master
+# Total entries: 526
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── MCTier-Android/
+│   ├── app/
+│   │   ├── src/
+│   │   │   └── main/
+│   │   │       ├── assets/
+│   │   │       │   ├── localvqe-README.txt
+│   │   │       │   └── localvqe-pi-v1-49k-f32.gguf
+│   │   │       ├── cpp/
+│   │   │       │   ├── include/
+│   │   │       │   │   └── localvqe_api.h
+│   │   │       │   ├── CMakeLists.txt
+│   │   │       │   └── LocalVqeNative.cpp
+│   │   │       ├── java/
+│   │   │       │   ├── com/
+│   │   │       │   │   └── easytier/
+│   │   │       │   │       └── jni/
+│   │   │       │   │           ├── EasyTierJNI.kt
+│   │   │       │   │           └── EasyTierVpnService.kt
+│   │   │       │   └── top/
+│   │   │       │       └── pmh13/
+│   │   │       │           └── mctier/
+│   │   │       │               ├── audio/
+│   │   │       │               │   ├── LocalVqeNative.kt
+│   │   │       │               │   └── LocalVqePcmProcessor.kt
+│   │   │       │               ├── data/
+│   │   │       │               │   ├── JsonCodecs.kt
+│   │   │       │               │   └── Models.kt
+│   │   │       │               ├── network/
+│   │   │       │               │   ├── AndroidRtcController.kt
+│   │   │       │               │   ├── ChatHttpServer.kt
+│   │   │       │               │   ├── ChatP2PClient.kt
+│   │   │       │               │   ├── FileShareHttpServer.kt
+│   │   │       │               │   ├── LobbyInviteCodec.kt
+│   │   │       │               │   ├── MinecraftScanner.kt
+│   │   │       │               │   ├── NetworkController.kt
+│   │   │       │               │   ├── PublicLobbyClient.kt
+│   │   │       │               │   ├── QrUtil.kt
+│   │   │       │               │   ├── RemoteControlController.kt
+│   │   │       │               │   ├── RemoteFileClient.kt
+│   │   │       │               │   ├── ScreenShareController.kt
+│   │   │       │               │   ├── SignalingClient.kt
+│   │   │       │               │   ├── SoundManager.kt
+│   │   │       │               │   ├── UpdateChecker.kt
+│   │   │       │               │   ├── VoiceAuditioner.kt
+│   │   │       │               │   └── VoiceProcessor.kt
+│   │   │       │               ├── service/
+│   │   │       │               │   ├── MctierAccessibilityService.kt
+│   │   │       │               │   ├── ScreenCaptureService.kt
+│   │   │       │               │   └── VoiceForegroundService.kt
+│   │   │       │               ├── ui/
+│   │   │       │               │   ├── Compliance.kt
+│   │   │       │               │   ├── ComplianceUi.kt
+│   │   │       │               │   ├── DanmakuOverlay.kt
+│   │   │       │               │   ├── GameHudOverlay.kt
+│   │   │       │               │   ├── GameTools.kt
+│   │   │       │               │   ├── MctierApp.kt
+│   │   │       │               │   └── MicKeepAliveOverlay.kt
+│   │   │       │               ├── MainActivity.kt
+│   │   │       │               ├── MctierRepository.kt
+│   │   │       │               └── PortraitCaptureActivity.kt
+│   │   │       ├── jniLibs/
+│   │   │       │   └── arm64-v8a/
+│   │   │       │       ├── libeasytier_android_jni.so
+│   │   │       │       ├── libeasytier_ffi.so
+│   │   │       │       └── liblocalvqe.so
+│   │   │       ├── res/
+│   │   │       │   ├── drawable/
+│   │   │       │   │   ├── ic_crown.xml
+│   │   │       │   │   ├── ic_gitee.xml
+│   │   │       │   │   ├── ic_github.xml
+│   │   │       │   │   ├── mctier_logo.png
+│   │   │       │   │   ├── sponsor_alipay.jpg
+│   │   │       │   │   └── sponsor_wechat.png
+│   │   │       │   ├── mipmap-anydpi-v26/
+│   │   │       │   │   └── ic_launcher.xml
+│   │   │       │   ├── mipmap-hdpi/
+│   │   │       │   │   ├── ic_launcher.png
+│   │   │       │   │   ├── ic_launcher_foreground.png
+│   │   │       │   │   └── ic_launcher_round.png
+│   │   │       │   ├── mipmap-mdpi/
+│   │   │       │   │   ├── ic_launcher.png
+│   │   │       │   │   ├── ic_launcher_foreground.png
+│   │   │       │   │   └── ic_launcher_round.png
+│   │   │       │   ├── mipmap-xhdpi/
+│   │   │       │   │   ├── ic_launcher.png
+│   │   │       │   │   ├── ic_launcher_foreground.png
+│   │   │       │   │   └── ic_launcher_round.png
+│   │   │       │   ├── mipmap-xxhdpi/
+│   │   │       │   │   ├── ic_launcher.png
+│   │   │       │   │   ├── ic_launcher_foreground.png
+│   │   │       │   │   └── ic_launcher_round.png
+│   │   │       │   ├── mipmap-xxxhdpi/
+│   │   │       │   │   ├── ic_launcher.png
+│   │   │       │   │   ├── ic_launcher_foreground.png
+│   │   │       │   │   └── ic_launcher_round.png
+│   │   │       │   ├── raw/
+│   │   │       │   │   ├── new_msg.mp3
+│   │   │       │   │   ├── user_joined.mp3
+│   │   │       │   │   └── user_left.mp3
+│   │   │       │   ├── values/
+│   │   │       │   │   ├── colors.xml
+│   │   │       │   │   ├── strings.xml
+│   │   │       │   │   └── styles.xml
+│   │   │       │   └── xml/
+│   │   │       │       ├── accessibility_service_config.xml
+│   │   │       │       ├── data_extraction_rules.xml
+│   │   │       │       └── file_paths.xml
+│   │   │       └── AndroidManifest.xml
+│   │   ├── build.gradle.kts
+│   │   └── proguard-rules.pro
+│   ├── gradle/
+│   │   └── wrapper/
+│   │       ├── gradle-wrapper.jar
+│   │       └── gradle-wrapper.properties
+│   ├── scripts/
+│   │   └── build-easytier-jni.ps1
+│   ├── .gitignore
+│   ├── README.md
+│   ├── build.gradle.kts
+│   ├── gradle.properties
+│   ├── gradlew
+│   ├── gradlew.bat
+│   ├── settings.gradle.kts
+│   ├── wx.png
+│   └── zfb.jpg
+├── public/
+│   ├── localvqe/
+│   │   ├── README.txt
+│   │   ├── localvqe-bridge-worklet.js
+│   │   ├── localvqe-pi-v1-49k-f32.gguf
+│   │   ├── localvqe-worker.js
+│   │   ├── localvqe.js
+│   │   └── localvqe.wasm
+│   ├── MCTierIcon.png
+│   ├── NewMsg.mp3
+│   ├── UserJoined.mp3
+│   ├── UserLeft.mp3
+│   ├── tauri.svg
+│   ├── wx.png
+│   ├── zfb.jpg
+│   ├── 手机端-主界面.jpg
+│   ├── 手机端-大厅二维码.jpg
+│   ├── 手机端-大厅动态设置.jpg
+│   ├── 手机端-大厅界面.jpg
+│   ├── 手机端-屏幕共享.jpg
+│   ├── 手机端-文件夹共享.jpg
+│   ├── 手机端-聊天室.jpg
+│   ├── 手机端-设置.jpg
+│   ├── 软件预览-主界面.png
+│   ├── 软件预览-创建大厅.png
+│   ├── 软件预览-加入大厅.png
+│   ├── 软件预览-大厅动态设置.png
+│   ├── 软件预览-大厅界面.png
+│   ├── 软件预览-屏幕共享.png
+│   ├── 软件预览-常用大厅信息.png
+│   ├── 软件预览-文件夹共享.png
+│   ├── 软件预览-聊天室.png
+│   └── 软件预览-设置.png
+├── src/
+│   ├── components/
+│   │   ├── AboutWindow/
+│   │   │   ├── AboutWindow.css
+│   │   │   └── AboutWindow.tsx
+│   │   ├── AdvancedNetworkConfig/
+│   │   │   ├── AdvancedNetworkConfig.css
+│   │   │   └── AdvancedNetworkConfig.tsx
+│   │   ├── ChatRoom/
+│   │   │   ├── ChatRoom.css
+│   │   │   └── ChatRoom.tsx
+│   │   ├── ConnectionDiagnostic/
+│   │   │   └── ConnectionDiagnosticModal.tsx
+│   │   ├── Danmaku/
+│   │   │   ├── DanmakuOverlay.css
+│   │   │   ├── DanmakuOverlay.tsx
+│   │   │   └── DanmakuSettings.tsx
+│   │   ├── EmojiPicker/
+│   │   │   ├── EmojiPicker.css
+│   │   │   └── EmojiPicker.tsx
+│   │   ├── ErrorBoundary/
+│   │   │   ├── ErrorBoundary.css
+│   │   │   └── ErrorBoundary.tsx
+│   │   ├── ExitNodeAdvancedModal/
+│   │   │   ├── ExitNodeAdvancedModal.css
+│   │   │   └── ExitNodeAdvancedModal.tsx
+│   │   ├── FavoriteLobbyManager/
+│   │   │   ├── FavoriteLobbyManager.css
+│   │   │   └── FavoriteLobbyManager.tsx
+│   │   ├── FileShareManager/
+│   │   │   ├── FileShareManager.css
+│   │   │   ├── FileShareManagerNew.tsx
+│   │   │   └── index.ts
+│   │   ├── GameHud/
+│   │   │   ├── GameHudOverlay.css
+│   │   │   ├── GameHudOverlay.tsx
+│   │   │   └── GameHudSettings.tsx
+│   │   ├── GameQuickConnect/
+│   │   │   └── GameQuickConnectModal.tsx
+│   │   ├── GlobalAdvancedConfigPanel/
+│   │   │   ├── GlobalAdvancedConfigPanel.css
+│   │   │   └── GlobalAdvancedConfigPanel.tsx
+│   │   ├── GlobalTooltip/
+│   │   │   ├── GlobalButtonTheme.tsx
+│   │   │   ├── GlobalTooltip.css
+│   │   │   ├── GlobalTooltip.tsx
+│   │   │   └── tooltipPolicy.ts
+│   │   ├── HistoryInput/
+│   │   │   ├── HistoryInput.css
+│   │   │   ├── HistoryInput.tsx
+│   │   │   ├── HistoryPasswordInput.css
+│   │   │   └── HistoryPasswordInput.tsx
+│   │   ├── HostPanel/
+│   │   │   └── HostPanel.tsx
+│   │   ├── HotkeyInput/
+│   │   │   ├── HotkeyInput.css
+│   │   │   └── HotkeyInput.tsx
+│   │   ├── LobbyAdvancedConfigModal/
+│   │   │   ├── LobbyAdvancedConfigModal.css
+│   │   │   └── LobbyAdvancedConfigModal.tsx
+│   │   ├── LobbyForm/
+│   │   │   ├── LobbyForm.css
+│   │   │   └── LobbyForm.tsx
+│   │   ├── LobbySettingsModal/
+│   │   │   ├── LobbySettingsModal.css
+│   │   │   └── LobbySettingsModal.tsx
+│   │   ├── MainWindow/
+│   │   │   ├── MainWindow.css
+│   │   │   └── MainWindow.tsx
+│   │   ├── MinecraftConfig/
+│   │   │   ├── MinecraftConfig.css
+│   │   │   └── MinecraftConfig.tsx
+│   │   ├── MinecraftHelper/
+│   │   │   ├── MinecraftHelper.css
+│   │   │   └── MinecraftHelper.tsx
+│   │   ├── MinecraftWorlds/
+│   │   │   └── MinecraftWorldsModal.tsx
+│   │   ├── MiniWindow/
+│   │   │   ├── MiniWindow.css
+│   │   │   └── MiniWindow.tsx
+│   │   ├── NetworkDiagnostic/
+│   │   │   ├── NetworkDiagnostic.css
+│   │   │   └── NetworkDiagnostic.tsx
+│   │   ├── OnboardingWizard/
+│   │   │   ├── OnboardingWizard.css
+│   │   │   └── OnboardingWizard.tsx
+│   │   ├── PlayerList/
+│   │   │   ├── PlayerList.css
+│   │   │   └── PlayerList.tsx
+│   │   ├── PublicPlaza/
+│   │   │   └── PublicPlaza.tsx
+│   │   ├── RecentManager/
+│   │   │   └── RecentManager.tsx
+│   │   ├── RemoteControl/
+│   │   │   ├── RemoteControl.css
+│   │   │   └── RemoteControl.tsx
+│   │   ├── RestartConfirmModal/
+│   │   │   ├── RestartConfirmModal.css
+│   │   │   └── RestartConfirmModal.tsx
+│   │   ├── RoomTools/
+│   │   │   ├── RoomTools.css
+│   │   │   └── RoomTools.tsx
+│   │   ├── ScreenShareManager/
+│   │   │   ├── ScreenShareManager.css
+│   │   │   ├── ScreenShareManager.tsx
+│   │   │   └── index.ts
+│   │   ├── ScreenViewer/
+│   │   │   ├── ScreenViewer.css
+│   │   │   ├── ScreenViewer.tsx
+│   │   │   └── index.ts
+│   │   ├── SettingsWindow/
+│   │   │   ├── SettingsWindow.css
+│   │   │   ├── SettingsWindow.tsx
+│   │   │   └── index.ts
+│   │   ├── StatsPanel/
+│   │   │   ├── StatsPanel.css
+│   │   │   └── StatsPanel.tsx
+│   │   ├── StatusWindow/
+│   │   │   ├── StatusWindow.css
+│   │   │   └── StatusWindow.tsx
+│   │   ├── VersionUpdateModal/
+│   │   │   ├── VersionUpdateModal.css
+│   │   │   ├── VersionUpdateModal.tsx
+│   │   │   └── index.ts
+│   │   ├── VoiceChanger/
+│   │   │   ├── VoiceChangerPicker.css
+│   │   │   └── VoiceChangerPicker.tsx
+│   │   ├── VoiceControls/
+│   │   │   ├── VoiceControls.css
+│   │   │   └── VoiceControls.tsx
+│   │   ├── VoiceSettings/
+│   │   │   └── VoiceSettings.tsx
+│   │   ├── icons/
+│   │   │   ├── BackIcon.tsx
+│   │   │   ├── ChatIcon.tsx
+│   │   │   ├── CheckIcon.tsx
+│   │   │   ├── ChevronIcon.tsx
+│   │   │   ├── ClipboardIcon.tsx
+│   │   │   ├── CloseCircleIcon.tsx
+│   │   │   ├── CloseIcon.tsx
+│   │   │   ├── CoffeeIcon.tsx
+│   │   │   ├── CollapseIcon.tsx
+│   │   │   ├── CrownIcon.tsx
+│   │   │   ├── DiceIcon.tsx
+│   │   │   ├── DownloadIcon.tsx
+│   │   │   ├── EmojiIcon.tsx
+│   │   │   ├── FileIcon.tsx
+│   │   │   ├── FolderIcon.tsx
+│   │   │   ├── GamepadIcon.tsx
+│   │   │   ├── GitHubIcon.tsx
+│   │   │   ├── GiteeIcon.tsx
+│   │   │   ├── GlobeIcon.tsx
+│   │   │   ├── HeartIcon.tsx
+│   │   │   ├── ImageIcon.tsx
+│   │   │   ├── InfoIcon.tsx
+│   │   │   ├── LightbulbIcon.tsx
+│   │   │   ├── LightningIcon.tsx
+│   │   │   ├── LockIcon.tsx
+│   │   │   ├── LogoIcon.tsx
+│   │   │   ├── MicIcon.tsx
+│   │   │   ├── MicrophoneIcon.tsx
+│   │   │   ├── OpacityIcon.tsx
+│   │   │   ├── PauseIcon.tsx
+│   │   │   ├── PlayIcon.tsx
+│   │   │   ├── PlayerIcon.tsx
+│   │   │   ├── RocketIcon.tsx
+│   │   │   ├── ScreenShareIcon.tsx
+│   │   │   ├── SettingsIcon.tsx
+│   │   │   ├── ShareIcon.tsx
+│   │   │   ├── SparklesIcon.tsx
+│   │   │   ├── SpeakerIcon.tsx
+│   │   │   ├── StarIcon.tsx
+│   │   │   ├── TrashIcon.tsx
+│   │   │   ├── VolumeIcon.tsx
+│   │   │   ├── WarningIcon.tsx
+│   │   │   ├── WarningTriangleIcon.tsx
+│   │   │   ├── WindowIcon.tsx
+│   │   │   └── index.ts
+│   │   └── index.ts
+│   ├── hooks/
+│   │   ├── index.ts
+│   │   └── useEscapeKey.ts
+│   ├── i18n/
+│   │   ├── en.ts
+│   │   ├── index.ts
+│   │   └── zh.ts
+│   ├── services/
+│   │   ├── audio/
+│   │   │   └── AudioService.ts
+│   │   ├── chat/
+│   │   │   ├── P2PChatService.ts
+│   │   │   └── recallPolicy.ts
+│   │   ├── danmaku/
+│   │   │   └── danmakuService.ts
+│   │   ├── fileShare/
+│   │   │   ├── FileShareService.ts
+│   │   │   ├── FileTransferService.ts
+│   │   │   └── index.ts
+│   │   ├── gamehud/
+│   │   │   └── gameHudService.ts
+│   │   ├── hotkey/
+│   │   │   ├── HotkeyManager.ts
+│   │   │   └── index.ts
+│   │   ├── lobby/
+│   │   │   ├── lobbyInvite.ts
+│   │   │   └── publicLobbies.ts
+│   │   ├── recent/
+│   │   │   └── recentService.ts
+│   │   ├── remoteControl/
+│   │   │   ├── RemoteControlService.ts
+│   │   │   └── keymap.ts
+│   │   ├── roomtools/
+│   │   │   └── countdownService.ts
+│   │   ├── screenShare/
+│   │   │   ├── ScreenShareService.ts
+│   │   │   └── relayTopology.ts
+│   │   ├── stats/
+│   │   │   └── statsService.ts
+│   │   ├── version/
+│   │   │   ├── VersionCheckService.ts
+│   │   │   └── versionPolicy.ts
+│   │   ├── voice/
+│   │   │   ├── SpeakingDetector.ts
+│   │   │   ├── audioDevices.ts
+│   │   │   ├── localVqeService.ts
+│   │   │   ├── playerVolumeMemory.ts
+│   │   │   ├── voiceChanger.ts
+│   │   │   └── voiceChangerService.ts
+│   │   ├── webrtc/
+│   │   │   ├── WebRTCClient.ts
+│   │   │   └── index.ts
+│   │   └── index.ts
+│   ├── stores/
+│   │   ├── appStore.ts
+│   │   ├── devtools.ts
+│   │   ├── hooks.ts
+│   │   ├── index.ts
+│   │   ├── initialize.ts
+│   │   ├── persistence.ts
+│   │   └── selectors.ts
+│   ├── theme/
+│   │   └── themePreference.ts
+│   ├── types/
+│   │   ├── fileShare.ts
+│   │   └── index.ts
+│   ├── App.css
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── vite-env.d.ts
+├── src-tauri/
+│   ├── capabilities/
+│   │   └── default.json
+│   ├── icons/
+│   │   ├── android/
+│   │   │   ├── mipmap-anydpi-v26/
+│   │   │   │   └── ic_launcher.xml
+│   │   │   ├── mipmap-hdpi/
+│   │   │   │   ├── ic_launcher.png
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   └── ic_launcher_round.png
+│   │   │   ├── mipmap-mdpi/
+│   │   │   │   ├── ic_launcher.png
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   └── ic_launcher_round.png
+│   │   │   ├── mipmap-xhdpi/
+│   │   │   │   ├── ic_launcher.png
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   └── ic_launcher_round.png
+│   │   │   ├── mipmap-xxhdpi/
+│   │   │   │   ├── ic_launcher.png
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   └── ic_launcher_round.png
+│   │   │   ├── mipmap-xxxhdpi/
+│   │   │   │   ├── ic_launcher.png
+│   │   │   │   ├── ic_launcher_foreground.png
+│   │   │   │   └── ic_launcher_round.png
+│   │   │   └── values/
+│   │   │       └── ic_launcher_background.xml
+│   │   ├── ios/
+│   │   │   ├── AppIcon-20x20@1x.png
+│   │   │   ├── AppIcon-20x20@2x-1.png
+│   │   │   ├── AppIcon-20x20@2x.png
+│   │   │   ├── AppIcon-20x20@3x.png
+│   │   │   ├── AppIcon-29x29@1x.png
+│   │   │   ├── AppIcon-29x29@2x-1.png
+│   │   │   ├── AppIcon-29x29@2x.png
+│   │   │   ├── AppIcon-29x29@3x.png
+│   │   │   ├── AppIcon-40x40@1x.png
+│   │   │   ├── AppIcon-40x40@2x-1.png
+│   │   │   ├── AppIcon-40x40@2x.png
+│   │   │   ├── AppIcon-40x40@3x.png
+│   │   │   ├── AppIcon-512@2x.png
+│   │   │   ├── AppIcon-60x60@2x.png
+│   │   │   ├── AppIcon-60x60@3x.png
+│   │   │   ├── AppIcon-76x76@1x.png
+│   │   │   ├── AppIcon-76x76@2x.png
+│   │   │   └── AppIcon-83.5x83.5@2x.png
+│   │   ├── 128x128.png
+│   │   ├── 128x128@2x.png
+│   │   ├── 32x32.png
+│   │   ├── 64x64.png
+│   │   ├── Square107x107Logo.png
+│   │   ├── Square142x142Logo.png
+│   │   ├── Square150x150Logo.png
+│   │   ├── Square284x284Logo.png
+│   │   ├── Square30x30Logo.png
+│   │   ├── Square310x310Logo.png
+│   │   ├── Square44x44Logo.png
+│   │   ├── Square71x71Logo.png
+│   │   ├── Square89x89Logo.png
+│   │   ├── StoreLogo.png
+│   │   ├── icon.icns
+│   │   ├── icon.ico
+│   │   └── icon.png
+│   ├── resources/
+│   │   └── binaries/
+│   │       └── minecraft-offline-agent.jar
+│   ├── src/
+│   │   ├── modules/
+│   │   │   ├── app_core.rs
+│   │   │   ├── chat_service.rs
+│   │   │   ├── config_manager.rs
+│   │   │   ├── easytier_advanced_commands.rs
+│   │   │   ├── error.rs
+│   │   │   ├── file_transfer.rs
+│   │   │   ├── hosts_manager.rs
+│   │   │   ├── lobby_manager.rs
+│   │   │   ├── mc_lan_bridge.rs
+│   │   │   ├── minecraft_agent.rs
+│   │   │   ├── minecraft_discovery.rs
+│   │   │   ├── minecraft_launcher.rs
+│   │   │   ├── mod.rs
+│   │   │   ├── network_service.rs
+│   │   │   ├── p2p_signaling.rs
+│   │   │   ├── remote_control.rs
+│   │   │   ├── resource_manager.rs
+│   │   │   ├── sonora_audio.rs
+│   │   │   ├── system_audio.rs
+│   │   │   ├── tauri_commands.rs
+│   │   │   ├── tauri_events.rs
+│   │   │   ├── voice_service.rs
+│   │   │   └── websocket_signaling.rs
+│   │   ├── lib.rs
+│   │   └── main.rs
+│   ├── .gitignore
+│   ├── Cargo.lock
+│   ├── Cargo.toml
+│   ├── build.rs
+│   └── tauri.conf.json
+├── .clippy.toml
+├── .gitignore
+├── .prettierignore
+├── .prettierrc.json
+├── .rustfmt.toml
+├── 0
+├── LGPL_LICENSE.txt
+├── LICENSE
+├── README.md
+├── README_EN.md
+├── buildout.txt
+├── eslint.config.js
+├── index.html
+├── latest.json
+├── package-lock.json
+├── package.json
+├── tsconfig.json
+├── tsconfig.node.json
+└── vite.config.ts

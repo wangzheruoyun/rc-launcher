@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  GENERATED FILE — DO NOT EDIT.
+
+  Source of truth: rust/crates/rc-launcher-core/i18n/en.properties
+  Regenerate with: python3 scripts/gen_android_strings.py
+  Verified in CI : python3 scripts/check_i18n.py
+
+  Translation of the zh-CN base catalogue; missing keys fall back to values/.
+-->
+<resources>
+    <!-- app -->
+    <string name="app_name">RC Launcher</string>
+    <string name="app_tagline">A high-performance Minecraft Java Edition launcher</string>
+
+    <!-- common -->
+    <string name="common_add">Add</string>
+    <string name="common_apply">Apply</string>
+    <string name="common_back">Back</string>
+    <string name="common_cancel">Cancel</string>
+    <string name="common_close">Close</string>
+    <string name="common_default">Default</string>
+    <string name="common_delete">Delete</string>
+    <string name="common_edit">Edit</string>
+    <string name="common_loading">Loading…</string>
+    <string name="common_next">Next</string>
+    <string name="common_ok">OK</string>
+    <string name="common_previous">Previous</string>
+    <string name="common_refresh">Refresh</string>
+    <string name="common_retry">Retry</string>
+    <string name="common_save">Save</string>
+    <string name="common_unavailable">Unavailable</string>
+
+    <!-- crash -->
+    <string name="crash_authentication_failure_advice">Re-login to the account (the token expired), or use an offline account for single-player.</string>
+    <string name="crash_authentication_failure_summary">the account session was rejected</string>
+    <string name="crash_clean_exit_advice">Nothing to do.</string>
+    <string name="crash_clean_exit_summary">the game exited normally</string>
+    <string name="crash_corrupted_file_advice">Re-download the version (and the failing mod / library): the file is truncated, usually after an interrupted download.</string>
+    <string name="crash_corrupted_file_summary">a game file is corrupt or incomplete</string>
+    <string name="crash_disk_full_advice">Free up storage and launch again.</string>
+    <string name="crash_disk_full_summary">the device is out of storage</string>
+    <string name="crash_game_error_advice">Check the stack trace in the log; removing the most recently added mod / resource pack usually fixes it.</string>
+    <string name="crash_game_error_summary">the game threw an unhandled exception</string>
+    <string name="crash_graphics_failure_advice">Try another renderer (GL4ES / Zink / ANGLE), disable shaders and lower the resolution; some drivers need OpenGL ES 3.</string>
+    <string name="crash_graphics_failure_summary">the renderer / GPU driver failed</string>
+    <string name="crash_killed_by_system_advice">Lower the memory allocation, close background apps and keep the launcher in the foreground; Android reclaims memory from background processes.</string>
+    <string name="crash_killed_by_system_summary">Android killed the game process</string>
+    <string name="crash_missing_main_class_advice">Repair or reinstall the version: the client jar or a loader library is missing from the classpath.</string>
+    <string name="crash_missing_main_class_summary">the game&apos;s main class is missing</string>
+    <string name="crash_missing_native_library_advice">Reinstall the runtime components (LWJGL / renderer) and make sure the instance&apos;s ABI matches the device.</string>
+    <string name="crash_missing_native_library_summary">a native library could not be loaded</string>
+    <string name="crash_mod_loader_failure_advice">Read the mod list in the log: a mod is missing a dependency or is built for another game/loader version. Remove or update it.</string>
+    <string name="crash_mod_loader_failure_summary">a mod or mod loader failed to start</string>
+    <string name="crash_native_crash_advice">Attach the hs_err_pid log when reporting. Try another renderer, disable mods/shaders and lower the memory allocation.</string>
+    <string name="crash_native_crash_summary">the Java virtual machine crashed</string>
+    <string name="crash_out_of_memory_advice">Raise -Xmx if the device has spare RAM, otherwise lower the render distance, remove heavy mods / shaders and reduce the resolution scale.</string>
+    <string name="crash_out_of_memory_summary">the game ran out of memory</string>
+    <string name="crash_permission_denied_advice">Grant storage permission, or move the game directory into the app&apos;s private storage.</string>
+    <string name="crash_permission_denied_summary">the launcher lacks filesystem permission</string>
+    <string name="crash_unknown_advice">Export the full log and report it; try launching without mods to narrow it down.</string>
+    <string name="crash_unknown_summary">the game crashed for an unknown reason</string>
+    <string name="crash_unsupported_java_version_advice">Switch the instance to the Java version the game requires (Java 8 for &lt;= 1.16, Java 17 for 1.17-1.20.4, Java 21 for 1.20.5+).</string>
+    <string name="crash_unsupported_java_version_summary">the selected Java version is incompatible</string>
+    <string name="crash_user_terminated_advice">Launch the game again when you are ready.</string>
+    <string name="crash_user_terminated_summary">the game was stopped by the launcher</string>
+
+    <!-- download -->
+    <string name="download_files_one">{count} file</string>
+    <string name="download_files_other">{count} files</string>
+
+    <!-- error -->
+    <string name="error_auth">Authentication failed: {detail}</string>
+    <string name="error_checksum">Checksum verification failed: {path}</string>
+    <string name="error_launch">Launch failed: {detail}</string>
+    <string name="error_missing_file">Missing file: {path}</string>
+    <string name="error_network">Network error: {detail}</string>
+    <string name="error_offline">Network unreachable, degraded to offline mode: {detail}</string>
+    <string name="error_rate_limited">Too many requests — please try again later</string>
+    <string name="error_retry_scheduled">Retry {attempt} starts in {delay_secs} seconds</string>
+    <string name="error_severity_fatal">Fatal</string>
+    <string name="error_severity_recoverable">Recoverable</string>
+    <string name="error_severity_transient">Transient</string>
+    <string name="error_timeout">Request timed out: {detail}</string>
+    <string name="error_unknown">Unknown error: {detail}</string>
+
+    <!-- language -->
+    <string name="language_en">English</string>
+    <string name="language_system">Follow system</string>
+    <string name="language_zh_cn">简体中文 (Simplified Chinese)</string>
+    <string name="language_zh_hant">繁體中文 (Traditional Chinese)</string>
+
+    <!-- launch -->
+    <string name="launch_state_crashed">Crashed</string>
+    <string name="launch_state_idle">Idle</string>
+    <string name="launch_state_launching">Launching</string>
+    <string name="launch_state_preparing">Preparing</string>
+    <string name="launch_state_running">Running</string>
+    <string name="launch_state_stopped">Stopped</string>
+
+    <!-- nav -->
+    <string name="nav_accounts">Accounts</string>
+    <string name="nav_downloads">Downloads</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_instances">Instances</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- screen -->
+    <string name="screen_awt_title">AWT / Swing compatibility layer</string>
+    <string name="screen_controller_title">Control mapping</string>
+    <string name="screen_install_title">Install a new instance</string>
+    <string name="screen_instance_detail_title">Instance details</string>
+
+    <!-- settings -->
+    <string name="settings_language_applied">Interface language switched to {language}</string>
+    <string name="settings_language_follow_system">Follow the system language</string>
+    <string name="settings_language_subtitle">Applied instantly — no restart required</string>
+    <string name="settings_language_title">Interface language</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_controller">Controller</string>
+    <string name="settings_section_directory">Directories &amp; logs</string>
+    <string name="settings_section_java">Java &amp; memory</string>
+    <string name="settings_section_language">Language &amp; region</string>
+    <string name="settings_section_network">Network optimisation (China mainland)</string>
+    <string name="settings_section_renderer">Renderer &amp; display</string>
+
+    <!-- theme -->
+    <string name="theme_night_dark">Dark</string>
+    <string name="theme_night_light">Light</string>
+    <string name="theme_night_system">Follow system</string>
+    <string name="theme_night_toggle">Toggle night mode</string>
+</resources>

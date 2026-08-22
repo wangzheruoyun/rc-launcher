@@ -1,0 +1,350 @@
+# Repository: FCL-Team/OpenAL
+# Default branch: 1.22.2-fcl
+# Total entries: 344
+# BFS fallback used: False
+# Format: directory tree snapshot
+
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── al/
+│   ├── eax/
+│   │   ├── api.cpp
+│   │   ├── api.h
+│   │   ├── call.cpp
+│   │   ├── call.h
+│   │   ├── effect.h
+│   │   ├── exception.cpp
+│   │   ├── exception.h
+│   │   ├── fx_slot_index.cpp
+│   │   ├── fx_slot_index.h
+│   │   ├── fx_slots.cpp
+│   │   ├── fx_slots.h
+│   │   ├── globals.cpp
+│   │   ├── globals.h
+│   │   ├── utils.cpp
+│   │   ├── utils.h
+│   │   └── x_ram.h
+│   ├── effects/
+│   │   ├── autowah.cpp
+│   │   ├── chorus.cpp
+│   │   ├── compressor.cpp
+│   │   ├── convolution.cpp
+│   │   ├── dedicated.cpp
+│   │   ├── distortion.cpp
+│   │   ├── echo.cpp
+│   │   ├── effects.cpp
+│   │   ├── effects.h
+│   │   ├── equalizer.cpp
+│   │   ├── fshifter.cpp
+│   │   ├── modulator.cpp
+│   │   ├── null.cpp
+│   │   ├── pshifter.cpp
+│   │   ├── reverb.cpp
+│   │   └── vmorpher.cpp
+│   ├── auxeffectslot.cpp
+│   ├── auxeffectslot.h
+│   ├── buffer.cpp
+│   ├── buffer.h
+│   ├── effect.cpp
+│   ├── effect.h
+│   ├── error.cpp
+│   ├── event.cpp
+│   ├── event.h
+│   ├── extension.cpp
+│   ├── filter.cpp
+│   ├── filter.h
+│   ├── listener.cpp
+│   ├── listener.h
+│   ├── source.cpp
+│   ├── source.h
+│   └── state.cpp
+├── alc/
+│   ├── backends/
+│   │   ├── alsa.cpp
+│   │   ├── alsa.h
+│   │   ├── base.cpp
+│   │   ├── base.h
+│   │   ├── coreaudio.cpp
+│   │   ├── coreaudio.h
+│   │   ├── dsound.cpp
+│   │   ├── dsound.h
+│   │   ├── jack.cpp
+│   │   ├── jack.h
+│   │   ├── loopback.cpp
+│   │   ├── loopback.h
+│   │   ├── null.cpp
+│   │   ├── null.h
+│   │   ├── oboe.cpp
+│   │   ├── oboe.h
+│   │   ├── opensl.cpp
+│   │   ├── opensl.h
+│   │   ├── oss.cpp
+│   │   ├── oss.h
+│   │   ├── pipewire.cpp
+│   │   ├── pipewire.h
+│   │   ├── portaudio.cpp
+│   │   ├── portaudio.h
+│   │   ├── pulseaudio.cpp
+│   │   ├── pulseaudio.h
+│   │   ├── sdl2.cpp
+│   │   ├── sdl2.h
+│   │   ├── sndio.cpp
+│   │   ├── sndio.h
+│   │   ├── solaris.cpp
+│   │   ├── solaris.h
+│   │   ├── wasapi.cpp
+│   │   ├── wasapi.h
+│   │   ├── wave.cpp
+│   │   ├── wave.h
+│   │   ├── winmm.cpp
+│   │   └── winmm.h
+│   ├── effects/
+│   │   ├── autowah.cpp
+│   │   ├── base.h
+│   │   ├── chorus.cpp
+│   │   ├── compressor.cpp
+│   │   ├── convolution.cpp
+│   │   ├── dedicated.cpp
+│   │   ├── distortion.cpp
+│   │   ├── echo.cpp
+│   │   ├── equalizer.cpp
+│   │   ├── fshifter.cpp
+│   │   ├── modulator.cpp
+│   │   ├── null.cpp
+│   │   ├── pshifter.cpp
+│   │   ├── reverb.cpp
+│   │   └── vmorpher.cpp
+│   ├── alc.cpp
+│   ├── alconfig.cpp
+│   ├── alconfig.h
+│   ├── alu.cpp
+│   ├── alu.h
+│   ├── context.cpp
+│   ├── context.h
+│   ├── device.cpp
+│   ├── device.h
+│   ├── inprogext.h
+│   └── panning.cpp
+├── build/
+│   └── .empty
+├── cmake/
+│   ├── FindALSA.cmake
+│   ├── FindAudioIO.cmake
+│   ├── FindFFmpeg.cmake
+│   ├── FindJACK.cmake
+│   ├── FindMySOFA.cmake
+│   ├── FindOSS.cmake
+│   ├── FindOboe.cmake
+│   ├── FindOpenSL.cmake
+│   ├── FindPortAudio.cmake
+│   ├── FindPulseAudio.cmake
+│   ├── FindSDL2.cmake
+│   ├── FindSndFile.cmake
+│   ├── FindSoundIO.cmake
+│   └── bin2h.script.cmake
+├── common/
+│   ├── albit.h
+│   ├── albyte.h
+│   ├── alcomplex.cpp
+│   ├── alcomplex.h
+│   ├── aldeque.h
+│   ├── alfstream.cpp
+│   ├── alfstream.h
+│   ├── almalloc.cpp
+│   ├── almalloc.h
+│   ├── alnumbers.h
+│   ├── alnumeric.h
+│   ├── aloptional.h
+│   ├── alspan.h
+│   ├── alstring.cpp
+│   ├── alstring.h
+│   ├── atomic.h
+│   ├── comptr.h
+│   ├── dynload.cpp
+│   ├── dynload.h
+│   ├── intrusive_ptr.h
+│   ├── opthelpers.h
+│   ├── phase_shifter.h
+│   ├── polyphase_resampler.cpp
+│   ├── polyphase_resampler.h
+│   ├── pragmadefs.h
+│   ├── ringbuffer.cpp
+│   ├── ringbuffer.h
+│   ├── strutils.cpp
+│   ├── strutils.h
+│   ├── threads.cpp
+│   ├── threads.h
+│   ├── vecmat.h
+│   ├── vector.h
+│   └── win_main_utf8.h
+├── core/
+│   ├── effects/
+│   │   └── base.h
+│   ├── filters/
+│   │   ├── biquad.cpp
+│   │   ├── biquad.h
+│   │   ├── nfc.cpp
+│   │   ├── nfc.h
+│   │   ├── splitter.cpp
+│   │   └── splitter.h
+│   ├── mixer/
+│   │   ├── defs.h
+│   │   ├── hrtfbase.h
+│   │   ├── hrtfdefs.h
+│   │   ├── mixer_c.cpp
+│   │   ├── mixer_neon.cpp
+│   │   ├── mixer_sse.cpp
+│   │   ├── mixer_sse2.cpp
+│   │   ├── mixer_sse3.cpp
+│   │   └── mixer_sse41.cpp
+│   ├── ambdec.cpp
+│   ├── ambdec.h
+│   ├── ambidefs.cpp
+│   ├── ambidefs.h
+│   ├── async_event.h
+│   ├── bformatdec.cpp
+│   ├── bformatdec.h
+│   ├── bs2b.cpp
+│   ├── bs2b.h
+│   ├── bsinc_defs.h
+│   ├── bsinc_tables.cpp
+│   ├── bsinc_tables.h
+│   ├── buffer_storage.cpp
+│   ├── buffer_storage.h
+│   ├── bufferline.h
+│   ├── context.cpp
+│   ├── context.h
+│   ├── converter.cpp
+│   ├── converter.h
+│   ├── cpu_caps.cpp
+│   ├── cpu_caps.h
+│   ├── dbus_wrap.cpp
+│   ├── dbus_wrap.h
+│   ├── devformat.cpp
+│   ├── devformat.h
+│   ├── device.cpp
+│   ├── device.h
+│   ├── effectslot.cpp
+│   ├── effectslot.h
+│   ├── except.cpp
+│   ├── except.h
+│   ├── fmt_traits.cpp
+│   ├── fmt_traits.h
+│   ├── fpu_ctrl.cpp
+│   ├── fpu_ctrl.h
+│   ├── front_stablizer.h
+│   ├── helpers.cpp
+│   ├── helpers.h
+│   ├── hrtf.cpp
+│   ├── hrtf.h
+│   ├── logging.cpp
+│   ├── logging.h
+│   ├── mastering.cpp
+│   ├── mastering.h
+│   ├── mixer.cpp
+│   ├── mixer.h
+│   ├── resampler_limits.h
+│   ├── rtkit.cpp
+│   ├── rtkit.h
+│   ├── uhjfilter.cpp
+│   ├── uhjfilter.h
+│   ├── uiddefs.cpp
+│   ├── voice.cpp
+│   ├── voice.h
+│   └── voice_change.h
+├── docs/
+│   ├── 3D7.1.txt
+│   ├── ambdec.txt
+│   ├── ambisonics.txt
+│   ├── env-vars.txt
+│   └── hrtf.txt
+├── examples/
+│   ├── common/
+│   │   ├── alhelpers.c
+│   │   └── alhelpers.h
+│   ├── alconvolve.c
+│   ├── alffplay.cpp
+│   ├── alhrtf.c
+│   ├── allatency.c
+│   ├── alloopback.c
+│   ├── almultireverb.c
+│   ├── alplay.c
+│   ├── alrecord.c
+│   ├── alreverb.c
+│   ├── alstream.c
+│   ├── alstreamcb.cpp
+│   └── altonegen.c
+├── hrtf/
+│   └── Default HRTF.mhr
+├── include/
+│   └── AL/
+│       ├── al.h
+│       ├── alc.h
+│       ├── alext.h
+│       ├── efx-creative.h
+│       ├── efx-presets.h
+│       └── efx.h
+├── presets/
+│   ├── 3D7.1.ambdec
+│   ├── hexagon.ambdec
+│   ├── itu5.1-nocenter.ambdec
+│   ├── itu5.1.ambdec
+│   ├── presets.txt
+│   ├── rectangle.ambdec
+│   └── square.ambdec
+├── resources/
+│   ├── openal32.rc
+│   ├── resource.h
+│   ├── router.rc
+│   └── soft_oal.rc
+├── router/
+│   ├── al.cpp
+│   ├── alc.cpp
+│   ├── router.cpp
+│   └── router.h
+├── utils/
+│   ├── alsoft-config/
+│   │   ├── CMakeLists.txt
+│   │   ├── main.cpp
+│   │   ├── mainwindow.cpp
+│   │   ├── mainwindow.h
+│   │   ├── mainwindow.ui
+│   │   ├── verstr.cpp
+│   │   └── verstr.h
+│   ├── makemhr/
+│   │   ├── loaddef.cpp
+│   │   ├── loaddef.h
+│   │   ├── loadsofa.cpp
+│   │   ├── loadsofa.h
+│   │   ├── makemhr.cpp
+│   │   └── makemhr.h
+│   ├── CIAIR.def
+│   ├── IRC_1005.def
+│   ├── MIT_KEMAR.def
+│   ├── MIT_KEMAR_sofa.def
+│   ├── SCUT_KEMAR.def
+│   ├── getopt.c
+│   ├── getopt.h
+│   ├── openal-info.c
+│   ├── sofa-info.cpp
+│   ├── sofa-support.cpp
+│   ├── sofa-support.h
+│   ├── uhjdecoder.cpp
+│   └── uhjencoder.cpp
+├── .gitignore
+├── .travis.yml
+├── BSD-3Clause
+├── CMakeLists.txt
+├── COPYING
+├── ChangeLog
+├── OpenALConfig.cmake.in
+├── README.md
+├── XCompile-Android.txt
+├── XCompile.txt
+├── alsoftrc.sample
+├── appveyor.yml
+├── config.h.in
+├── openal.pc.in
+├── version.cmake
+└── version.h.in
