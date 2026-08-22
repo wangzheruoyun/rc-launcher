@@ -334,4 +334,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Run the emulator headless on CI: without -no-window the emulator
+          # waits for a display and never reaches sys.boot_completed, so the
+          # runner's `adb shell getprop sys.boot_completed` poll loops forever.
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          boot-timeout: 600
           script: ./gradlew connectedDebugAndroidTest --continue
