@@ -86,7 +86,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rust-core-${{ matrix.target }}
-          path: core/src/main/jniLibs/${{ matrix.target }}/librc_launcher.so
+          # cargo-ndk emits the .so under the *Android ABI* folder name
+          # (e.g. arm64-v8a), not the rust target triple (aarch64-linux-android),
+          # so we match it with a glob instead of hard-coding the triple.
+          path: core/src/main/jniLibs/**/librc_launcher.so
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
