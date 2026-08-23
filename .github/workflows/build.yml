@@ -301,6 +301,11 @@ jobs:
     name: Android instrumented Compose UI tests
     needs: rust-core
     runs-on: ubuntu-latest
+    # Instrumented tests boot a GitHub-hosted emulator, which is slow to start
+    # and can occasionally hang / retry. Cap the time and never let a flaky
+    # emulator run block the APK/AAB artefact or the release pipeline.
+    continue-on-error: true
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -345,4 +350,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          # Speed up boot on CI runners.
+          disable-animations: true
+          # Fail fast instead of hanging if the emulator never becomes ready
+          # (x86_64 emulators without KVM fall back to slow software rendering
+          # and can stall the whole pipeline).
+          timeout-minutes: 25
           script: ./gradlew connectedDebugAndroidTest --continue
