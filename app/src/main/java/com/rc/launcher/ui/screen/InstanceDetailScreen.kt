@@ -85,9 +85,9 @@ fun InstanceDetailScreen(
 
     LaunchedEffect(id) { vm.load(id) }
 
-    val launching = when (launchState) {
-        is LaunchState.Launching -> launchState.instanceId == id
-        is LaunchState.Running -> launchState.instanceId == id
+    val launching = when (val ls = launchState) {
+        is LaunchState.Launching -> ls.instanceId == id
+        is LaunchState.Running -> ls.instanceId == id
         else -> false
     }
 

@@ -76,7 +76,7 @@ private class JsonParser(private val src: String) {
             if (peek() != ':') return null
             pos++ // consume ':'
             val value = parseValue() ?: return null
-            map[key] = value
+            map[key.value] = value
             skipWs()
             when (peek()) {
                 ',' -> { pos++; continue }
@@ -218,7 +218,7 @@ private fun writeString(s: String, sb: StringBuilder) {
             '\r' -> sb.append("\\r")
             '\t' -> sb.append("\\t")
             '\b' -> sb.append("\\b")
-            '\f' -> sb.append("\\u000C")
+            '\u000C' -> sb.append("\\u000C")
             else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code))
             else sb.append(c)
         }

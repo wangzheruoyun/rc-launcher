@@ -96,7 +96,7 @@ fun HomeScreen(
                     Text("主页", style = MaterialTheme.typography.headlineSmall)
                     Text(
                         text = when (val cs = coreState) {
-                            is MainUiState.Ready -> "核心 ${coreState.coreVersion} 已就绪"
+                            is MainUiState.Ready -> "核心 ${cs.coreVersion} 已就绪"
                             is MainUiState.Loading -> "正在连接核心…"
                             is MainUiState.Error -> "核心不可用：${cs.message}"
                         },

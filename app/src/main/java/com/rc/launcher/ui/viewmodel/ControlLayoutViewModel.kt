@@ -92,6 +92,7 @@ class ControlLayoutViewModel(
             when (el) {
                 is VirtualButton -> el.copy(x = x.coerceIn(0f, 1f), y = y.coerceIn(0f, 1f))
                 is VirtualJoystick -> el.copy(x = x.coerceIn(0f, 1f), y = y.coerceIn(0f, 1f))
+                else -> el
             }
         }
     }

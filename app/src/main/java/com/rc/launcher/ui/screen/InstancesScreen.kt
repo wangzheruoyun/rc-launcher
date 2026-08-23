@@ -38,9 +38,9 @@ fun InstancesScreen(
 ) {
     val instances by dashboard.instances.collectAsStateWithLifecycle()
     val launchState by dashboard.launchState.collectAsStateWithLifecycle()
-    val launchingId = when (launchState) {
-        is LaunchState.Launching -> launchState.instanceId
-        is LaunchState.Running -> launchState.instanceId
+    val launchingId = when (val ls = launchState) {
+        is LaunchState.Launching -> ls.instanceId
+        is LaunchState.Running -> ls.instanceId
         else -> null
     }
 
