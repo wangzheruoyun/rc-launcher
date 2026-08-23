@@ -31,7 +31,8 @@ import androidx.compose.ui.input.key.nativeKeyCode
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
-import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer
+import androidx.compose.ui.input.pointer.Button.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
@@ -163,8 +164,8 @@ fun AwtCanvasSurface(
                             continue
                         }
                         val button = when {
-                            event.buttons.isSecondaryPressed -> AwtMouseButton.RIGHT
-                            event.buttons.isTertiaryPressed -> AwtMouseButton.MIDDLE
+                            event.buttons.pressedButtons.contains(Button.secondary) -> AwtMouseButton.RIGHT
+                            event.buttons.pressedButtons.contains(Button.tertiary) -> AwtMouseButton.MIDDLE
                             else -> touchButton
                         }
                         val phase = when {
