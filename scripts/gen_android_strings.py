@@ -54,7 +54,7 @@ def escape(value: str) -> str:
     `@`/`?` are only special at the *start* of a resource value, and a leading /
     trailing space would be trimmed by aapt, so both are protected.
     """
-    out = sax.escape(value).replace('"', "&quot;").replace("'", "&apos;")
+    out = sax.escape(value).replace('"', "&quot;").replace("'", "\'")
     if out.startswith(("@", "?")):
         out = "\\" + out
     if out != out.strip():

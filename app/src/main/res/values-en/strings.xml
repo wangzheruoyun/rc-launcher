@@ -47,8 +47,8 @@
     <string name="crash_killed_by_system_advice">Lower the memory allocation, close background apps and keep the launcher in the foreground; Android reclaims memory from background processes.</string>
     <string name="crash_killed_by_system_summary">Android killed the game process</string>
     <string name="crash_missing_main_class_advice">Repair or reinstall the version: the client jar or a loader library is missing from the classpath.</string>
-    <string name="crash_missing_main_class_summary">the game&apos;s main class is missing</string>
-    <string name="crash_missing_native_library_advice">Reinstall the runtime components (LWJGL / renderer) and make sure the instance&apos;s ABI matches the device.</string>
+    <string name="crash_missing_main_class_summary">the game's main class is missing</string>
+    <string name="crash_missing_native_library_advice">Reinstall the runtime components (LWJGL / renderer) and make sure the instance's ABI matches the device.</string>
     <string name="crash_missing_native_library_summary">a native library could not be loaded</string>
     <string name="crash_mod_loader_failure_advice">Read the mod list in the log: a mod is missing a dependency or is built for another game/loader version. Remove or update it.</string>
     <string name="crash_mod_loader_failure_summary">a mod or mod loader failed to start</string>
@@ -56,7 +56,7 @@
     <string name="crash_native_crash_summary">the Java virtual machine crashed</string>
     <string name="crash_out_of_memory_advice">Raise -Xmx if the device has spare RAM, otherwise lower the render distance, remove heavy mods / shaders and reduce the resolution scale.</string>
     <string name="crash_out_of_memory_summary">the game ran out of memory</string>
-    <string name="crash_permission_denied_advice">Grant storage permission, or move the game directory into the app&apos;s private storage.</string>
+    <string name="crash_permission_denied_advice">Grant storage permission, or move the game directory into the app's private storage.</string>
     <string name="crash_permission_denied_summary">the launcher lacks filesystem permission</string>
     <string name="crash_unknown_advice">Export the full log and report it; try launching without mods to narrow it down.</string>
     <string name="crash_unknown_summary">the game crashed for an unknown reason</string>
