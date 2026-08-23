@@ -155,6 +155,8 @@ jobs:
     name: Android APK / AAB
     needs: rust-core
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -211,7 +213,7 @@ jobs:
       # Skipped when the secret is absent so fork PRs / dry-runs still sign
       # with the debug key (see app/build.gradle.kts).
       - name: Decode release keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |

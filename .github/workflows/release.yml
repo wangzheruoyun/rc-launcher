@@ -124,7 +124,7 @@ jobs:
         with:
           name: app-release-aab
           path: dist
-          if-no-files-found: ignore
+        continue-on-error: true
 
       - name: Generate SHA-256 checksums
         working-directory: dist
