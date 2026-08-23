@@ -288,7 +288,6 @@ private fun LoaderVersionStep(
             ) {
                 androidx.compose.foundation.layout.Row(
                     modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(lv.displayName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))

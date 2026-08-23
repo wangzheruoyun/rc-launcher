@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rc.launcher.ui.resource.ResourceUsage
+import androidx.compose.foundation.layout.padding
 
 /**
  * Floating frame-rate / performance HUD (task 12 "悬浮帧率 HUD"), modelled after

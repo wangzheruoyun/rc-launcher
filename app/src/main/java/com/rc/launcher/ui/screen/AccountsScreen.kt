@@ -61,6 +61,7 @@ import com.rc.launcher.ui.viewmodel.AccountViewModel
 import com.rc.launcher.ui.viewmodel.LoginState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 
 /**
  * Account-management screen (task 16).

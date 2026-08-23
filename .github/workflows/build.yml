@@ -93,7 +93,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rust-core-${{ matrix.target }}
-          path: core/src/main/jniLibs/${{ matrix.abi }}/librc_launcher.so
+          path: core/src/main/jniLibs/${{ matrix.abi }}
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------

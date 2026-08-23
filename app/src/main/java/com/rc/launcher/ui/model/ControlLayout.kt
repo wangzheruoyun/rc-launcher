@@ -182,6 +182,7 @@ data class ControlLayout(
             when (it) {
                 is VirtualButton -> it.normalized()
                 is VirtualJoystick -> it.normalized()
+                else -> it
             }
         },
     )
@@ -322,6 +323,7 @@ fun ControlLayout.toJsonValue(): JsonValue {
                     "k" to JsonValue.Str(el.kind.name),
                 ),
             )
+            else -> JsonValue.Null,
         }
     }
     return JsonValue.Obj(

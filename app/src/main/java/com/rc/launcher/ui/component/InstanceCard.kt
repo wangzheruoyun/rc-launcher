@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rc.launcher.ui.model.GameInstance
 import com.rc.launcher.ui.model.lastPlayedLabel
+import androidx.compose.foundation.layout.padding
 
 /**
  * Game instance card (task 12): cover, name, loader badge, last-played time and

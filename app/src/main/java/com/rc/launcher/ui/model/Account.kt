@@ -72,8 +72,8 @@ sealed interface Account {
 
 /** Redacted Microsoft account (no access / refresh tokens). */
 data class MicrosoftAccount(
-    val uuid: String = "",
-    val username: String = "",
+    override val uuid: String = "",
+    override val username: String = "",
     val clientId: String = "",
     val xuid: String? = null,
     val expiresAt: Long = 0,
@@ -91,8 +91,8 @@ data class MicrosoftAccount(
 
 /** Offline (cracked / no-network) account. */
 data class OfflineAccount(
-    val uuid: String = "",
-    val username: String = "",
+    override val uuid: String = "",
+    override val username: String = "",
 ) : Account {
     override val kind: AccountKind get() = AccountKind.OFFLINE
 }

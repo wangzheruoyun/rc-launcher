@@ -76,7 +76,7 @@ private class JsonParser(private val src: String) {
             if (peek() != ':') return null
             pos++ // consume ':'
             val value = parseValue() ?: return null
-            map[key.value] = value
+            map[key] = value
             skipWs()
             when (peek()) {
                 ',' -> { pos++; continue }

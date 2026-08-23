@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rc.launcher.ui.resource.ResourceUsage
 import com.rc.launcher.ui.resource.formatBytes
+import androidx.compose.foundation.layout.padding
 
 /**
  * Compact "资源占用" panel (task 12): memory / storage / CPU with progress bars.
