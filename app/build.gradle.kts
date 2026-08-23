@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
     id("io.gitlab.arturbosch.detekt")
     id("org.jlleitschuh.gradle.ktlint")
 }
@@ -69,6 +68,13 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // Kotlin 1.9.24 ships the Compose compiler as a separate extension; the
+    // dedicated `org.jetbrains.kotlin.plugin.compose` Gradle plugin only exists
+    // for Kotlin 2.0+, so enable Compose the 1.9.x way.
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
 
     // Robolectric-backed JVM Compose UI tests (task 21) need the Android
