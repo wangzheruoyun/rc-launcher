@@ -42,11 +42,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - aarch64-linux-android   # arm64-v8a
-          - armv7-linux-androideabi # armeabi-v7a
-          - x86_64-linux-android    # x86_64
-          - i686-linux-android      # x86
+        include:
+          - target: aarch64-linux-android
+            abi: arm64-v8a
+          - target: armv7-linux-androideabi
+            abi: armeabi-v7a
+          - target: x86_64-linux-android
+            abi: x86_64
+          - target: i686-linux-android
+            abi: x86
     steps:
       - uses: actions/checkout@v4
 
@@ -82,11 +86,25 @@ jobs:
         working-directory: rust
         run: cargo ndk -t ${{ matrix.target }} -o ../core/src/main/jniLibs build --release
 
+      # cargo-ndk emits the .so under an Android-ABI-named subfolder (e.g.
+      # arm64-v8a) of the -o directory, not under the Rust target triple.
+      # Normalise into the ABI folder Gradle expects so the upload + assemble
+      # steps are unambiguous regardless of cargo-ndk's exact output layout.
+      - name: Normalize native library path
+        run: |
+          set -euo pipefail
+          src="$(find core/src/main/jniLibs -name 'librc_launcher.so' | head -n1)"
+          test -n "$src" || { echo "::error::librc_launcher.so not found after cargo ndk build"; exit 1; }
+          dst="core/src/main/jniLibs/${{ matrix.abi }}"
+          mkdir -p "$dst"
+          cp -f "$src" "$dst/librc_launcher.so"
+          echo "Normalized $src -> $dst/librc_launcher.so"
+
       - name: Upload .so artifact
         uses: actions/upload-artifact@v4
         with:
           name: rust-core-${{ matrix.target }}
-          path: core/src/main/jniLibs/${{ matrix.target }}/librc_launcher.so
+          path: core/src/main/jniLibs/${{ matrix.abi }}/librc_launcher.so
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
