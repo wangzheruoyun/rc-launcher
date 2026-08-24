@@ -119,7 +119,7 @@ private class JsonParser(private val src: String) {
                 c == '"' -> return JsonValue.Str(sb.toString())
                 c == '\\' -> {
                     if (pos >= src.length) return null
-                    when (val ec = src[pos++]) {
+                    when (src[pos++]) {
                         '"' -> sb.append('"')
                         '\\' -> sb.append('\\')
                         '/' -> sb.append('/')

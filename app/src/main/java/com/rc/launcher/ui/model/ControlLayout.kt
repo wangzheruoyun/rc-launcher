@@ -111,7 +111,7 @@ data class VirtualButton(
         x = x.coerceIn(0f, 1f),
         y = y.coerceIn(0f, 1f),
         size = size.coerceIn(MIN_SIZE, MAX_SIZE),
-        keys = keys.filter { it is MappedKey }.distinct(),
+        keys = keys.distinct(),
     )
 
     val displayLabel: String
