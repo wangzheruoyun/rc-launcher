@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.rc.launcher.ui.model.json.JsonValue
 import com.rc.launcher.ui.model.json.parseJson
+import com.rc.launcher.ui.model.json.toJsonString
 
 /**
  * Persistence contract for custom [ControlLayout]s (task 15).

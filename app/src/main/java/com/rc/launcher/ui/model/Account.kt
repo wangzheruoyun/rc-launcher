@@ -2,6 +2,7 @@ package com.rc.launcher.ui.model
 
 import com.rc.launcher.ui.model.json.JsonValue
 import com.rc.launcher.ui.model.json.parseJson
+import com.rc.launcher.ui.model.json.toJsonString
 
 /**
  * Account model for the account-management UI (task 16).

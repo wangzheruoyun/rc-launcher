@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.align
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.material3.Button
@@ -140,7 +139,6 @@ fun ControllerScreen(
                         .height(360.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(Color.Black.copy(alpha = 0.22f))
-                        .align(Alignment.CenterHorizontally)
                         .onSizeChanged { surfaceSize.value = it },
                 ) {
                     val surface = surfaceSize.value
@@ -328,6 +326,7 @@ private fun selectedElementEditor(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun buttonEditor(viewModel: ControlLayoutViewModel, btn: VirtualButton) {
     OutlinedTextField(

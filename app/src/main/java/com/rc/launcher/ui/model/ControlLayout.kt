@@ -2,6 +2,7 @@ package com.rc.launcher.ui.model
 
 import com.rc.launcher.ui.model.json.JsonValue
 import com.rc.launcher.ui.model.json.parseJson
+import com.rc.launcher.ui.model.json.toJsonString
 
 /**
  * Controller / input-mapping model for the launcher (task 15).

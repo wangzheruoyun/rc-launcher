@@ -79,9 +79,23 @@ fn install(root: &Path, java_script: &str) -> LaunchOptions {
     ] {
         fs::write(lwjgl.join(jar), b"jar").unwrap();
     }
+    // The launch engine preflights the LWJGL bundle and rejects it when a
+    // *required* native (.so) is absent. The fake tree ships placeholder
+    // natives so `prepare()` validates the bundle instead of erroring out.
+    let natives_dir = lwjgl.join("natives").join("arm64-v8a");
+    for so in ["liblwjgl.so", "liblwjgl_opengl.so"] {
+        fs::write(natives_dir.join(so), b"so").unwrap();
+    }
     let cacio = app_runtime.join("caciocavallo17");
     fs::create_dir_all(&cacio).unwrap();
-    for jar in ["cacio-shared-1.19.1-SNAPSHOT.jar", "cacio-agent.jar"] {
+    // The AWT/cacio bridge validation requires the *required* artifacts (the
+    // CTC toolkit + off-screen graphics environment) to be present. Ship
+    // placeholder jars so the preflight accepts the fake bundle.
+    for jar in [
+        "cacio-shared-1.19.1-SNAPSHOT.jar",
+        "cacio-tta-1.19.1-SNAPSHOT.jar",
+        "cacio-agent.jar",
+    ] {
         fs::write(cacio.join(jar), b"jar").unwrap();
     }
 

@@ -95,8 +95,8 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("主页", style = MaterialTheme.typography.headlineSmall)
+                    val coreStateVal = coreState
                     Text(
-                        val coreStateVal = coreState
                         text = when (coreStateVal) {
                             is MainUiState.Ready -> "核心 ${coreStateVal.coreVersion} 已就绪"
                             is MainUiState.Loading -> "正在连接核心…"
