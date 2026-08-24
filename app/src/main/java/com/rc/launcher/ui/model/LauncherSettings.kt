@@ -203,7 +203,7 @@ data class LauncherSettings(
         const val MAX_SCALE = 2f
         const val CONTROLLER_LAYOUT_DEFAULT = "default"
 
-        /** Heuristic auto heap: ~1/3 of device RAM, clamped to [MIN..MAX_HEAP_MB]. */
+        /** Heuristic auto heap: ~1/3 of device RAM, clamped to MIN_HEAP_MB..MAX_HEAP_MB. */
         fun autoHeapFor(deviceTotalMb: Int): Int {
             if (deviceTotalMb <= 0) return DEFAULT_HEAP_MB
             return (deviceTotalMb * 0.33).toInt()

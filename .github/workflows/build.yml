@@ -171,22 +171,35 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: rust-core-*
-          merge-multiple: true
+          merge-multiple: false
           path: rust-artifacts
 
-      # upload-artifact preserves the full workspace-relative path, so we copy
-      # each .so into the canonical jniLibs/<triple>/ location for :core.
+      # Each artifact (rust-core-<target>) contains librec_launcher.so at its
+      # root. Map the Rust target triple to its Android ABI folder so :core's
+      # jniLibs picks them up as a valid ABI (arm64-v8a / armeabi-v7a /
+      # x86_64 / x86) instead of a non-ABI directory name.
       - name: Assemble native libraries
         run: |
           mkdir -p core/src/main/jniLibs
-          for f in $(find rust-artifacts -name 'librc_launcher.so'); do
-            triple=$(echo "$f" | sed -E 's#.*/([^/]+)/librc_launcher.so#\1#')
-            mkdir -p "core/src/main/jniLibs/$triple"
-            cp -f "$f" "core/src/main/jniLibs/$triple/librc_launcher.so"
+          declare -A ABI_MAP=(
+            [aarch64-linux-android]=arm64-v8a
+            [armv7-linux-androideabi]=armeabi-v7a
+            [x86_64-linux-android]=x86_64
+            [i686-linux-android]=x86
+          )
+          for target in "${!ABI_MAP[@]}"; do
+            abi="${ABI_MAP[$target]}"
+            src=$(find "rust-artifacts/rust-core-$target" -name 'librc_launcher.so' 2>/dev/null | head -n1)
+            if [ -n "$src" ]; then
+              mkdir -p "core/src/main/jniLibs/$abi"
+              cp -f "$src" "core/src/main/jniLibs/$abi/librc_launcher.so"
+            else
+              echo "::error::missing librec_launcher.so for $target ($abi)"
+              exit 1
+            fi
           done
           echo "Assembled native libraries:"
           find core/src/main/jniLibs -name '*.so' | sort
-
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

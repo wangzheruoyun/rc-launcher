@@ -57,7 +57,7 @@ private class JsonParser(private val src: String) {
         return when (peek()) {
             '{' -> parseObject()
             '[' -> parseArray()
-            '"' -> parseString()
+            '"' -> parseString()?.let { JsonValue.Str(it) }
             't', 'f' -> parseBool()
             'n' -> parseNull()
             '-', in '0'..'9' -> parseNumber()
@@ -76,7 +76,7 @@ private class JsonParser(private val src: String) {
             if (peek() != ':') return null
             pos++ // consume ':'
             val value = parseValue() ?: return null
-            map[key.value] = value
+            map[key] = value
             skipWs()
             when (peek()) {
                 ',' -> { pos++; continue }
@@ -105,14 +105,14 @@ private class JsonParser(private val src: String) {
         return JsonValue.Arr(items)
     }
 
-    private fun parseString(): JsonValue? {
+    private fun parseString(): String? {
         if (peek() != '"') return null
         pos++ // consume opening quote
         val sb = StringBuilder()
         while (pos < src.length) {
             val c = src[pos++]
             when {
-                c == '"' -> return JsonValue.Str(sb.toString())
+                c == '"' -> return sb.toString()
                 c == '\\' -> {
                     if (pos >= src.length) return null
                     when (val ec = src[pos++]) {
