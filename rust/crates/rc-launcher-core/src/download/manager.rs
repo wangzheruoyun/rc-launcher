@@ -460,14 +460,25 @@ impl DownloadManager {
         let start = Instant::now();
         // Stream the whole resource straight into the temp file — no in-memory
         // buffering of the body (task 25 — large-file streaming download).
-        let mut file = tfs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(&temp)
-            .await
-            .map_err(RcError::Io)?;
-        let total = self.retry_fetch_into(&task.url, &mut file).await?;
+        //
+        // The writer is scoped so it is flushed (`sync_all`) and *dropped* before
+        // `finalize` opens the same path through a separate descriptor to hash and
+        // rename it. If the still-open writer were kept alive across `finalize`,
+        // the destination inode could be observed empty/truncated on some runtimes
+        // (the bytes would only reach the OS when the handle is later dropped),
+        // which broke `falls_back_to_single_shot_when_no_range`.
+        let total = {
+            let mut file = tfs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&temp)
+                .await
+                .map_err(RcError::Io)?;
+            let t = self.retry_fetch_into(&task.url, &mut file).await?;
+            file.sync_all().await.map_err(RcError::Io)?;
+            t
+        };
         self.finalize(task, &temp, total, false, start.elapsed())
             .await
     }
