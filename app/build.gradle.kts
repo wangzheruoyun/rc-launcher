@@ -110,6 +110,27 @@ android {
     }
 }
 
+// Force a single, coherent Compose UI version. The dependency graph
+// (material3 / material-icons-extended / navigation-compose ...) can otherwise
+// pull the LATEST published compose-ui (1.7.0+, whose `ui` artifact no longer
+// ships PointerButtons / PointerButton / the `pressed` set), which breaks the
+// build. Pin all compose-ui artifacts to 1.6.8 (Kotlin 1.9.24 / Compose
+// compiler 1.5.14 compatible) so the code's PointerButtons API is available.
+configurations.all {
+    resolutionStrategy {
+        force(
+            "androidx.compose.ui:ui:1.6.8",
+            "androidx.compose.ui:ui-graphics:1.6.8",
+            "androidx.compose.ui:ui-tooling-preview:1.6.8",
+            "androidx.compose.ui:ui-tooling:1.6.8",
+            "androidx.compose.ui:ui-test-junit4:1.6.8",
+            "androidx.compose.ui:ui-test-manifest:1.6.8",
+            "androidx.compose.material:material-icons-extended:1.6.8",
+            "androidx.compose.material3:material3:1.2.1",
+        )
+    }
+}
+
 dependencies {
     // Project modules — clear dependency direction:
     //   :app -> :core (Rust/JNI bridge) -> :runtime (JRE/library mgmt)
