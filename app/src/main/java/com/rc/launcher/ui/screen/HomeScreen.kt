@@ -69,9 +69,10 @@ fun HomeScreen(
     val usage by rememberResourceUsage()
     val showHud = hudOn || launchState is LaunchState.Running
 
-    val launchingId = when (launchState) {
-        is LaunchState.Launching -> launchState.instanceId
-        is LaunchState.Running -> launchState.instanceId
+    val launchStateVal = launchState
+    val launchingId = when (launchStateVal) {
+        is LaunchState.Launching -> launchStateVal.instanceId
+        is LaunchState.Running -> launchStateVal.instanceId
         else -> null
     }
 
@@ -95,10 +96,11 @@ fun HomeScreen(
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("主页", style = MaterialTheme.typography.headlineSmall)
                     Text(
-                        text = when (coreState) {
-                            is MainUiState.Ready -> "核心 ${coreState.coreVersion} 已就绪"
+                        val coreStateVal = coreState
+                        text = when (coreStateVal) {
+                            is MainUiState.Ready -> "核心 ${coreStateVal.coreVersion} 已就绪"
                             is MainUiState.Loading -> "正在连接核心…"
-                            is MainUiState.Error -> "核心不可用：${coreState.message}"
+                            is MainUiState.Error -> "核心不可用：${coreStateVal.message}"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,

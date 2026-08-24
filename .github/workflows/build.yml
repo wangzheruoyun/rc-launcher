@@ -182,7 +182,7 @@ jobs:
           for f in $(find rust-artifacts -name 'librc_launcher.so'); do
             triple=$(echo "$f" | sed -E 's#.*/([^/]+)/librc_launcher.so#\1#')
             mkdir -p "core/src/main/jniLibs/$triple"
-            cp -f "$f" "core/src/main/jniLibs/$triple/librc_launcher.so"
+            cp -f "$f" "core/src/main/jniLibs/$triple"
           done
           echo "Assembled native libraries:"
           find core/src/main/jniLibs -name '*.so' | sort

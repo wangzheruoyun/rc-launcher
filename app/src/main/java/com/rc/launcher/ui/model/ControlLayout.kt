@@ -323,7 +323,7 @@ fun ControlLayout.toJsonValue(): JsonValue {
                     "k" to JsonValue.Str(el.kind.name),
                 ),
             )
-            else -> JsonValue.Null,
+            else -> JsonValue.Null
         }
     }
     return JsonValue.Obj(
