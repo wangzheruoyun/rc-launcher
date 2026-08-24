@@ -1,7 +1,7 @@
 package com.rc.launcher.ui.model
 
 import kotlin.math.roundToInt
-import kotlin.math.minOf
+import kotlin.comparisons.minOf
 
 /**
  * A download mirror usable for the China mainland (task 3 / task 14).

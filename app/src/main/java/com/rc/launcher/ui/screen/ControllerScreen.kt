@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.layout.onSizeChanged
-import kotlin.math.minOf
+import kotlin.comparisons.minOf
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -58,7 +58,7 @@ import com.rc.launcher.ui.model.MappedKey
 import com.rc.launcher.ui.model.VirtualButton
 import com.rc.launcher.ui.model.VirtualJoystick
 import com.rc.launcher.ui.viewmodel.ControlLayoutViewModel
-import kotlin.math.minOf
+import kotlin.comparisons.minOf
 import kotlin.math.roundToInt
 
 /**

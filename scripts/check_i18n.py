@@ -58,6 +58,10 @@ def read_xml_strings(path: str) -> dict[str, str]:
     for node in tree.getroot().findall("string"):
         name = node.get("name")
         text = node.text or ""
+        # Reverse generator Android escaping so the value matches the raw catalogue.
+        # aapt decodes backslash-apostrophe to a plain apostrophe at build time; ElementTree
+        # keeps the backslash (it is not a standard XML entity), so un-escape it here.
+        text = text.replace("\\'", "'").replace('\\"', '"')
         # The generator quotes values with significant whitespace.
         if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
