@@ -92,7 +92,7 @@ jobs:
       - name: Upload .so artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rust-core-${{ matrix.target }}
+          name: rust-core-${{ matrix.abi }}
           path: core/src/main/jniLibs/${{ matrix.abi }}
           if-no-files-found: error
 
@@ -171,18 +171,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: rust-core-*
-          merge-multiple: true
           path: rust-artifacts
 
       # upload-artifact preserves the full workspace-relative path, so we copy
       # each .so into the canonical jniLibs/<triple>/ location for :core.
+      # Each rust-core-* artifact is named after its ABI (rust-core-arm64-v8a,
+      # rust-core-armeabi-v7a, rust-core-x86_64, rust-core-x86) and is downloaded
+      # into rust-artifacts/<name>/. Map by ABI so the .so lands in the canonical
+      # jniLibs/<abi>/ location Gradle expects, independent of upload-artifact's
+      # inner-path handling.
       - name: Assemble native libraries
         run: |
           mkdir -p core/src/main/jniLibs
-          for f in $(find rust-artifacts -name 'librc_launcher.so'); do
-            triple=$(echo "$f" | sed -E 's#.*/([^/]+)/librc_launcher.so#\1#')
-            mkdir -p "core/src/main/jniLibs/$triple"
-            cp -f "$f" "core/src/main/jniLibs/$triple"
+          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+            src="rust-artifacts/rust-core-$abi/librc_launcher.so"
+            if [ -f "$src" ]; then
+              mkdir -p "core/src/main/jniLibs/$abi"
+              cp -f "$src" "core/src/main/jniLibs/$abi/"
+              echo "placed $abi <- $src"
+            else
+              echo "WARNING: missing native lib for $abi ($src)"
+            fi
           done
           echo "Assembled native libraries:"
           find core/src/main/jniLibs -name '*.so' | sort
