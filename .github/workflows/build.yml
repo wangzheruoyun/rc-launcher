@@ -37,23 +37,27 @@ jobs:
   # 1) Cross-compile the Rust core to a native .so for every target ABI.
   # ---------------------------------------------------------------------------
   rust-core:
-    name: Rust core (${{ matrix.target }})
+    name: Rust core (${{ matrix.abi }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - aarch64-linux-android   # arm64-v8a
-          - armv7-linux-androideabi # armeabi-v7a
-          - x86_64-linux-android    # x86_64
-          - i686-linux-android      # x86
+        # cargo-ndk is invoked with the Rust *target triple* but emits the .so
+        # into an Android *ABI*-named directory (arm64-v8a, armeabi-v7a,
+        # x86_64, x86); the upload + android jobs key everything off the ABI
+        # name, which is also exactly what the APK's jniLibs layout requires.
+        include:
+          - { abi: arm64-v8a,    triple: aarch64-linux-android }
+          - { abi: armeabi-v7a, triple: armv7-linux-androideabi }
+          - { abi: x86_64,      triple: x86_64-linux-android }
+          - { abi: x86,         triple: i686-linux-android }
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ matrix.triple }}
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -66,27 +70,39 @@ jobs:
       - name: Cache Cargo registry + build
         uses: actions/cache@v4
         with:
-          # Cache the registry, git index, build artifacts AND the cargo-ndk
-          # binary (installed via `cargo install`) so subsequent runs skip the
-          # NDK cross-compile dependency resolution and the cargo-ndk install.
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             ~/.cargo/bin
             rust/target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('rust/**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ matrix.triple }}-${{ hashFiles('rust/**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-${{ matrix.triple }}-
 
       - name: Build libcrc_launcher.so
         working-directory: rust
-        run: cargo ndk -t ${{ matrix.target }} -o ../core/src/main/jniLibs build --release
+        run: cargo ndk -t ${{ matrix.triple }} -o ../core/src/main/jniLibs build --release
+
+      # cargo-ndk writes the .so into an ABI-named subdirectory of its -o dir;
+      # relocate it to the canonical core/src/main/jniLibs/<abi>/ location so
+      # the upload step and the downstream android job agree on the path
+      # (regardless of whether cargo-ndk nests it under the ABI or the triple).
+      - name: Relocate .so into the ABI-named jniLibs directory
+        run: |
+          SRC=$(find core/src/main/jniLibs -name 'librc_launcher.so' | head -n1)
+          if [ -z "$SRC" ]; then
+            echo "error: libcrc_launcher.so was not produced by cargo ndk" >&2
+            exit 1
+          fi
+          mkdir -p "core/src/main/jniLibs/${{ matrix.abi }}"
+          cp -f "$SRC" "core/src/main/jniLibs/${{ matrix.abi }}/librc_launcher.so"
+          ls -l "core/src/main/jniLibs/${{ matrix.abi }}/librc_launcher.so"
 
       - name: Upload .so artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rust-core-${{ matrix.target }}
-          path: core/src/main/jniLibs/${{ matrix.target }}/librc_launcher.so
+          name: rust-core-${{ matrix.abi }}
+          path: core/src/main/jniLibs/${{ matrix.abi }}/librc_launcher.so
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
