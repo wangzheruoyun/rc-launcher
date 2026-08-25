@@ -162,17 +162,13 @@ fun AwtCanvasSurface(
                             change.consume()
                             continue
                         }
-                        // PointerButtons.packedValue is the stable, version-proof bitmask
-                        // (bit 0 = primary/left, bit 1 = secondary/right, bit 2 = tertiary/middle).
-                        // The convenience `isSecondaryPressed` / `pressed: Set<PointerButton>` APIs
-                        // only exist on compose-ui >= 1.6.0, so derive the button from the bits
-                        // to stay compatible with the pinned compose-ui 1.5.4.
-                        val buttons = event.buttons.packedValue
-                        val button = when {
-                            (buttons and 0b10) != 0 -> AwtMouseButton.RIGHT
-                            (buttons and 0b100) != 0 -> AwtMouseButton.MIDDLE
-                            else -> touchButton
-                        }
+                        // The pinned compose-ui 1.5.4 PointerButtons only exposes isPrimaryPressed
+                        // publicly; secondary/tertiary detection needs the internal packedValue or the
+                        // pressed: Set<PointerButton> API introduced in later Compose versions, neither of
+                        // which is available here. Map every non-touch pointer to the touch button for now
+                        // (this matches the original `else` branch for primary/touch pointers). Right/middle
+                        // mouse-button classification is deferred until the Compose stack is bumped.
+                        val button = touchButton
                         val phase = when {
                             change.pressed && !change.previousPressed -> AwtPointerPhase.DOWN
                             !change.pressed && change.previousPressed -> AwtPointerPhase.UP
