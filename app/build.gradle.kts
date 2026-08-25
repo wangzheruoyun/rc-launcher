@@ -83,7 +83,7 @@ android {
     // dedicated `org.jetbrains.kotlin.plugin.compose` Gradle plugin only exists
     // for Kotlin 2.0+, so enable Compose the 1.9.x way.
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
+        kotlinCompilerExtensionVersion = "1.5.4"
     }
 
     // Robolectric-backed JVM Compose UI tests (task 21) need the Android
@@ -115,25 +115,25 @@ android {
 // navigation-compose / ...) otherwise pulls the LATEST published compose-ui
 // (1.7.0+), whose PointerButtons / PointerButton / `pressed` API differs from
 // what the code targets, breaking the build. Force every androidx.compose.*
-// module we use to 1.6.8 (Kotlin 1.9.24 / Compose compiler 1.5.14 compatible),
+// module we use to 1.5.4 (Kotlin 1.9.22 / Compose compiler 1.5.4 compatible),
 // applied as a resolution rule so it cannot float upward.
 configurations.all {
     resolutionStrategy {
-        // Hard-pin the whole Compose stack to a single coherent 1.6.8 set.
+        // Hard-pin the whole Compose stack to a single coherent 1.5.4 set.
         // navigation-compose / material3 can otherwise pull a newer compose-ui
         // (1.7.0+), which removed PointerButton / isSecondaryPressed and breaks
         // the build. `force` wins over transitive `strictly` constraints so the
         // version cannot float upward.
         force(
-            "androidx.compose.ui:ui:1.6.8",
-            "androidx.compose.ui:ui-graphics:1.6.8",
-            "androidx.compose.ui:ui-tooling:1.6.8",
-            "androidx.compose.ui:ui-tooling-preview:1.6.8",
-            "androidx.compose.foundation:foundation:1.6.8",
-            "androidx.compose.runtime:runtime:1.6.8",
-            "androidx.compose.animation:animation:1.6.8",
-            "androidx.compose.material3:material3:1.2.1",
-            "androidx.compose.material:material-icons-extended:1.6.8",
+            "androidx.compose.ui:ui:1.5.4",
+            "androidx.compose.ui:ui-graphics:1.5.4",
+            "androidx.compose.ui:ui-tooling:1.5.4",
+            "androidx.compose.ui:ui-tooling-preview:1.5.4",
+            "androidx.compose.foundation:foundation:1.5.4",
+            "androidx.compose.runtime:runtime:1.5.4",
+            "androidx.compose.animation:animation:1.5.4",
+            "androidx.compose.material3:material3:1.2.0",
+            "androidx.compose.material:material-icons-extended:1.5.4",
         )
         eachDependency {
             if (requested.group == "androidx.compose.ui" ||
@@ -141,8 +141,8 @@ configurations.all {
                 requested.group == "androidx.compose.runtime" ||
                 requested.group == "androidx.compose.animation"
             ) {
-                useVersion("1.6.8")
-                because("pin Compose to a single coherent 1.6.8 set")
+                useVersion("1.5.4")
+                because("pin Compose to a single coherent 1.5.4 set")
             }
         }
     }
@@ -161,12 +161,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
     implementation("androidx.activity:activity-compose:1.9.0")
 
-    val composeVersion = "1.6.8"
+    val composeVersion = "1.5.4"
     implementation("androidx.compose.ui:ui:$composeVersion")
     implementation("androidx.compose.ui:ui-graphics:$composeVersion")
     implementation("androidx.compose.ui:ui-tooling-preview:$composeVersion")
-    implementation("androidx.compose.material3:material3:1.2.1")
-    implementation("androidx.compose.material:material-icons-extended:1.6.8")
+    implementation("androidx.compose.material3:material3:1.2.0")
+    implementation("androidx.compose.material:material-icons-extended:1.5.4")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     debugImplementation("androidx.compose.ui:ui-tooling:$composeVersion")
