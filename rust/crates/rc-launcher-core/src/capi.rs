@@ -145,9 +145,13 @@ pub unsafe extern "C" fn rc_run_async(spec_json: *const c_char) -> *mut c_char {
     };
     match jobs::spawn_job(&spec) {
         Ok(v) => CString::new(v.to_string()).unwrap_or_default().into_raw(),
-        Err(e) => CString::new(format!("{{\"ok\":false,\"error\":\"{e}\"}}"))
-            .unwrap_or_default()
-            .into_raw(),
+        Err(e) => {
+            let msg = e.to_string();
+            event::publish(Event::error_with_code("capi", "invalid_request", &msg));
+            CString::new(format!("{{\"ok\":false,\"error\":\"{msg}\"}}"))
+                .unwrap_or_default()
+                .into_raw()
+        }
     }
 }
 
@@ -169,6 +173,47 @@ pub unsafe extern "C" fn rc_cancel_async(scope: *const c_char) -> c_int {
         1
     } else {
         0
+    }
+}
+
+/// C mirror of the JNI `downloadAsync`: spawn a real download job (task 2 ⇄
+/// task 10) that reports progress / lifecycle / error events through the
+/// subscribed callback and returns immediately. Returns a NUL-terminated JSON
+/// string `{ "ok": bool, "scope": string }`; free it with [`rc_string_free`].
+///
+/// # Safety
+/// `spec_json` must be a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn rc_download_async(spec_json: *const c_char) -> *mut c_char {
+    let empty = || CString::new("{\"ok\":false,\"error\":\"null spec\"}").unwrap_or_default();
+    if spec_json.is_null() {
+        return empty().into_raw();
+    }
+    let cstr = match CStr::from_ptr(spec_json).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            return CString::new("{\"ok\":false,\"error\":\"bad utf8\"}")
+                .unwrap_or_default()
+                .into_raw()
+        }
+    };
+    let spec: serde_json::Value = match serde_json::from_str(cstr) {
+        Ok(v) => v,
+        Err(e) => {
+            return CString::new(format!("{{\"ok\":false,\"error\":\"{e}\"}}"))
+                .unwrap_or_default()
+                .into_raw()
+        }
+    };
+    match jobs::spawn_download_job(&spec, None) {
+        Ok(v) => CString::new(v.to_string()).unwrap_or_default().into_raw(),
+        Err(e) => {
+            let msg = e.to_string();
+            event::publish(Event::error_with_code("capi", "invalid_request", &msg));
+            CString::new(format!("{{\"ok\":false,\"error\":\"{msg}\"}}"))
+                .unwrap_or_default()
+                .into_raw()
+        }
     }
 }
 
@@ -246,6 +291,19 @@ pub unsafe extern "C" fn rc_i18n_translate(request_json: *const c_char) -> *mut 
 #[no_mangle]
 pub unsafe extern "C" fn rc_i18n_bundle(request_json: *const c_char) -> *mut c_char {
     i18n_call(request_json, crate::ffi::i18n_bundle_json)
+}
+
+/// Locale-aware value formatting as JSON (see `ffi::i18n_format_json`).
+///
+/// `{"kind":"bytes","value":1536}` -> `{"text":"1.5 KB", ...}`. Lets a non-JNI
+/// consumer render byte sizes / ETAs in the user's language without
+/// reimplementing the unit ladder.
+///
+/// # Safety
+/// `request_json` must be a NUL-terminated UTF-8 string (or null).
+#[no_mangle]
+pub unsafe extern "C" fn rc_i18n_format(request_json: *const c_char) -> *mut c_char {
+    i18n_call(request_json, crate::ffi::i18n_format_json)
 }
 
 /// Catalogue health report as JSON (missing keys, placeholder drift, ...).
@@ -361,6 +419,41 @@ mod tests {
     }
 
     #[test]
+    fn c_api_i18n_formats_values_and_survives_junk() {
+        let _g = crate::i18n::GLOBAL_I18N_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        unsafe {
+            let call = |body: &str| -> serde_json::Value {
+                let req = CString::new(body).unwrap();
+                serde_json::from_str(&take(rc_i18n_format(req.as_ptr()))).unwrap()
+            };
+
+            assert_eq!(
+                call(r#"{"kind":"bytes","value":1536,"language":"en"}"#)["text"],
+                "1.5 KB"
+            );
+            assert_eq!(
+                call(r#"{"kind":"eta","value":200,"language":"en"}"#)["text"],
+                "3 minutes 20 seconds remaining"
+            );
+            // The C consumer gets the localised unit, not a hardcoded English one.
+            assert_eq!(
+                call(r#"{"kind":"rate","value":1258291,"language":"zh-Hant"}"#)["text"],
+                "1.2 MB/\u{79d2}"
+            );
+
+            // Null pointer / malformed JSON degrade to the documented default.
+            let out: serde_json::Value =
+                serde_json::from_str(&take(rc_i18n_format(std::ptr::null()))).unwrap();
+            assert_eq!(out["kind"], "int");
+            assert_eq!(out["text"], "0");
+            let out = call("{ not json ");
+            assert_eq!(out["text"], "0");
+        }
+    }
+
+    #[test]
     fn c_api_i18n_lists_and_translates() {
         let _g = crate::i18n::GLOBAL_I18N_TEST_LOCK
             .lock()
@@ -423,5 +516,69 @@ mod tests {
             rc_string_free(std::ptr::null_mut());
         }
         crate::i18n::set_language(restore);
+    }
+    struct Rec {
+        events: std::sync::Mutex<Vec<String>>,
+    }
+
+    unsafe extern "C" fn record_cb(json: *const std::ffi::c_char, userdata: *mut std::ffi::c_void) {
+        let rec = &*(userdata as *const Rec);
+        if !json.is_null() {
+            if let Ok(t) = std::ffi::CStr::from_ptr(json).to_str() {
+                rec.events.lock().unwrap().push(t.to_string());
+            }
+        }
+    }
+
+    #[test]
+    fn c_sink_forwards_events_to_c_callback() {
+        let rec = std::sync::Arc::new(Rec {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let bus = crate::event::EventBus::new();
+        let ud = std::sync::Arc::into_raw(rec.clone()) as *mut std::ffi::c_void;
+        let sink = std::sync::Arc::new(CEventSink {
+            cb: record_cb,
+            userdata: ud,
+        });
+        assert!(!bus.subscribe(sink));
+        bus.publish(crate::event::Event::progress("dl", "step", 5, Some(10)));
+        bus.publish(crate::event::Event::error_with_code("dl", "boom", "kaboom"));
+        drop(unsafe { std::sync::Arc::from_raw(ud as *const Rec) });
+        let g = rec.events.lock().unwrap();
+        assert_eq!(g.len(), 2);
+        assert!(g[0].contains("kind"));
+        assert!(g[0].contains("progress"));
+        assert!(g[1].contains("code"));
+        assert!(g[1].contains("boom"));
+    }
+
+    #[test]
+    fn utf8_event_survives_c_boundary() {
+        let rec = std::sync::Arc::new(Rec {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let bus = crate::event::EventBus::new();
+        let ud = std::sync::Arc::into_raw(rec.clone()) as *mut std::ffi::c_void;
+        let sink = std::sync::Arc::new(CEventSink {
+            cb: record_cb,
+            userdata: ud,
+        });
+        bus.subscribe(sink);
+        bus.publish(crate::event::Event::log(
+            "s",
+            "info",
+            "中文进度 100% ✅ emoji",
+        ));
+        drop(unsafe { std::sync::Arc::from_raw(ud as *const Rec) });
+        let g = rec.events.lock().unwrap();
+        assert_eq!(g.len(), 1);
+        assert!(g[0].contains("中文进度"));
+        assert!(g[0].contains("✅"));
+    }
+
+    #[test]
+    fn rc_string_free_is_safe_on_null() {
+        unsafe { rc_string_free(std::ptr::null_mut()) };
     }
 }

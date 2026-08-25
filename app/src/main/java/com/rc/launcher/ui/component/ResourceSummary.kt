@@ -18,7 +18,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.rc.launcher.ui.resource.ResourceUsage
-import com.rc.launcher.ui.resource.formatBytes
+import com.rc.launcher.ui.i18n.LocalRcStrings
+import com.rc.launcher.ui.i18n.RcValueFormat
 import androidx.compose.foundation.layout.padding
 
 /**
@@ -70,10 +71,14 @@ private fun UsageRow(label: String, percent: Float, used: Long?, total: Long?) {
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(label, style = MaterialTheme.typography.labelMedium)
+            // Percent + sizes come from the catalogue, so the separators and the
+            // byte units follow the in-app language (task 20).
+            val strings = LocalRcStrings.current
+            val pct = RcValueFormat.percent(strings, percent.toDouble(), fractionDigits = 0)
             val detail = if (used != null && total != null) {
-                "%.0f%% · %s / %s".format(percent, formatBytes(used), formatBytes(total))
+                "$pct · " + RcValueFormat.byteProgress(strings, used, total)
             } else {
-                "%.0f%%".format(percent)
+                pct
             }
             Text(
                 detail,

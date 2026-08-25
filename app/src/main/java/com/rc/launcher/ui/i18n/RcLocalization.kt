@@ -79,3 +79,49 @@ fun rcPlural(base: String, count: Long, vararg args: Pair<String, String>): Stri
 @Composable
 fun rcLanguageName(language: AppLanguage): String =
     LocalRcStrings.current[RcStringKeys.nameKeyOf(language)]
+
+// --- Locale-aware values (task 20) ----------------------------------------
+//
+// Derived copy ("1.4 GB", "剩余 3 分 20 秒", "42.5%") must follow the in-app
+// language just like prose does, so it goes through the same table rather than
+// through a private English unit ladder. See [RcValueFormat].
+
+/** A byte size in the current language (`1.4 GB`). */
+@Composable
+fun rcBytes(value: Long): String = RcValueFormat.bytes(LocalRcStrings.current, value)
+
+/** A transfer rate in the current language (`1.2 MB/秒`). */
+@Composable
+fun rcRate(bytesPerSecond: Long): String =
+    RcValueFormat.rate(LocalRcStrings.current, bytesPerSecond)
+
+/** A byte-progress pair in the current language (`1.0 MB / 4.0 MB`). */
+@Composable
+fun rcByteProgress(done: Long, total: Long): String =
+    RcValueFormat.byteProgress(LocalRcStrings.current, done, total)
+
+/** A humanised duration in the current language (`3 分 20 秒`). */
+@Composable
+fun rcDuration(seconds: Long): String = RcValueFormat.duration(LocalRcStrings.current, seconds)
+
+/** A download ETA in the current language (`剩余 3 分 20 秒`). */
+@Composable
+fun rcEta(seconds: Long): String = RcValueFormat.eta(LocalRcStrings.current, seconds)
+
+/** A relative timestamp in the current language (`3 分前`). */
+@Composable
+fun rcRelativeTime(deltaSeconds: Long): String =
+    RcValueFormat.relativeTime(LocalRcStrings.current, deltaSeconds)
+
+/** A percentage in the current language (`42.5%`). */
+@Composable
+fun rcPercent(value: Double, fractionDigits: Int = 1): String =
+    RcValueFormat.percent(LocalRcStrings.current, value, fractionDigits)
+
+/** A frame rate in the current language (`59.9 FPS`). */
+@Composable
+fun rcFps(value: Double): String = RcValueFormat.fps(LocalRcStrings.current, value)
+
+/** A grouped integer in the current language (`1,234,567`). */
+@Composable
+fun rcInteger(value: Long): String = RcValueFormat.int(LocalRcStrings.current, value)

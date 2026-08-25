@@ -74,8 +74,14 @@ def render_strings_xml(tag: str, entries: dict[str, str], is_base: bool) -> str:
                 parts.append("\n")
             parts.append(f"    <!-- {top} -->\n")
             section = top
+        value = entries[key]
+        # aapt2 validates `%` as a printf specifier. Our placeholders are
+        # `{name}` and we never call getString(id, args), but a literal `%`
+        # (e.g. `format.percent = {value}%`) would still trip that validation
+        # — or worse, get silently mangled. `formatted="false"` opts out.
+        attrs = ' formatted="false"' if "%" in value else ""
         parts.append(
-            f'    <string name="{C.android_name(key)}">{escape(entries[key])}</string>\n'
+            f'    <string name="{C.android_name(key)}"{attrs}>{escape(value)}</string>\n'
         )
     parts.append("</resources>\n")
     return "".join(parts)

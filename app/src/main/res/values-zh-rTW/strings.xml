@@ -66,8 +66,20 @@
     <string name="crash_user_terminated_summary">遊戲已被啟動器停止</string>
 
     <!-- download -->
+    <string name="download_eta">剩餘 {duration}</string>
     <string name="download_files_one">共 {count} 個檔案</string>
     <string name="download_files_other">共 {count} 個檔案</string>
+
+    <!-- duration -->
+    <string name="duration_day_one">{count} 天</string>
+    <string name="duration_day_other">{count} 天</string>
+    <string name="duration_hour_one">{count} 小時</string>
+    <string name="duration_hour_other">{count} 小時</string>
+    <string name="duration_minute_one">{count} 分</string>
+    <string name="duration_minute_other">{count} 分</string>
+    <string name="duration_second_one">{count} 秒</string>
+    <string name="duration_second_other">{count} 秒</string>
+    <string name="duration_zero">0 秒</string>
 
     <!-- error -->
     <string name="error_auth">帳號驗證失敗：{detail}</string>
@@ -83,6 +95,17 @@
     <string name="error_severity_transient">暫時性故障</string>
     <string name="error_timeout">請求逾時：{detail}</string>
     <string name="error_unknown">未知錯誤：{detail}</string>
+
+    <!-- format -->
+    <string name="format_decimal_separator">.</string>
+    <string name="format_duration_join">{first} {second}</string>
+    <string name="format_fps">{value} FPS</string>
+    <string name="format_group_separator">,</string>
+    <string name="format_invalid_number">—</string>
+    <string name="format_percent" formatted="false">{value}%</string>
+    <string name="format_progress_of">{done} / {total}</string>
+    <string name="format_rate">{value} {unit}/秒</string>
+    <string name="format_size">{value} {unit}</string>
 
     <!-- language -->
     <string name="language_en">English</string>
@@ -104,6 +127,11 @@
     <string name="nav_home">主頁</string>
     <string name="nav_instances">實例</string>
     <string name="nav_settings">設定</string>
+
+    <!-- relative -->
+    <string name="relative_future">{duration}後</string>
+    <string name="relative_now">剛剛</string>
+    <string name="relative_past">{duration}前</string>
 
     <!-- screen -->
     <string name="screen_awt_title">AWT / Swing 相容層</string>
@@ -130,4 +158,12 @@
     <string name="theme_night_light">淺色</string>
     <string name="theme_night_system">跟隨系統</string>
     <string name="theme_night_toggle">切換夜間模式</string>
+
+    <!-- unit -->
+    <string name="unit_byte">B</string>
+    <string name="unit_gib">GB</string>
+    <string name="unit_kib">KB</string>
+    <string name="unit_mib">MB</string>
+    <string name="unit_pib">PB</string>
+    <string name="unit_tib">TB</string>
 </resources>

@@ -28,11 +28,14 @@
 //!
 //! Sub-modules: [`language`] (tags + negotiation), [`catalog`] (`.properties`
 //! parsing, embedded catalogues, runtime overlay), [`format`] (`{name}`
-//! interpolation + plural rules).
+//! interpolation + plural rules), [`number`] (locale-aware byte sizes, rates,
+//! percentages, durations and relative time — all catalogue-driven, so the UI
+//! never hardcodes an English `KB`/`MB` ladder of its own).
 
 pub mod catalog;
 pub mod format;
 pub mod language;
+pub mod number;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,6 +44,11 @@ use std::sync::{OnceLock, RwLock};
 pub use catalog::Catalog;
 pub use format::PluralCategory;
 pub use language::{Language, LanguageTag};
+pub use number::{
+    format_byte_progress, format_bytes, format_decimal, format_duration, format_duration_parts,
+    format_eta, format_fps, format_int, format_percent, format_rate, format_ratio_percent,
+    format_relative_time, format_uint,
+};
 
 /// The process-wide UI language, as a [`Language::index`].
 ///
@@ -170,6 +178,47 @@ pub fn t_plural(base: &str, count: i64) -> String {
 /// Whether `key` resolves in `language` (including via fallback).
 pub fn has_key(language: Language, key: &str) -> bool {
     catalog::lookup(language, key).is_some()
+}
+
+// --- Locale-aware value formatting in the current language ----------------
+//
+// Thin `current_language()` wrappers over [`number`], so a call site that just
+// wants "1.4 GB" in whatever the user picked does not have to thread a
+// [`Language`] through. See `number` for the catalogue keys involved.
+
+/// [`number::format_bytes`] in the [`current_language`] (`1.4 GB`).
+pub fn bytes(value: u64) -> String {
+    number::format_bytes(current_language(), value)
+}
+
+/// [`number::format_rate`] in the [`current_language`] (`1.2 MB/秒`).
+pub fn rate(bytes_per_second: u64) -> String {
+    number::format_rate(current_language(), bytes_per_second)
+}
+
+/// [`number::format_duration`] in the [`current_language`] (`3 分 20 秒`).
+pub fn duration(seconds: i64) -> String {
+    number::format_duration(current_language(), seconds)
+}
+
+/// [`number::format_eta`] in the [`current_language`] (`剩余 3 分 20 秒`).
+pub fn eta(seconds: i64) -> String {
+    number::format_eta(current_language(), seconds)
+}
+
+/// [`number::format_relative_time`] in the [`current_language`] (`3 分前`).
+pub fn relative_time(delta_seconds: i64) -> String {
+    number::format_relative_time(current_language(), delta_seconds)
+}
+
+/// [`number::format_percent`] in the [`current_language`] (`42.5%`).
+pub fn percent(value: f64, fraction_digits: usize) -> String {
+    number::format_percent(current_language(), value, fraction_digits)
+}
+
+/// [`number::format_int`] in the [`current_language`] (`1,234,567`).
+pub fn integer(value: i64) -> String {
+    number::format_int(current_language(), value)
 }
 
 // --- Bundles (for the UI / FFI) -------------------------------------------

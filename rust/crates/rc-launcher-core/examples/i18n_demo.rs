@@ -17,9 +17,13 @@
 //! 7. **Overlay** — a community translation / wording hot-fix applied at runtime
 //!    and then removed.
 //! 8. **Bundle** — the payload the Compose UI hydrates itself from.
+//! 9. **Locale-aware values** — byte sizes, transfer rates, ETAs, relative time
+//!    and percentages assembled from catalogue skeletons (so the units are
+//!    translated, not hardcoded), including a translator-supplied overlay that
+//!    changes the grouping/decimal separators and the unit names.
 
 use rc_launcher::error::RcError;
-use rc_launcher::i18n::{self, Language};
+use rc_launcher::i18n::{self, number, Language};
 use rc_launcher::launch::crash::diagnose;
 
 fn rule(title: &str) {
@@ -178,6 +182,60 @@ fn main() {
         assert!(lang["missing_keys"].as_array().unwrap().is_empty());
         assert!(lang["placeholder_mismatch"].as_array().unwrap().is_empty());
     }
+
+    rule("9. Locale-aware values (byte sizes, rates, ETAs, relative time)");
+    // Derived copy must follow the language too, otherwise a Chinese user gets
+    // Chinese prose wrapped around a hardcoded English unit ladder.
+    for l in Language::ALL {
+        println!(
+            "  [{}] {} | {} | {} | {} | {}",
+            l.tag(),
+            number::format_bytes(l, 1_500_000_000),
+            number::format_rate(l, 1_258_291),
+            number::format_eta(l, 200),
+            number::format_relative_time(l, 3_671),
+            number::format_percent(l, 42.5, 1),
+        );
+    }
+    // The units really are localised (not just the surrounding prose).
+    assert!(number::format_rate(Language::ZhCn, 1_258_291).ends_with("/\u{79d2}"));
+    assert!(number::format_rate(Language::En, 1_258_291).ends_with("/s"));
+    // English pluralises; Chinese does not.
+    assert_eq!(number::format_duration(Language::En, 1), "1 second");
+    assert_eq!(number::format_duration(Language::En, 2), "2 seconds");
+    assert_eq!(
+        number::format_duration(Language::ZhCn, 200),
+        "3 \u{5206} 20 \u{79d2}"
+    );
+    // Rounding is half away from zero on both sides of the FFI (Java's rule).
+    assert_eq!(number::format_decimal(Language::En, 1.25, 1), "1.3");
+    // Rounding must not produce a nonsensical unit.
+    assert_eq!(number::format_bytes(Language::En, 1_048_540), "1.0 MB");
+    // Nothing developer-facing can reach the UI.
+    for l in Language::ALL {
+        for out in [
+            number::format_decimal(l, f64::NAN, 2),
+            number::format_fps(l, f64::INFINITY),
+            number::format_ratio_percent(l, 1, 0, 1),
+            number::format_int(l, i64::MIN),
+            number::format_duration(l, i64::MIN),
+        ] {
+            let lower = out.to_lowercase();
+            assert!(!out.is_empty() && !out.contains('{'), "{out}");
+            assert!(!lower.contains("nan") && !lower.contains("inf"), "{out}");
+        }
+    }
+    // A translator owns the separators and the units, not the code.
+    i18n::install_overlay_text(
+        Language::En,
+        "format.group_separator = \\u0020\nformat.decimal_separator = ,\nunit.kib = Kio\n",
+    );
+    let relocalised = number::format_bytes(Language::En, 1_536);
+    println!("  overlay (fr-style): 1536 B -> {relocalised}");
+    assert_eq!(relocalised, "1,5 Kio");
+    assert_eq!(number::format_int(Language::En, 1_234_567), "1 234 567");
+    i18n::clear_overlay();
+    assert_eq!(number::format_bytes(Language::En, 1_536), "1.5 KB");
 
     i18n::set_language(Language::BASE);
     println!("\n\x1b[32mAll i18n invariants held.\x1b[0m");

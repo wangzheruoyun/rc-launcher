@@ -1,5 +1,7 @@
 package com.rc.launcher.core
 
+import org.json.JSONObject
+
 /**
  * JNI bridge to the Rust core ([librc_launcher.so]).
  *
@@ -146,6 +148,27 @@ object RustBridge {
     /** Cancel a running async job by scope. Returns `true` if a job was found. */
     external fun cancelAsync(scope: String): Boolean
 
+    /**
+     * Fire-and-forget async *download* job (task 2 ⇄ task 10 integration). A batch
+     * of download tasks is driven by the resumable download manager on the Rust
+     * side; progress / lifecycle / error events are streamed through the event bus
+     * ([RcEventBus]) exactly like [runAsync]. `specJson` =
+     * `{"scope"?:String,"label"?:String,"concurrency"?:Int,"tasks":[{"url":String,
+     * "dest":String,"size"?:Long,"sha1"?:String,"md5"?:String,
+     * "mirrors"?:[String]}]}`. Returns `{"ok":Boolean,"scope":String}`.
+     */
+    external fun downloadAsync(specJson: String): String
+
+    /**
+     * Convenience wrapper: start a download job from a pre-built spec JSON and
+     * return its [RcJobHandle] (ok flag + scope) so callers can later
+     * [cancelAsync] it or correlate the bus events by `scope`.
+     */
+    fun runDownloadAsync(specJson: String): RcJobHandle {
+        val out = JSONObject(downloadAsync(specJson))
+        return RcJobHandle(out.optBoolean("ok", false), out.optString("scope", ""))
+    }
+
     // === AWT / Swing compatibility layer (fakefx, task 18) ==================
     //
     // Minecraft's embedded AWT/Swing UI (Forge / OptiFine installers, the Mojang
@@ -230,6 +253,39 @@ object RustBridge {
      */
     external fun awtDrainEvents(): ByteArray
 
+    /**
+     * The **control plane** of the AWT bridge: everything that crosses it but is
+     * not a pixel. Returns
+     * `{"control":[{"kind":"cursor"|"title"|"clipboard_set"|"clipboard_request"|
+     *   "beep"|"screen_size"|"ime_show"|"ime_hide"|"window_opened"|
+     *   "window_closed"|"bye","seq":Int,...}],"count":Int,
+     *   "state":{"cursor":String,"cursor_awt_type":Int,"title":String?,
+     *     "ime":{"x":Int,"y":Int,"line_height":Int}?,"wants_keyboard":Boolean,
+     *     "clipboard_out":String?,"clipboard_requests":Int,
+     *     "windows":[{"id":Int,"title":String}],"window_count":Int,"beeps":Int,
+     *     "bye":String?},"clipboard_requests":Int}`.
+     *
+     * Draining is destructive: each message's side effect (push this text to the
+     * Android clipboard, buzz once, pop the soft keyboard) must fire exactly once.
+     */
+    external fun awtDrainControl(): String
+
+    /**
+     * The launcher's answers to the control plane:
+     * `{"clipboard":String?}` (answer every pending `Clipboard.getContents()`),
+     * `{"clipboard_empty":true}` (answer "no text" -- still an answer: a Swing
+     * thread may be blocked on it), `{"clipboard_seq":Int,...}` (answer one),
+     * `{"pong":Int}` (liveness) or `{"reset":true}` (forget the projection).
+     * Returns `{"queued":Int,"clipboard_requests":Int,"state":{...}}`.
+     */
+    external fun awtControl(requestJson: String): String
+
+    /**
+     * Hand one encoded `RCAC` control message to the session -- the mirror of
+     * [awtSubmitFrame], for a Kotlin-owned transport or a self-test.
+     */
+    external fun awtSubmitControl(message: ByteArray): String
+
     // === Internationalisation (task 20) =====================================
     //
     // The Rust core owns the message catalogues (resource files
@@ -270,6 +326,24 @@ object RustBridge {
      * Used to hydrate the Compose string table in one JNI crossing.
      */
     external fun i18nBundle(requestJson: String): String
+
+    /**
+     * Locale-aware value formatting — byte sizes, rates, percentages, durations,
+     * relative time:
+     * `{"kind":"bytes","value":1536}` -> `{"kind","text":"1.5 KB","language","supported"}`.
+     *
+     * `kind` is one of `bytes`, `rate`, `byte_progress`, `int`, `decimal`,
+     * `percent`, `ratio`, `duration`, `eta`, `relative`, `fps`; `total` pairs with
+     * `ratio`/`byte_progress`, `digits` sets the precision and `parts` caps how
+     * many duration units are shown. An unknown `kind` still returns a number
+     * with `"supported": false`.
+     *
+     * Compose does **not** need this per label — [i18nBundle] already ships the
+     * format skeletons (`format.size`, `unit.mib`, `duration.minute.other`, ...)
+     * and `RcValueFormat` assembles them locally. This entry point exists for
+     * non-Compose consumers and as the oracle the parity tests check against.
+     */
+    external fun i18nFormat(requestJson: String): String
 
     /**
      * Catalogue health: missing keys, orphan keys, placeholder drift, parse

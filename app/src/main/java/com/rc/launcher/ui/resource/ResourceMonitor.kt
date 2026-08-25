@@ -9,6 +9,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import com.rc.launcher.ui.i18n.LocaleEngine
+import com.rc.launcher.ui.i18n.RcStrings
+import com.rc.launcher.ui.i18n.RcValueFormat
 import kotlinx.coroutines.delay
 import java.io.BufferedReader
 import java.io.FileReader
@@ -72,18 +75,24 @@ data class ResourceUsage(
     }
 }
 
-/** Human-readable byte size, e.g. "1.4 GB". */
-internal fun formatBytes(bytes: Long): String {
-    if (bytes <= 0) return "0 B"
-    val units = arrayOf("B", "KB", "MB", "GB", "TB")
-    var v = bytes.toDouble()
-    var i = 0
-    while (v >= 1024 && i < units.lastIndex) {
-        v /= 1024
-        i++
-    }
-    return "%.1f %s".format(v, units[i])
-}
+/**
+ * Human-readable byte size, e.g. "1.4 GB".
+ *
+ * Delegates to [RcValueFormat] (task 20) instead of carrying its own unit
+ * ladder: the units, the decimal separator and the `{value} {unit}` skeleton all
+ * come from the message catalogue, so a Chinese user no longer gets Chinese
+ * prose wrapped around hardcoded English units — and the launcher core renders
+ * the *same* string for the same number.
+ *
+ * [strings] defaults to the engine's live table so non-Compose callers keep
+ * working; before the engine is initialised that table is empty and
+ * [RcValueFormat] falls back to its compiled-in ASCII units, so this never
+ * throws and never blanks out. Composables should prefer `rcBytes(...)`.
+ */
+internal fun formatBytes(
+    bytes: Long,
+    strings: RcStrings = LocaleEngine.strings.value,
+): String = RcValueFormat.bytes(strings, bytes)
 
 /**
  * Samples real device resource usage (task 12 "资源占用").

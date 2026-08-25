@@ -37,9 +37,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.rc.launcher.ui.awt.AwtControlWire
+import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtMouseButton
 import com.rc.launcher.ui.awt.AwtScaleMode
 import com.rc.launcher.ui.component.AwtCanvasSurface
+import com.rc.launcher.ui.i18n.rcFps
 import com.rc.launcher.ui.viewmodel.AwtSurfaceViewModel
 
 /**
@@ -119,6 +122,32 @@ fun AwtScreen(
                 onClick = { viewModel.releaseAll() },
                 enabled = state.open,
             ) { Text("释放按键") }
+            OutlinedButton(
+                onClick = {
+                    // Exercise the whole control plane the way a real cacio peer
+                    // would: hover a text field, name the window, ask for input,
+                    // copy something, then ask to paste. The canvas answers the
+                    // paste from the Android clipboard on the next frame.
+                    val cx = state.info.screenWidth / 2
+                    val cy = state.info.screenHeight / 2
+                    listOf(
+                        AwtControlWire.encodeCursor(AwtCursorKind.TEXT),
+                        AwtControlWire.encode(
+                            com.rc.launcher.ui.awt.AwtControlKind.WINDOW_OPENED,
+                            a = 1,
+                            text = "自检对话框",
+                        ),
+                        AwtControlWire.encodeImeShow(cx, cy, 18),
+                        AwtControlWire.encodeClipboardSet("RC Launcher AWT 自检"),
+                        AwtControlWire.encodeClipboardRequest(1),
+                    ).forEach { viewModel.submitControl(it) }
+                },
+                enabled = state.open,
+            ) { Text("控制面自检") }
+            OutlinedButton(
+                onClick = { viewModel.resetControl() },
+                enabled = state.open,
+            ) { Text("复位控制面") }
             OutlinedButton(onClick = { viewModel.refresh() }) { Text("刷新状态") }
         }
 
@@ -184,13 +213,40 @@ fun AwtScreen(
                     "接收 ${state.info.framesAccepted} · 丢弃 ${state.info.framesRejected} · " +
                         "上屏 ${state.uploads} · 跳过 ${state.skipped}",
                 )
-                InfoRow("帧率", String.format("%.1f fps", state.info.fps))
+                // Through the catalogue (task 20): the decimal separator and the
+                // "FPS" wording are translatable instead of a hardcoded %.1f.
+                InfoRow("帧率", rcFps(state.info.fps.toDouble()))
                 InfoRow(
                     "事件",
                     "待发 ${state.info.pendingEvents} · 已发 ${state.info.link.eventsWritten} · " +
                         "丢失 ${state.info.link.eventsLost}",
                 )
                 InfoRow("焦点", if (state.info.focused) "已获得" else "已失去")
+                InfoRow(
+                    "指针形状",
+                    "${state.cursor.label}（${state.cursor.id} / AWT ${state.cursor.awtType}）",
+                )
+                InfoRow("窗口标题", state.title ?: "—")
+                InfoRow(
+                    "软键盘",
+                    if (state.wantsKeyboard) {
+                        val caret = state.control.caret
+                        "文本组件请求输入" + (caret?.let { "（(${it.x}, ${it.y})）" } ?: "")
+                    } else {
+                        "无请求"
+                    },
+                )
+                InfoRow(
+                    "剪贴板",
+                    "待应答 ${state.control.clipboardRequests} · " +
+                        "JVM 复制 ${state.control.clipboardOut ?: "—"}",
+                )
+                InfoRow(
+                    "控制消息",
+                    "累计 ${state.controlMessages} · 窗口 ${state.control.windows.size} · " +
+                        "提示音 ${state.control.beeps}",
+                )
+                state.control.bye?.let { InfoRow("桥接结束", it) }
                 state.info.framesChannel?.let { InfoRow("帧通道", it) }
                 state.info.eventsChannel?.let { InfoRow("事件通道", it) }
                 state.lastInput.rejected.take(3).forEach { InfoRow("被拒事件", it) }

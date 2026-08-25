@@ -45,12 +45,6 @@ jobs:
         include:
           - target: aarch64-linux-android
             abi: arm64-v8a
-          - target: armv7-linux-androideabi
-            abi: armeabi-v7a
-          - target: x86_64-linux-android
-            abi: x86_64
-          - target: i686-linux-android
-            abi: x86
     steps:
       - uses: actions/checkout@v4
 
@@ -124,6 +118,31 @@ jobs:
       - name: i18n end-to-end demo
         working-directory: rust
         run: cargo run --example i18n_demo
+
+      # Task 20 - the locale-aware value formatters (byte sizes, rates, ETAs,
+      # percentages, relative time) exist twice: `i18n::number` in the Rust core
+      # and `RcValueFormat.kt` in Compose, because the UI formats locally from
+      # the catalogue bundle instead of paying a JNI crossing per label. Render
+      # the golden matrix with the Rust oracle and fail if the committed fixture
+      # the Kotlin parity test replays is stale.
+      - name: i18n formatter golden fixture is fresh
+        working-directory: rust
+        run: |
+          cargo run --quiet --example i18n_format_golden > /tmp/golden.tsv
+          if ! diff -u ../app/src/test/resources/i18n_format_golden.tsv /tmp/golden.tsv; then
+            echo "::error::i18n_format_golden.tsv is stale - run:"
+            echo "::error::  cd rust && cargo run --example i18n_format_golden -- --write"
+            exit 1
+          fi
+
+      # Task 18 - drive the AWT/Swing compatibility layer ("fakefx") end-to-end
+      # over *real* named pipes with a fake JVM and a fake UI: a full repaint, a
+      # corrupt frame, a damage-only patch, the whole control plane (cursor /
+      # title / IME / clipboard both ways) and a touch + key round trip. It
+      # asserts its own invariants, so a regression in the bridge fails the build.
+      - name: AWT bridge end-to-end demo
+        working-directory: rust
+        run: cargo run --example awt_demo
       # Task 6 — verify the prebuilt FCL JRE packages (extracted from the FCL
       # APK into runtime/src/main/assets/app_runtime/java/) still match the
       # committed jre_manifest.json. The cargo tests above already install,
@@ -141,9 +160,21 @@ jobs:
       # key -> R.string map) are in sync, that no locale has a missing / orphan
       # key, that no placeholder drifted, and that every key referenced by the
       # Rust core (crash categories, RcError) and the Compose UI (RcStringKeys)
-      # actually exists.
+      # actually exists. It also cross-checks the two value-formatter ports
+      # (`i18n/number.rs` vs `RcValueFormat.kt`): identical byte-unit and
+      # duration ladders, the same catalogue keys, the same precision cap, and a
+      # fresh golden fixture.
       - name: Verify i18n catalogues and generated resources
         run: python3 scripts/check_i18n.py
+
+      # Task 18 - the AWT bridge wire format is implemented twice (Rust core +
+      # Compose layer). A constant that drifts between them compiles and unit-tests
+      # fine on both sides, and only shows up on a device as a permanently black
+      # canvas or a clipboard answer the JVM cannot parse. This static check needs
+      # neither a Rust toolchain nor a JVM, so it also covers the Kotlin half that
+      # CI cannot unit-test on every runner.
+      - name: Verify the AWT wire contract (Rust <-> Kotlin)
+        run: python3 scripts/check_awt_wire.py
 
       - name: Prebuilt JRE assets present
         run: |
@@ -175,15 +206,14 @@ jobs:
 
       # upload-artifact preserves the full workspace-relative path, so we copy
       # each .so into the canonical jniLibs/<triple>/ location for :core.
-      # Each rust-core-* artifact is named after its ABI (rust-core-arm64-v8a,
-      # rust-core-armeabi-v7a, rust-core-x86_64, rust-core-x86) and is downloaded
+      # The rust-core-* artifact (rust-core-arm64-v8a) is downloaded
       # into rust-artifacts/<name>/. Map by ABI so the .so lands in the canonical
       # jniLibs/<abi>/ location Gradle expects, independent of upload-artifact's
       # inner-path handling.
       - name: Assemble native libraries
         run: |
           mkdir -p core/src/main/jniLibs
-          for abi in arm64-v8a armeabi-v7a x86_64 x86; do
+          for abi in arm64-v8a; do
             src="rust-artifacts/rust-core-$abi/librc_launcher.so"
             if [ -f "$src" ]; then
               mkdir -p "core/src/main/jniLibs/$abi"

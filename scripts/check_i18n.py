@@ -17,7 +17,18 @@ Checks, in order:
   8. every Rust `CrashCategory::id()` has `crash.<id>.summary` + `.advice`;
   9. every Rust `RcError::i18n_key()` target exists;
  10. the Kotlin `AppLanguage` enum agrees with the shipped catalogues
-     (tags + Android resource qualifiers).
+     (tags + Android resource qualifiers);
+ 11. every catalogue key the **value formatters** read exists, and the Rust
+     (`i18n/number.rs`) and Kotlin (`RcValueFormat.kt`) ports agree on the key
+     set, the byte-unit ladder and the duration units — the two are hand-ported
+     mirrors, so drift there means the core and the UI would render the same
+     byte count differently;
+ 12. the Rust->Kotlin golden fixture (`i18n_format_golden.tsv`) exists, is
+     well formed, covers every language and every `i18nFormat` kind, leaks no
+     placeholder, and is byte-identical to a fresh render (so a wording or
+     rounding change cannot land without the Kotlin parity test seeing it);
+ 13. any generated `<string>` holding a literal `%` carries `formatted="false"`
+     (otherwise aapt2 treats it as a printf specifier).
 
 Usage:  python3 scripts/check_i18n.py
 """
@@ -71,6 +82,28 @@ def read_xml_strings(path: str) -> dict[str, str]:
         out[name] = text
     return out
 
+
+
+def _regenerate_golden():
+    """Render the golden fixture with cargo; None when cargo is unavailable."""
+    import shutil
+    import subprocess
+
+    if shutil.which("cargo") is None:
+        return None
+    try:
+        proc = subprocess.run(
+            ["cargo", "run", "--quiet", "--example", "i18n_format_golden"],
+            cwd=os.path.join(C.REPO, "rust"),
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
 
 def main() -> int:
     print("== i18n catalogues ==")
@@ -173,9 +206,29 @@ def main() -> int:
     )
     with open(crash_rs, encoding="utf-8") as fh:
         crash_src = fh.read()
-    ids_block = re.search(r"pub fn id\(self\) -> &'static str \{(.*?)\n    \}", crash_src, re.S)
-    crash_ids = re.findall(r'=> "([a-z_]+)"', ids_block.group(1)) if ids_block else []
-    check("crash ids were located in crash.rs", len(crash_ids) >= 10, f"{crash_ids}")
+    # Anchor on the `impl CrashCategory` block first: `crash.rs` also defines
+    # `CrashSeverity::id()` with the *same* signature, and it happens to come
+    # first in the file. A bare `pub fn id(self)` search silently scraped the
+    # severity ids ("fatal", "recoverable", ...) and made this gate assert the
+    # wrong contract, so scope the search the way a reader would.
+    impl_block = re.search(
+        r"\nimpl CrashCategory \{\n(.*?)\n\}\n", crash_src, re.S
+    )
+    ids_block = (
+        re.search(r"pub fn id\(self\) -> &'static str \{(.*?)\n        \}", impl_block.group(1), re.S)
+        if impl_block
+        else None
+    )
+    crash_ids = (
+        re.findall(r'CrashCategory::\w+ => "([a-z_]+)"', ids_block.group(1))
+        if ids_block
+        else []
+    )
+    check(
+        "crash ids were located in crash.rs",
+        len(crash_ids) >= 10 and "clean_exit" in crash_ids,
+        f"{crash_ids}",
+    )
     missing_crash = [
         f"crash.{i}.{kind}"
         for i in crash_ids
@@ -220,6 +273,212 @@ def main() -> int:
         if t in declared and declared[t] != expected_langs[t]
     ]
     check("AppLanguage Android qualifiers match", not qual_drift, "; ".join(qual_drift))
+
+    print("== value formatters (Rust number.rs <-> Kotlin RcValueFormat.kt) ==")
+    # 11) the locale-aware value formatters
+    number_rs = os.path.join(
+        C.REPO, "rust/crates/rc-launcher-core/src/i18n/number.rs"
+    )
+    value_kt = os.path.join(
+        C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/RcValueFormat.kt"
+    )
+    with open(number_rs, encoding="utf-8") as fh:
+        number_src = fh.read()
+    with open(value_kt, encoding="utf-8") as fh:
+        value_src = fh.read()
+
+    def _rust_list(name: str) -> list[str]:
+        """The string literals of a `const NAME: [...] = [ ... ];` array."""
+        m = re.search(rf"{name}[^=]*=\s*\[(.*?)\];", number_src, re.S)
+        return re.findall(r'"([^"]+)"', m.group(1)) if m else []
+
+    # Byte-unit ladders must be identical *and* in the same order: index `i`
+    # means "1024^i" on both sides.
+    rust_units = _rust_list("BYTE_UNIT_KEYS")
+    kt_units = re.findall(
+        r'"(unit\.[a-z]+)"', re.search(r"val BYTE_UNIT_KEYS = listOf\((.*?)\)", value_src, re.S).group(1)
+    )
+    check(
+        "byte-unit ladders agree (same units, same order)",
+        rust_units == kt_units and len(rust_units) >= 5,
+        f"rust {rust_units} vs kotlin {kt_units}",
+    )
+
+    # Duration units: same bases, same order (largest first). Each entry also
+    # carries a compiled-in fallback template, which must match too — that is
+    # what renders when the catalogue cannot supply the piece, so a divergence
+    # would only show up on a device with a missing native core.
+    rust_durations_full = re.findall(
+        r'\(\s*[\d_]+,\s*"(duration\.[a-z]+)",\s*"([^"]*)"\s*\)',
+        re.search(r"DURATION_UNITS[^=]*=\s*\[(.*?)\];", number_src, re.S).group(1),
+    )
+    kt_durations_full = re.findall(
+        r'Triple\(\s*[\d_]+L,\s*"(duration\.[a-z]+)",\s*"([^"]*)"\s*\)',
+        re.search(r"val DURATION_UNITS = listOf\((.*?)\n    \)", value_src, re.S).group(1),
+    )
+    rust_durations = [b for b, _f in rust_durations_full]
+    kt_durations = [b for b, _f in kt_durations_full]
+    check(
+        "duration-unit ladders agree (same units, same order)",
+        rust_durations == kt_durations and len(rust_durations) == 4,
+        f"rust {rust_durations} vs kotlin {kt_durations}",
+    )
+    check(
+        "duration fallback templates agree",
+        rust_durations_full == kt_durations_full and len(rust_durations_full) == 4,
+        f"rust {rust_durations_full} vs kotlin {kt_durations_full}",
+    )
+
+    # The full key set each port declares it reads.
+    def _required(src: str) -> set[str]:
+        keys = set(re.findall(r'"((?:format|unit|duration|relative|download)\.[a-z_.]+)"', src))
+        # `duration.<unit>` bases are read through their plural sub-keys.
+        for base in rust_durations or kt_durations:
+            keys.discard(base)
+            keys.update({f"{base}.one", f"{base}.other"})
+        return keys
+
+    rust_keys = _required(number_src)
+    kt_keys = _required(value_src)
+    check(
+        "both ports read the same catalogue keys",
+        rust_keys == kt_keys,
+        f"rust-only {sorted(rust_keys - kt_keys)} kotlin-only {sorted(kt_keys - rust_keys)}",
+    )
+    missing_fmt = sorted(k for k in rust_keys | kt_keys if k not in base_keys)
+    check(
+        "every formatter key is in the base catalogue",
+        not missing_fmt,
+        f"{missing_fmt}",
+    )
+
+    # An explicitly *empty* `format.group_separator` means "this locale does not
+    # group digits" and must be honoured, while a blank unit name / template must
+    # fall back. Both ports need the dedicated lookup, or a locale that disables
+    # grouping would render differently in the core and in the UI.
+    group_via_skeleton = re.compile(
+        r'skeleton\([^)]*"format\.group_separator"', re.S
+    )
+    rust_group = bool(
+        re.search(r"fn group_separator\s*\(", number_src)
+    ) and not group_via_skeleton.search(number_src)
+    kt_group = bool(
+        re.search(r"fun groupSeparator\s*\(", value_src)
+    ) and not group_via_skeleton.search(value_src)
+    check(
+        "both ports honour an explicitly empty group separator",
+        rust_group and kt_group,
+        f"rust={rust_group} kotlin={kt_group}",
+    )
+    # ... while the *decimal* separator must still fall back (a blank one would
+    # fuse "1" and "5" into "15").
+    # Whitespace-tolerant: `cargo fmt` / ktlint are free to reflow the call across
+    # lines, and a gate that a formatter can break is a gate nobody trusts.
+    decimal_fallback = re.compile(
+        r'"format\.decimal_separator"\s*,\s*DEFAULT_DECIMAL_SEPARATOR', re.S
+    )
+    rust_decimal = bool(decimal_fallback.search(number_src))
+    kt_decimal = bool(decimal_fallback.search(value_src))
+    check(
+        "both ports keep a fallback for the decimal separator",
+        rust_decimal and kt_decimal,
+        f"rust={rust_decimal} kotlin={kt_decimal}",
+    )
+
+    # The precision cap must match, or a `digits` request would be clamped
+    # differently on the two sides.
+    rust_cap = re.search(r"MAX_FRACTION_DIGITS: usize = (\d+)", number_src)
+    kt_cap = re.search(r"MAX_FRACTION_DIGITS = (\d+)", value_src)
+    check(
+        "MAX_FRACTION_DIGITS agrees",
+        bool(rust_cap and kt_cap) and rust_cap.group(1) == kt_cap.group(1),
+        f"rust {rust_cap and rust_cap.group(1)} vs kotlin {kt_cap and kt_cap.group(1)}",
+    )
+
+    # Every `kind` the FFI advertises must be handled by the match arm above it.
+    ffi_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/ffi.rs")
+    with open(ffi_rs, encoding="utf-8") as fh:
+        ffi_src = fh.read()
+    kinds_fn = re.search(
+        r"pub fn i18n_format_kinds\(\) -> &'static \[&'static str\] \{(.*?)\n\}", ffi_src, re.S
+    )
+    advertised = re.findall(r'"([a-z_]+)"', kinds_fn.group(1)) if kinds_fn else []
+    bridge_kt = os.path.join(
+        C.REPO, "core/src/main/java/com/rc/launcher/core/RustBridge.kt"
+    )
+    with open(bridge_kt, encoding="utf-8") as fh:
+        bridge_src = fh.read()
+    documented = set(re.findall(r"`([a-z_]+)`", bridge_src[bridge_src.find("external fun i18nFormat") - 900 : bridge_src.find("external fun i18nFormat")]))
+    check(
+        "i18nFormat advertises kinds and RustBridge documents them",
+        len(advertised) >= 10 and set(advertised) <= documented,
+        f"advertised {sorted(advertised)} undocumented {sorted(set(advertised) - documented)}",
+    )
+
+    # 12) the Rust->Kotlin golden fixture must exist and be fresh
+    golden = os.path.join(C.REPO, "app/src/test/resources/i18n_format_golden.tsv")
+    if not os.path.exists(golden):
+        check("golden formatter fixture exists", False, golden)
+    else:
+        with open(golden, encoding="utf-8") as fh:
+            golden_src = fh.read()
+        rows = [
+            l for l in golden_src.splitlines() if l.strip() and not l.startswith("#")
+        ]
+        check(
+            "golden formatter fixture is substantial",
+            len(rows) >= 300,
+            f"{len(rows)} rows",
+        )
+        bad_rows = [l for l in rows if len(l.split("\t")) != 7]
+        check("golden fixture rows are well formed", not bad_rows, f"{bad_rows[:3]}")
+        langs = {l.split("\t")[0] for l in rows}
+        check(
+            "golden fixture covers every shipped language",
+            langs == {t for t, _d, _b in C.LANGUAGES},
+            f"{sorted(langs)}",
+        )
+        kinds = {l.split("\t")[1] for l in rows}
+        check(
+            "golden fixture covers every i18nFormat kind",
+            set(advertised) <= kinds,
+            f"uncovered {sorted(set(advertised) - kinds)}",
+        )
+        # No rendering may leak a placeholder or a raw catalogue key.
+        leaks = [
+            l for l in rows
+            if "{" in l.split("\t")[6]
+            or any(l.split("\t")[6].startswith(p) for p in ("unit.", "duration.", "format."))
+        ]
+        check("golden renderings resolve fully", not leaks, f"{leaks[:3]}")
+        # Freshness: re-run the generator when cargo is available.
+        regen = _regenerate_golden()
+        if regen is None:
+            print("  skip  golden fixture freshness (cargo unavailable)")
+        else:
+            check(
+                "golden fixture is up to date "
+                "(cargo run --example i18n_format_golden -- --write)",
+                regen == golden_src,
+                "committed fixture differs from a fresh render",
+            )
+
+    # 13) `%` needs formatted="false" in the generated XML
+    unguarded = []
+    for tag, dirname, _base in C.LANGUAGES:
+        path = os.path.join(C.RES_DIR, dirname, "strings.xml")
+        with open(path, encoding="utf-8") as fh:
+            xml_src = fh.read()
+        for name, attrs, body in re.findall(
+            r'<string name="([^"]+)"([^>]*)>(.*?)</string>', xml_src, re.S
+        ):
+            if "%" in body and 'formatted="false"' not in attrs:
+                unguarded.append(f"{dirname}/{name}")
+    check(
+        'literal "%" values carry formatted="false"',
+        not unguarded,
+        f"{unguarded}",
+    )
 
     print()
     if FAILURES:

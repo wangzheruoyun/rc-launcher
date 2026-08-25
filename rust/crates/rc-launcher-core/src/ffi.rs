@@ -118,7 +118,7 @@ use crate::error::RcResult;
 static MANAGER: OnceLock<Mutex<AccountManager>> = OnceLock::new();
 static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
-fn runtime() -> &'static tokio::runtime::Runtime {
+pub(crate) fn runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -127,7 +127,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     })
 }
 
-fn manager() -> &'static Mutex<AccountManager> {
+pub(crate) fn manager() -> &'static Mutex<AccountManager> {
     MANAGER.get_or_init(|| {
         let transport = ReqwestTransport::with_defaults().expect("init auth transport");
         let mgr = AccountManager::new(
@@ -140,8 +140,44 @@ fn manager() -> &'static Mutex<AccountManager> {
     })
 }
 
-fn lock_manager() -> MutexGuard<'static, AccountManager> {
+pub(crate) fn lock_manager() -> MutexGuard<'static, AccountManager> {
     manager().lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Build an [`AccountManager`] from a config JSON value. Shared by the JNI
+/// `authInit` entry point and the C-ABI `rc_auth_init` so both surfaces expose
+/// exactly the same store-configuration contract. `cfg` accepts
+/// `{ "path"?: string, "key_hex"?: string, "client_id"?: string }`:
+/// * with `path` the store is persisted on disk, and when `key_hex` is present
+///   the on-disk JSON is sealed with AES-256-GCM (on Android `key_hex` is the
+///   Keystore-held key surfaced by the FFI bridge);
+/// * without `path` an in-memory store is used.
+pub(crate) fn auth_manager_from_config(cfg: &serde_json::Value) -> RcResult<AccountManager> {
+    let transport = ReqwestTransport::with_defaults()?;
+    let client_id = cfg
+        .get("client_id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(microsoft::DEFAULT_CLIENT_ID)
+        .to_string();
+    let storage: Box<dyn TokenStorage> =
+        if let Some(path) = cfg.get("path").and_then(|v| v.as_str()) {
+            let vault: Box<dyn SecretVault> =
+                if let Some(key_hex) = cfg.get("key_hex").and_then(|v| v.as_str()) {
+                    match parse_hex_key(key_hex) {
+                        Some(k) => match AesGcmVault::new(k) {
+                            Ok(v) => Box::new(v),
+                            Err(e) => return Err(crate::error::RcError::Auth(e.to_string())),
+                        },
+                        None => return Err(crate::error::RcError::Auth("invalid key_hex".into())),
+                    }
+                } else {
+                    Box::new(InsecureVault)
+                };
+            Box::new(FileTokenStorage::with_vault(path, vault))
+        } else {
+            Box::new(MemoryTokenStorage::new())
+        };
+    AccountManager::new(storage, Arc::new(transport), client_id)
 }
 
 fn jstr(env: &mut JNIEnv, s: &str) -> jstring {
@@ -211,34 +247,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authInit(
             Ok(v) => v,
             Err(e) => return err_json(&mut env, &format!("bad config: {e}")),
         };
-        let transport = match ReqwestTransport::with_defaults() {
-            Ok(t) => t,
-            Err(e) => return err_json(&mut env, &e.to_string()),
-        };
-        let client_id = cfg
-            .get("client_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or(microsoft::DEFAULT_CLIENT_ID)
-            .to_string();
-        let storage: Box<dyn TokenStorage> =
-            if let Some(path) = cfg.get("path").and_then(|v| v.as_str()) {
-                let vault: Box<dyn SecretVault> =
-                    if let Some(key_hex) = cfg.get("key_hex").and_then(|v| v.as_str()) {
-                        match parse_hex_key(key_hex) {
-                            Some(k) => match AesGcmVault::new(k) {
-                                Ok(v) => Box::new(v),
-                                Err(e) => return err_json(&mut env, &e.to_string()),
-                            },
-                            None => return err_json(&mut env, "invalid key_hex"),
-                        }
-                    } else {
-                        Box::new(InsecureVault)
-                    };
-                Box::new(FileTokenStorage::with_vault(path, vault))
-            } else {
-                Box::new(MemoryTokenStorage::new())
-            };
-        let mgr = match AccountManager::new(storage, Arc::new(transport), client_id) {
+        let mgr = match auth_manager_from_config(&cfg) {
             Ok(m) => m,
             Err(e) => return err_json(&mut env, &e.to_string()),
         };
@@ -825,6 +834,39 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_cancelAsync(
     }
 }
 
+/// `RustBridge.downloadAsync(specJson): String` — fire-and-forget async
+/// *download* job (task 2 ⇄ task 10 integration). The same event bus carries
+/// progress / lifecycle / error events; the returned JSON is
+/// `{ "ok": bool, "scope": string }`.
+///
+/// `specJson` = `{ "scope"?, "label"?, "concurrency"?, "tasks": [ { "url",
+/// "dest", "size"?, "sha1"?, "md5"?, "mirrors"? } ] }`.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_downloadAsync(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &spec) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing spec"),
+        };
+        let spec_val: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad spec: {e}")),
+        };
+        match jobs::spawn_download_job(&spec_val, None) {
+            Ok(v) => jstr(&mut env, &v.to_string()),
+            Err(e) => err_json(&mut env, &e.to_string()),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 // === AWT / Swing bridge FFI (task 18) ========================================
 //
 // The Compose canvas that shows Minecraft's embedded AWT/Swing UI is driven
@@ -1174,6 +1216,80 @@ fn awt_poll_frame_json(slot: &AwtSlot, dst: &mut [u8]) -> RcResult<serde_json::V
     })
 }
 
+/// Take the control messages the JVM sent (cursor / title / clipboard / IME).
+///
+/// Returns both the *messages* (the UI must act on each exactly once: push this
+/// text to the Android clipboard, buzz, pop the keyboard) and the *projection*
+/// (what the UI renders every frame), so one call per frame is enough.
+fn awt_drain_control_json(slot: &AwtSlot) -> RcResult<serde_json::Value> {
+    let host = awt_host(slot)?;
+    let (messages, control, pending) = {
+        let mut session = host.session();
+        let messages: Vec<serde_json::Value> = session
+            .drain_control()
+            .iter()
+            .map(|c| c.to_json())
+            .collect();
+        let control = session.control().to_json();
+        let pending = session.pending_clipboard_requests();
+        (messages, control, pending)
+    };
+    Ok(json!({
+        "control": messages,
+        "count": messages.len(),
+        "state": control,
+        "clipboard_requests": pending,
+    }))
+}
+
+/// Answers / commands for the control plane, coming from the Compose layer.
+///
+/// * `{"clipboard": "text"}` - answer every pending `Clipboard.getContents()`.
+/// * `{"clipboard": null}` / `{"clipboard_empty": true}` - answer "no text"
+///   (still an *answer*: a Swing thread may be blocked on it).
+/// * `{"clipboard_seq": n, "clipboard": ...}` - answer one specific request.
+/// * `{"pong": n}` - liveness answer.
+/// * `{"reset": true}` - forget the projection (arrow cursor, no keyboard).
+fn awt_control_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde_json::Value> {
+    let host = awt_host(slot)?;
+    let mut queued = 0usize;
+    {
+        let mut session = host.session();
+        let has_clipboard_key = req.get("clipboard").is_some();
+        let empty = req.get("clipboard_empty").and_then(|v| v.as_bool()) == Some(true);
+        if has_clipboard_key || empty {
+            let text = req.get("clipboard").and_then(|v| v.as_str());
+            let text = if empty { None } else { text };
+            queued += match req.get("clipboard_seq").and_then(|v| v.as_u64()) {
+                Some(seq) => session.answer_clipboard_seq(seq as u32, text),
+                None => session.answer_clipboard(text),
+            };
+        }
+        if let Some(seq) = req.get("pong").and_then(|v| v.as_u64()) {
+            queued += session.answer_pong(seq as u32);
+        }
+        if req.get("reset").and_then(|v| v.as_bool()) == Some(true) {
+            session.reset_control();
+        }
+    }
+    Ok(json!({
+        "queued": queued,
+        "clipboard_requests": host.session().pending_clipboard_requests(),
+        "state": host.session().control().to_json(),
+    }))
+}
+
+/// Feed one encoded (`RCAC`) control message in - the mirror of
+/// `awtSubmitFrame`, for a Kotlin-owned transport or a self-test.
+fn awt_submit_control_json(slot: &AwtSlot, bytes: &[u8]) -> RcResult<serde_json::Value> {
+    let host = awt_host(slot)?;
+    host.submit_control_bytes(bytes)?;
+    Ok(json!({
+        "accepted": true,
+        "state": host.session().control().to_json(),
+    }))
+}
+
 /// The queued AWT records, encoded for the JVM-side bridge.
 fn awt_drain_events_bytes(slot: &AwtSlot) -> Vec<u8> {
     match slot {
@@ -1412,6 +1528,66 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_awtPollFrameArray(
     })
 }
 
+/// `RustBridge.awtDrainControl(): String` - the control messages the JVM sent
+/// (cursor shape, window title, clipboard hand-off / request, IME, beep) plus the
+/// current projection. One call per UI frame; `{"count":0}` when nothing changed.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_awtDrainControl(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        let slot = lock_awt();
+        let out = awt_drain_control_json(&slot);
+        drop(slot);
+        rc_to_json(&mut env, out)
+    })
+}
+
+/// `RustBridge.awtControl(json): String` - the launcher's answers to the control
+/// plane (clipboard contents, liveness, reset). See `awt_control_json`.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_awtControl(
+    mut env: JNIEnv,
+    _class: JClass,
+    request_json: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request_json) {
+            Some(s) => s,
+            None => return err_json(&mut env, "awtControl needs a JSON request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad AWT control request: {e}")),
+        };
+        let slot = lock_awt();
+        let out = awt_control_json(&slot, &value);
+        drop(slot);
+        rc_to_json(&mut env, out)
+    })
+}
+
+/// `RustBridge.awtSubmitControl(bytes): String` - hand one encoded `RCAC` control
+/// message to the session (Kotlin-owned transport / self-test).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_awtSubmitControl(
+    mut env: JNIEnv,
+    _class: JClass,
+    message: JByteArray,
+) -> jstring {
+    auth_ffi!({
+        let bytes = match env.convert_byte_array(&message) {
+            Ok(b) => b,
+            Err(e) => return err_json(&mut env, &format!("cannot read the control message: {e}")),
+        };
+        let slot = lock_awt();
+        let out = awt_submit_control_json(&slot, &bytes);
+        drop(slot);
+        rc_to_json(&mut env, out)
+    })
+}
+
 /// `RustBridge.awtDrainEvents(): ByteArray` — the queued AWT records as 32-byte
 /// little-endian rows, for a Kotlin-side transport. Empty when no session is
 /// open, so the caller never has to null-check.
@@ -1542,20 +1718,28 @@ mod tests {
     fn renderer_catalogue_is_complete() {
         let out = launch_renderers_json();
         let arr = out.as_array().unwrap();
-        assert_eq!(arr.len(), 5);
+        // 5 FCL stacks + the LWJGL SDL backend (task 9).
+        assert_eq!(arr.len(), 6);
         assert_eq!(arr[0]["id"], "opengles2");
         assert_eq!(arr[0]["gl_libname"], "libgl4es_114.so");
         assert_eq!(arr[0]["env"]["LIBGL_ES"], "2");
-        assert!(arr
+        // The catalogue must surface the SDL renderer added for task 9.
+        let sdl = arr
             .iter()
-            .all(|r| r["id"].is_string() && r["gl_libname"].is_string()));
+            .find(|r| r["id"] == "sdl2")
+            .expect("sdl2 renderer must be in the FFI catalogue");
+        assert_eq!(sdl["gl_libname"], "liblwjgl_sdl.so");
+        assert_eq!(sdl["backend"], "Sdl");
+        assert!(arr.iter().all(|r| {
+            r["id"].is_string() && r["gl_libname"].is_string() && r["backend"].is_string()
+        }));
     }
 }
 
 #[cfg(test)]
 mod awt_tests {
     use super::*;
-    use crate::launch::awt::AwtFrame;
+    use crate::launch::awt::{AwtControl, AwtFrame, CursorKind};
 
     /// A tiny 4×2 desktop on an 8×4 surface (exact 2× scale, no letterbox bars).
     fn open_tiny(slot: &mut AwtSlot) -> serde_json::Value {
@@ -1944,6 +2128,235 @@ mod awt_tests {
         // Closing joins the pump threads, so the channels are nobody's any more.
         assert_eq!(awt_close_json(&mut slot)["closed"], true);
     }
+
+    // ---- Control plane ----------------------------------------------------
+
+    #[test]
+    fn control_messages_reach_the_ui_through_the_json_plane() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        // Nothing yet.
+        let out = awt_drain_control_json(&slot).unwrap();
+        assert_eq!(out["count"], 0);
+        assert_eq!(out["state"]["cursor"], "default");
+        assert_eq!(out["state"]["wants_keyboard"], false);
+
+        for message in [
+            AwtControl::cursor(CursorKind::Text),
+            AwtControl::title("Forge 安装程序"),
+            AwtControl::clipboard_set("copied"),
+            AwtControl::ime_show(2, 1, 8),
+            AwtControl::beep(),
+        ] {
+            assert_eq!(
+                awt_submit_control_json(&slot, &message.encode()).unwrap()["accepted"],
+                true
+            );
+        }
+
+        let out = awt_drain_control_json(&slot).unwrap();
+        assert_eq!(out["count"], 5);
+        let kinds: Vec<&str> = out["control"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            kinds,
+            vec!["cursor", "title", "clipboard_set", "ime_show", "beep"]
+        );
+        assert_eq!(out["control"][0]["cursor"], "text");
+        assert_eq!(out["control"][2]["text"], "copied");
+        assert_eq!(out["control"][3]["x"], 2);
+        assert_eq!(out["state"]["cursor"], "text");
+        assert_eq!(out["state"]["title"], "Forge 安装程序");
+        assert_eq!(out["state"]["wants_keyboard"], true);
+
+        // Draining is destructive: the side effects must not fire twice.
+        assert_eq!(awt_drain_control_json(&slot).unwrap()["count"], 0);
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn a_clipboard_request_round_trips_through_the_ffi() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        awt_submit_control_json(&slot, &AwtControl::clipboard_request(5).encode()).unwrap();
+
+        let out = awt_drain_control_json(&slot).unwrap();
+        assert_eq!(out["control"][0]["kind"], "clipboard_request");
+        assert_eq!(out["control"][0]["seq"], 5);
+        assert_eq!(out["clipboard_requests"], 1);
+
+        // The UI read the Android clipboard and answers.
+        let out = awt_control_json(&slot, &json!({ "clipboard": "seed 42" })).unwrap();
+        assert!(out["queued"].as_u64().unwrap() >= 1);
+        assert_eq!(out["clipboard_requests"], 0);
+
+        // The answer is on the outbound record stream, ready for the JVM.
+        let bytes = awt_drain_events_bytes(&slot);
+        let records = crate::launch::awt::AwtEventRecord::decode_batch(&bytes).unwrap();
+        let (kind, seq, text) = crate::launch::awt::decode_control_reply(&records).unwrap();
+        assert_eq!(kind, crate::launch::awt::AwtReplyKind::Clipboard);
+        assert_eq!(seq, 5);
+        assert_eq!(text, "seed 42");
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn an_empty_clipboard_is_still_an_answer_and_seq_targeting_works() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        awt_submit_control_json(&slot, &AwtControl::clipboard_request(1).encode()).unwrap();
+        awt_submit_control_json(&slot, &AwtControl::clipboard_request(2).encode()).unwrap();
+
+        // Answer only #2, explicitly empty.
+        let out = awt_control_json(
+            &slot,
+            &json!({ "clipboard_seq": 2, "clipboard_empty": true }),
+        )
+        .unwrap();
+        assert_eq!(out["clipboard_requests"], 1, "#1 is still waiting");
+        let records =
+            crate::launch::awt::AwtEventRecord::decode_batch(&awt_drain_events_bytes(&slot))
+                .unwrap();
+        let (kind, seq, _) = crate::launch::awt::decode_control_reply(&records).unwrap();
+        assert_eq!(kind, crate::launch::awt::AwtReplyKind::ClipboardEmpty);
+        assert_eq!(seq, 2);
+
+        // `{"clipboard": null}` answers the rest the same way.
+        let out = awt_control_json(&slot, &json!({ "clipboard": null })).unwrap();
+        assert!(out["queued"].as_u64().unwrap() >= 1);
+        assert_eq!(out["clipboard_requests"], 0);
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn control_reset_and_pong_are_accepted() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        awt_submit_control_json(&slot, &AwtControl::cursor(CursorKind::Hand).encode()).unwrap();
+        let out = awt_control_json(&slot, &json!({ "pong": 9 })).unwrap();
+        assert!(out["queued"].as_u64().unwrap() >= 1);
+        let out = awt_control_json(&slot, &json!({ "reset": true })).unwrap();
+        assert_eq!(out["state"]["cursor"], "default");
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn a_garbage_control_message_is_an_error_not_a_crash() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        assert!(awt_submit_control_json(&slot, &[0xAB; 40]).is_err());
+        assert!(awt_submit_control_json(&slot, &[]).is_err());
+        // The session is still perfectly usable.
+        assert_eq!(awt_info_json(&slot)["open"], true);
+        assert_eq!(
+            awt_info_json(&slot)["session"]["controls_rejected"],
+            2,
+            "both were counted"
+        );
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn the_control_plane_needs_an_open_session() {
+        let slot: AwtSlot = None;
+        for err in [
+            awt_drain_control_json(&slot).err(),
+            awt_control_json(&slot, &json!({ "clipboard": "x" })).err(),
+            awt_submit_control_json(&slot, &AwtControl::beep().encode()).err(),
+        ] {
+            assert!(err.unwrap().to_string().contains("no AWT session is open"));
+        }
+    }
+
+    #[test]
+    fn the_control_snapshot_carries_every_field_the_compose_layer_parses() {
+        // Guard rail for the Kotlin `AwtControlBatch` / `AwtControlState` parsers:
+        // CI cannot run the Kotlin unit tests on every platform, so the contract
+        // is pinned here.
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        awt_submit_control_json(&slot, &AwtControl::window_opened(1, "标题").encode()).unwrap();
+        awt_submit_control_json(&slot, &AwtControl::ime_show(1, 1, 9).encode()).unwrap();
+        awt_submit_control_json(&slot, &AwtControl::clipboard_set("x").encode()).unwrap();
+        awt_submit_control_json(&slot, &AwtControl::clipboard_request(4).encode()).unwrap();
+
+        let out = awt_drain_control_json(&slot).unwrap();
+        for key in ["control", "count", "state", "clipboard_requests"] {
+            assert!(out.get(key).is_some(), "batch is missing {key}");
+        }
+        for key in [
+            "cursor",
+            "cursor_awt_type",
+            "title",
+            "ime",
+            "wants_keyboard",
+            "clipboard_out",
+            "clipboard_requests",
+            "windows",
+            "window_count",
+            "beeps",
+            "bye",
+        ] {
+            assert!(out["state"].get(key).is_some(), "state.{key}");
+        }
+        for key in ["x", "y", "line_height"] {
+            assert!(out["state"]["ime"].get(key).is_some(), "state.ime.{key}");
+        }
+        for key in ["id", "title"] {
+            assert!(
+                out["state"]["windows"][0].get(key).is_some(),
+                "state.windows[0].{key}"
+            );
+        }
+        for message in out["control"].as_array().unwrap() {
+            for key in ["kind", "seq"] {
+                assert!(message.get(key).is_some(), "control[].{key}");
+            }
+        }
+        // …and the session snapshot's control section + counters.
+        let info = awt_info_json(&slot);
+        assert!(info.get("control").is_some());
+        assert!(info.get("pending_controls").is_some());
+        for key in [
+            "controls_accepted",
+            "controls_rejected",
+            "controls_dropped",
+            "screens_adopted",
+            "clipboard_answers",
+        ] {
+            assert!(info["session"].get(key).is_some(), "session.{key}");
+        }
+        for key in ["controls_accepted", "controls_rejected"] {
+            assert!(info["link"].get(key).is_some(), "link.{key}");
+        }
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    #[test]
+    fn a_managed_screen_announcement_resizes_the_canvas_through_the_ffi() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        assert_eq!(awt_info_json(&slot)["screen"]["width"], 4);
+        awt_submit_control_json(&slot, &AwtControl::screen_size(16, 8).encode()).unwrap();
+        let info = awt_info_json(&slot);
+        assert_eq!(info["screen"]["width"], 16);
+        assert_eq!(info["screen"]["height"], 8);
+        assert_eq!(info["rgba_len"], 16 * 8 * 4);
+        assert_eq!(info["session"]["screens_adopted"], 1);
+        // A frame at the new size is accepted straight away.
+        let frame = AwtFrame::full(1, 16, 8, vec![0xFF12_3456; 16 * 8])
+            .unwrap()
+            .encode();
+        assert_eq!(
+            awt_submit_frame_json(&slot, &frame).unwrap()["changed"],
+            true
+        );
+        assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
 }
 
 // === Internationalisation FFI (task 20) ====================================
@@ -2056,6 +2469,114 @@ pub fn i18n_translate_json(request: &serde_json::Value) -> serde_json::Value {
         "language": language.tag(),
         "missing": missing,
     })
+}
+
+/// Pure core of `RustBridge.i18nFormat` — locale-aware value formatting.
+///
+/// `request` = `{ "kind": "bytes"|"rate"|"int"|"decimal"|"percent"|"ratio"
+///                       |"duration"|"eta"|"relative"|"fps"|"byte_progress",
+///                "value"?: 1536, "total"?: 4096, "digits"?: 1,
+///                "language"?: "en" }`
+///
+/// One crossing per label, and — crucially — the *same* implementation the core
+/// itself uses (`crate::i18n::number`). Before this existed the Compose layer
+/// carried a private English `B/KB/MB` ladder, so a Chinese user saw Chinese
+/// prose wrapped around English units.
+///
+/// Never fails: an unknown `kind` reports `"supported": false` and echoes the
+/// value through the plain integer formatter, so a version-skewed UI still
+/// renders a number instead of an error (task-19 degradation contract).
+pub fn i18n_format_json(request: &serde_json::Value) -> serde_json::Value {
+    use crate::i18n::number;
+
+    let language = requested_language(request);
+    let kind = request
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("int")
+        .trim()
+        .to_ascii_lowercase();
+
+    // Accept a JSON number *or* a numeric string: Kotlin `Long`s beyond 2^53
+    // are safer to send as strings, and a UI that stringifies everything must
+    // not silently format zero.
+    let num = |field: &str| -> f64 {
+        match request.get(field) {
+            Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
+            Some(serde_json::Value::String(s)) => s.trim().parse::<f64>().unwrap_or(0.0),
+            _ => 0.0,
+        }
+    };
+    let int = |field: &str| -> i64 {
+        match request.get(field) {
+            Some(serde_json::Value::Number(n)) => n
+                .as_i64()
+                .or_else(|| {
+                    n.as_f64()
+                        .map(|f| f.clamp(i64::MIN as f64, i64::MAX as f64) as i64)
+                })
+                .unwrap_or(0),
+            Some(serde_json::Value::String(s)) => s.trim().parse::<i64>().unwrap_or(0),
+            _ => 0,
+        }
+    };
+    // Byte counts are unsigned; a negative request clamps to 0 rather than
+    // wrapping around to 18 EB.
+    let uint = |field: &str| -> u64 { int(field).max(0) as u64 };
+    let digits = request
+        .get("digits")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(1)
+        .min(number::MAX_FRACTION_DIGITS as u64) as usize;
+
+    let mut supported = true;
+    let text = match kind.as_str() {
+        "bytes" | "size" => number::format_bytes(language, uint("value")),
+        "rate" | "speed" => number::format_rate(language, uint("value")),
+        "byte_progress" | "progress" => {
+            number::format_byte_progress(language, uint("value"), uint("total"))
+        }
+        "int" | "integer" | "count" => number::format_int(language, int("value")),
+        "decimal" | "number" => number::format_decimal(language, num("value"), digits),
+        "percent" => number::format_percent(language, num("value"), digits),
+        "ratio" => number::format_ratio_percent(language, uint("value"), uint("total"), digits),
+        "duration" => match request.get("parts").and_then(|v| v.as_u64()) {
+            Some(parts) => number::format_duration_parts(language, int("value"), parts as usize),
+            None => number::format_duration(language, int("value")),
+        },
+        "eta" => number::format_eta(language, int("value")),
+        "relative" | "relative_time" => number::format_relative_time(language, int("value")),
+        "fps" => number::format_fps(language, num("value")),
+        _ => {
+            supported = false;
+            number::format_int(language, int("value"))
+        }
+    };
+
+    serde_json::json!({
+        "kind": kind,
+        "text": text,
+        "language": language.tag(),
+        "supported": supported,
+    })
+}
+
+/// Every `kind` [`i18n_format_json`] understands — the Kotlin mirror and
+/// `check_i18n.py` assert against this list so the two sides cannot drift.
+pub fn i18n_format_kinds() -> &'static [&'static str] {
+    &[
+        "bytes",
+        "rate",
+        "byte_progress",
+        "int",
+        "decimal",
+        "percent",
+        "ratio",
+        "duration",
+        "eta",
+        "relative",
+        "fps",
+    ]
 }
 
 /// Pure core of `RustBridge.i18nBundle` — the *whole* resolved catalogue.
@@ -2180,6 +2701,16 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_i18nTranslate(
     request: JString,
 ) -> jstring {
     auth_ffi!({ i18n_json_call(&mut env, &request, i18n_translate_json) })
+}
+
+/// `RustBridge.i18nFormat(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_i18nFormat(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({ i18n_json_call(&mut env, &request, i18n_format_json) })
 }
 
 /// `RustBridge.i18nBundle(requestJson): String`
@@ -2358,6 +2889,135 @@ mod i18n_tests {
         // Every language yields the same key set (no holes for the UI).
         let en = i18n_bundle_json(&json!({ "language": "en" }));
         assert_eq!(en["messages"].as_object().unwrap().len(), msgs.len());
+    }
+
+    #[test]
+    fn format_json_renders_every_kind_in_the_requested_language() {
+        let _g = lock();
+        let f =
+            |req: serde_json::Value| i18n_format_json(&req)["text"].as_str().unwrap().to_string();
+
+        assert_eq!(
+            f(json!({ "kind": "bytes", "value": 1536, "language": "en" })),
+            "1.5 KB"
+        );
+        assert_eq!(
+            f(json!({ "kind": "rate", "value": 1258291, "language": "en" })),
+            "1.2 MB/s"
+        );
+        assert_eq!(
+            f(json!({ "kind": "rate", "value": 1258291, "language": "zh-CN" })),
+            "1.2 MB/\u{79d2}"
+        );
+        assert_eq!(
+            f(json!({ "kind": "int", "value": 1234567, "language": "en" })),
+            "1,234,567"
+        );
+        assert_eq!(
+            f(json!({ "kind": "decimal", "value": 1.25, "digits": 1, "language": "en" })),
+            "1.3"
+        );
+        assert_eq!(
+            f(json!({ "kind": "percent", "value": 42.5, "digits": 1, "language": "en" })),
+            "42.5%"
+        );
+        assert_eq!(
+            f(json!({ "kind": "ratio", "value": 1, "total": 4, "digits": 0, "language": "en" })),
+            "25%"
+        );
+        assert_eq!(
+            f(json!({ "kind": "duration", "value": 200, "language": "en" })),
+            "3 minutes 20 seconds"
+        );
+        assert_eq!(
+            f(json!({ "kind": "duration", "value": 200, "parts": 1, "language": "en" })),
+            "3 minutes"
+        );
+        assert_eq!(
+            f(json!({ "kind": "eta", "value": 200, "language": "zh-CN" })),
+            "\u{5269}\u{4f59} 3 \u{5206} 20 \u{79d2}"
+        );
+        assert_eq!(
+            f(json!({ "kind": "relative", "value": 120, "language": "en" })),
+            "2 minutes ago"
+        );
+        assert_eq!(
+            f(json!({ "kind": "fps", "value": 59.94, "language": "en" })),
+            "59.9 FPS"
+        );
+        assert_eq!(
+            f(
+                json!({ "kind": "byte_progress", "value": 1048576, "total": 4194304, "language": "en" })
+            ),
+            "1.0 MB / 4.0 MB"
+        );
+
+        // Every advertised kind is actually handled.
+        for kind in i18n_format_kinds() {
+            let out = i18n_format_json(&json!({ "kind": kind, "value": 1, "total": 2 }));
+            assert_eq!(out["supported"], true, "{kind}");
+            assert!(!out["text"].as_str().unwrap().is_empty(), "{kind}");
+        }
+    }
+
+    #[test]
+    fn format_json_degrades_instead_of_failing() {
+        let _g = lock();
+        // Unknown kind: still a number, flagged unsupported (version skew).
+        let out = i18n_format_json(&json!({ "kind": "quaternions", "value": 42 }));
+        assert_eq!(out["supported"], false);
+        assert_eq!(out["text"], "42");
+        // Null / empty request: defaults to `int` of 0, never a panic.
+        let out = i18n_format_json(&serde_json::Value::Null);
+        assert_eq!(out["kind"], "int");
+        assert_eq!(out["text"], "0");
+        // Kind casing / padding is tolerated.
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "  BYTES  ", "value": 1024, "language": "en" }))
+                ["text"],
+            "1.0 KB"
+        );
+        // Long values may arrive as strings (Kotlin Long > 2^53 safety).
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "bytes", "value": "1536", "language": "en" }))
+                ["text"],
+            "1.5 KB"
+        );
+        // A negative byte count clamps to 0 rather than wrapping to 18 EB.
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "bytes", "value": -5, "language": "en" }))["text"],
+            "0 B"
+        );
+        // Absurd precision is clamped, not honoured.
+        let wide = i18n_format_json(&json!({
+            "kind": "decimal", "value": 1.5, "digits": 9_999_999u64, "language": "en"
+        }));
+        assert!(wide["text"].as_str().unwrap().len() < 32);
+        // Non-numeric junk formats as zero instead of erroring.
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "bytes", "value": "not-a-number" }))["text"],
+            "0 B"
+        );
+        // Non-finite input never leaks "NaN"/"inf" into the UI.
+        let nan = i18n_format_json(&json!({ "kind": "fps", "value": "NaN", "language": "en" }));
+        assert!(!nan["text"].as_str().unwrap().to_lowercase().contains("nan"));
+    }
+
+    #[test]
+    fn format_json_follows_the_current_language_when_none_is_given() {
+        let _g = lock();
+        let restore = crate::i18n::current_language();
+        crate::i18n::set_language(Language::En);
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "bytes", "value": 1024 }))["text"],
+            "1.0 KB"
+        );
+        crate::i18n::set_language(Language::ZhCn);
+        assert_eq!(
+            i18n_format_json(&json!({ "kind": "eta", "value": 30 }))["language"],
+            "zh-CN"
+        );
+        crate::i18n::set_language(restore);
     }
 
     #[test]
