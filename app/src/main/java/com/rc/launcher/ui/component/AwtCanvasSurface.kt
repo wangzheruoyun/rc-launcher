@@ -28,7 +28,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.nativeKeyCode
-import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
@@ -163,9 +162,15 @@ fun AwtCanvasSurface(
                             change.consume()
                             continue
                         }
+                        // PointerButtons.packedValue is the stable, version-proof bitmask
+                        // (bit 0 = primary/left, bit 1 = secondary/right, bit 2 = tertiary/middle).
+                        // The convenience `isSecondaryPressed` / `pressed: Set<PointerButton>` APIs
+                        // only exist on compose-ui >= 1.6.0, so derive the button from the bits
+                        // to stay compatible with the pinned compose-ui 1.5.4.
+                        val buttons = event.buttons.packedValue
                         val button = when {
-                            event.buttons.pressed.contains(PointerButton(1)) -> AwtMouseButton.RIGHT
-                            event.buttons.pressed.contains(PointerButton(2)) -> AwtMouseButton.MIDDLE
+                            (buttons and 0b10) != 0 -> AwtMouseButton.RIGHT
+                            (buttons and 0b100) != 0 -> AwtMouseButton.MIDDLE
                             else -> touchButton
                         }
                         val phase = when {
