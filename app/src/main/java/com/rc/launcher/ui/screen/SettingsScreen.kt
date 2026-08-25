@@ -571,7 +571,7 @@ private fun ThemeColorCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         tonalElevation = if (selected) 6.dp else 1.dp,
-        border = if (selected) ButtonDefaults.outlinedButtonBorder(enabled = true) else null,
+        border = if (selected) ButtonDefaults.outlinedButtonBorder else null,
         color = scheme.surface,
     ) {
         Column(
