@@ -29,6 +29,30 @@ pub const MOJANG_HOSTS: &[&str] = &[
     "session.minecraft.net",
 ];
 
+/// How the [`NetworkClient`](crate::net::client::NetworkClient) should order and
+/// select mirror candidate URLs when fetching a canonical Mojang resource.
+///
+/// Mirror fallback is the single biggest lever for China-mainland download
+/// reliability, so the launcher lets the user pick a strategy instead of
+/// hard-coding one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MirrorMode {
+    /// Try the origin first, then every configured mirror (preferred first).
+    /// Safe on any network; the mirrors are only used if the origin fails.
+    #[default]
+    All,
+    /// Only ever use mirrors, never the origin. Useful when the origin CDN is
+    /// known to be blocked/poisoned on the current network.
+    MirrorsOnly,
+    /// Speed-test every mirror at client-build time and pin the fastest one as
+    /// the primary candidate. Picks the best mirror up-front with no runtime
+    /// probe, but costs one round-trip per mirror during `build`.
+    Auto,
+    /// Disable mirrors entirely and only ever hit the origin.
+    Off,
+}
+
+
 /// A single download mirror.
 ///
 /// Mirrors are configured as *path-preserving* rewrites: the host of a canonical
@@ -119,6 +143,38 @@ pub fn default_mirrors() -> Vec<MirrorSource> {
         MirrorSource::new("aliyun", "Aliyun", "https://mirrors.aliyun.com/minecraft"),
     ]
 }
+
+/// Extended mirror list for the China mainland.
+///
+/// On top of the three canonical mirrors ([`default_mirrors`]: BMCLAPI / MCBBS /
+/// Aliyun), this adds several reputable institutional mirrors — Huawei Cloud,
+/// Tsinghua TUNA and USTC — that proxy the Mojang CDN by path. They are
+/// *path-preserving* exactly like Aliyun, so a single `path_prefix` of
+/// `minecraft` rewrites `host/path` onto `mirror/minecraft/path`.
+///
+/// [`NetworkClientBuilder`](crate::net::client::NetworkClientBuilder) seeds this
+/// richer list by default, so fallback has more than three candidates before it
+/// gives up on the origin.
+pub fn extended_mirrors() -> Vec<MirrorSource> {
+    let mut v = default_mirrors();
+    v.push(MirrorSource::new(
+        "huaweicloud",
+        "HuaweiCloud",
+        "https://mirrors.huaweicloud.com/minecraft",
+    ));
+    v.push(MirrorSource::new(
+        "tuna",
+        "Tuna",
+        "https://mirrors.tuna.tsinghua.edu.cn/minecraft",
+    ));
+    v.push(MirrorSource::new(
+        "ustc",
+        "USTC",
+        "https://mirrors.ustc.edu.cn/minecraft",
+    ));
+    v
+}
+
 
 /// Result of measuring a mirror's reachability / latency.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -360,5 +416,28 @@ mod tests {
     fn non_mojang_host_is_not_rewritten() {
         let bm = MirrorSource::new("bmclapi", "BMCLAPI", "https://bmclapi2.bangbang93.com");
         assert!(bm.rewrite("https://example.org/foo").is_none());
+    }
+
+    #[test]
+    fn extended_mirrors_include_institutional() {
+        let m = extended_mirrors();
+        assert!(m.iter().any(|x| x.id == "bmclapi"));
+        assert!(m.iter().any(|x| x.id == "mcbbs"));
+        assert!(m.iter().any(|x| x.id == "aliyun"));
+        assert!(m.iter().any(|x| x.id == "huaweicloud"));
+        assert!(m.iter().any(|x| x.id == "tuna"));
+        assert!(m.iter().any(|x| x.id == "ustc"));
+        // The extended list must strictly extend the canonical three.
+        let base_mirrors = default_mirrors();
+        let base: std::collections::HashSet<&str> =
+            base_mirrors.iter().map(|x| x.id.as_str()).collect();
+        let extra = ["huaweicloud", "tuna", "ustc"];
+        for x in &m {
+            assert!(
+                base.contains(x.id.as_str()) || extra.contains(&x.id.as_str()),
+                "unexpected mirror id {}",
+                x.id
+            );
+        }
     }
 }

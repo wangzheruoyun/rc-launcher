@@ -17,7 +17,8 @@
 
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::time::Duration;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -146,77 +147,168 @@ pub fn parse_doh_json(body: &str) -> RcResult<Vec<IpAddr>> {
 
 /// Resolve `host` using the configured mode. `client` (a plain bootstrap client
 /// that already honours the proxy) is used for DoH queries.
+/// Resolve `host` using the configured mode. `client` (a plain bootstrap client
+/// that already honours the proxy) is used for DoH queries. `cache`, when
+/// provided, is consulted first (TTL-guarded) and refreshed on every successful
+/// resolution, so repeated lookups of the same host avoid redundant DoH / network
+/// work — a real speed-up when many URLs share one Mojang host.
 pub async fn resolve_host(
     config: &DnsConfig,
     host: &str,
     client: &reqwest::Client,
+    cache: Option<&DnsCache>,
 ) -> RcResult<Vec<IpAddr>> {
-    match &config.mode {
-        DnsMode::System => {
-            let addrs = tokio::net::lookup_host((host, 0))
-                .await
-                .map_err(|e| RcError::Network(format!("system resolve {host}: {e}")))?
-                .map(|sa| sa.ip())
-                .collect::<Vec<_>>();
-            if addrs.is_empty() {
-                return Err(RcError::Network(format!("no addresses for {host}")));
-            }
-            Ok(addrs)
+    // 1) Cache hit (TTL-guarded) short-circuits the whole resolution.
+    if let Some(c) = cache {
+        if let Some(ips) = c.get(host) {
+            return Ok(ips);
         }
+    }
+
+    let result: RcResult<Vec<IpAddr>> = match &config.mode {
         DnsMode::Static(map) => {
             if let Some(ips) = map.get(host) {
                 if !ips.is_empty() {
-                    return Ok(ips.clone());
+                    Ok(ips.clone())
+                } else {
+                    Err(RcError::Network(format!("no static addresses for {host}")))
                 }
+            } else {
+                // Unknown host -> fall back to the system resolver.
+                resolve_via_system(host).await
             }
-            // Fall back to the system resolver for hosts without a static entry.
-            let addrs = tokio::net::lookup_host((host, 0))
-                .await
-                .map_err(|e| RcError::Network(format!("system resolve {host}: {e}")))?
-                .map(|sa| sa.ip())
-                .collect::<Vec<_>>();
-            if addrs.is_empty() {
-                return Err(RcError::Network(format!("no addresses for {host}")));
-            }
-            Ok(addrs)
         }
+        DnsMode::System => resolve_via_system(host).await,
         DnsMode::Doh { servers } => {
-            let mut last_err: Option<String> = None;
-            for server in servers {
-                let mut collected: Vec<IpAddr> = Vec::new();
-                for rtype in ["A", "AAAA"] {
-                    let url = doh_query_url(server, host, rtype);
-                    let resp = match client.get(&url).send().await {
-                        Ok(r) if r.status().is_success() => r,
-                        Ok(r) => {
-                            last_err = Some(format!("{server} -> {}", r.status()));
-                            continue;
-                        }
-                        Err(e) => {
-                            last_err = Some(format!("{server} -> {e}"));
-                            continue;
-                        }
-                    };
-                    let body = match resp.text().await {
-                        Ok(t) => t,
-                        Err(e) => {
-                            last_err = Some(format!("DoH body error: {e}"));
-                            continue;
-                        }
-                    };
-                    match parse_doh_json(&body) {
-                        Ok(ips) => collected.extend(ips),
-                        Err(e) => last_err = Some(e.to_string()),
-                    }
-                }
-                if !collected.is_empty() {
-                    return Ok(collected);
+            match doh_resolve(servers, host, client).await {
+                Ok(ips) => Ok(ips),
+                Err(e) => {
+                    // Graceful degradation: if *every* DoH upstream failed
+                    // (network jitter / blocked), fall back to the system
+                    // resolver rather than hard-failing the launch.
+                    resolve_via_system(host)
+                        .await
+                        .map_err(|_| RcError::Network(e))
                 }
             }
-            Err(RcError::Network(last_err.unwrap_or_else(|| {
-                format!("DoH resolution of {host} failed")
-            })))
         }
+    };
+
+    // 2) Populate the cache on success so subsequent resolutions are instant.
+    if let (Some(c), Ok(ips)) = (cache, &result) {
+        c.insert(host, ips.clone(), config.cache_ttl);
+    }
+    result
+}
+
+/// System/resolver lookup used as both the `System` mode and the fallback for
+/// `Static` (unknown host) and `Doh` (all upstreams failed).
+async fn resolve_via_system(host: &str) -> RcResult<Vec<IpAddr>> {
+    let addrs = tokio::net::lookup_host((host, 0))
+        .await
+        .map_err(|e| RcError::Network(format!("system resolve {host}: {e}")))?
+        .map(|sa| sa.ip())
+        .collect::<Vec<_>>();
+    if addrs.is_empty() {
+        return Err(RcError::Network(format!("no addresses for {host}")));
+    }
+    Ok(addrs)
+}
+
+/// Resolve `host` through the DoH upstreams, returning the first server that
+/// yields any A/AAAA record. On total failure returns the last error string so
+/// the caller can fall back to the system resolver.
+async fn doh_resolve(
+    servers: &[String],
+    host: &str,
+    client: &reqwest::Client,
+) -> Result<Vec<IpAddr>, String> {
+    let mut last_err: Option<String> = None;
+    for server in servers {
+        let mut collected: Vec<IpAddr> = Vec::new();
+        for rtype in ["A", "AAAA"] {
+            let url = doh_query_url(server, host, rtype);
+            let resp = match client.get(&url).send().await {
+                Ok(r) if r.status().is_success() => r,
+                Ok(r) => {
+                    last_err = Some(format!("{server} -> {}", r.status()));
+                    continue;
+                }
+                Err(e) => {
+                    last_err = Some(format!("{server} -> {e}"));
+                    continue;
+                }
+            };
+            let body = match resp.text().await {
+                Ok(t) => t,
+                Err(e) => {
+                    last_err = Some(format!("DoH body error: {e}"));
+                    continue;
+                }
+            };
+            match parse_doh_json(&body) {
+                Ok(ips) => collected.extend(ips),
+                Err(e) => last_err = Some(e.to_string()),
+            }
+        }
+        if !collected.is_empty() {
+            return Ok(collected);
+        }
+    }
+    Err(last_err.unwrap_or_else(|| format!("DoH resolution of {host} failed")))
+}
+
+/// A tiny, thread-safe, TTL-guarded DNS cache.
+///
+/// Resolving Mojang/Forge hosts through DoH or the system resolver costs one or
+/// more round-trips, yet many distinct URLs share the same *host*. Caching the
+/// resolved addresses for [`DnsConfig::cache_ttl`] keeps repeated downloads of
+/// the same host from re-resolving on every chunk / mirror probe — a meaningful
+/// speed-up on lossy China-mainland networks.
+#[derive(Debug, Default)]
+pub struct DnsCache {
+    map: Mutex<HashMap<String, CacheEntry>>,
+}
+
+#[derive(Debug, Clone)]
+struct CacheEntry {
+    addrs: Vec<IpAddr>,
+    expires_at: Instant,
+}
+
+impl DnsCache {
+    /// Create an empty cache.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Look up `host`, returning cached addresses only while they have not
+    /// expired (TTL-guarded). Expired entries are treated as a miss.
+    pub fn get(&self, host: &str) -> Option<Vec<IpAddr>> {
+        let guard = self.map.lock().unwrap();
+        let entry = guard.get(host)?;
+        if entry.expires_at >= Instant::now() {
+            Some(entry.addrs.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Insert/refresh `host` -> `addrs` with the given TTL.
+    pub fn insert(&self, host: &str, addrs: Vec<IpAddr>, ttl: Duration) {
+        let mut guard = self.map.lock().unwrap();
+        guard.insert(
+            host.to_string(),
+            CacheEntry {
+                addrs,
+                expires_at: Instant::now() + ttl,
+            },
+        );
+    }
+
+    /// Drop every cached entry (e.g. when the network changes).
+    pub fn clear(&self) {
+        self.map.lock().unwrap().clear();
     }
 }
 
@@ -275,5 +367,68 @@ mod tests {
         let c = DnsConfig::default();
         assert!(matches!(c.mode, DnsMode::System));
         assert!(c.happy_eyeballs);
+    }
+
+    #[test]
+    fn dns_cache_stores_and_expires() {
+        let cache = DnsCache::new();
+        let ip = "93.184.216.34".parse::<IpAddr>().unwrap();
+        // Not present initially.
+        assert!(cache.get("example.com").is_none());
+        // Insert with a 50ms TTL.
+        cache.insert("example.com", vec![ip], Duration::from_millis(50));
+        assert_eq!(cache.get("example.com").unwrap(), vec![ip]);
+        // After the TTL elapses it is a miss again.
+        std::thread::sleep(Duration::from_millis(70));
+        assert!(cache.get("example.com").is_none());
+        // clear() wipes everything.
+        cache.insert("a.com", vec![ip], Duration::from_secs(60));
+        cache.clear();
+        assert!(cache.get("a.com").is_none());
+    }
+
+    #[test]
+    fn resolve_host_static_returns_override() {
+        let mut map = HashMap::new();
+        let ip = "1.2.3.4".parse::<IpAddr>().unwrap();
+        map.insert("launcher.mojang.com".to_string(), vec![ip]);
+        let cfg = DnsConfig::static_map(map);
+        let client = reqwest::Client::new();
+        let cache = DnsCache::new();
+        let out = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(resolve_host(&cfg, "launcher.mojang.com", &client, Some(&cache)))
+            .unwrap();
+        assert_eq!(out, vec![ip]);
+        // The static result is cached for next time.
+        assert_eq!(cache.get("launcher.mojang.com").unwrap(), vec![ip]);
+    }
+
+    #[test]
+    fn resolve_host_static_falls_back_to_system() {
+        let cfg = DnsConfig::static_map(HashMap::new());
+        let client = reqwest::Client::new();
+        let cache = DnsCache::new();
+        // "localhost" is not in the (empty) static map, so we fall back to the
+        // system resolver — which always resolves localhost offline.
+        let out = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(resolve_host(&cfg, "localhost", &client, Some(&cache)))
+            .unwrap();
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn resolve_host_doh_falls_back_to_system() {
+        // Point DoH at an impossible upstream so every server fails; resolution
+        // must then gracefully degrade to the system resolver for "localhost".
+        let cfg = DnsConfig::doh(vec!["https://127.0.0.1:1/dns-query".to_string()]);
+        let client = reqwest::Client::new();
+        let cache = DnsCache::new();
+        let out = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(resolve_host(&cfg, "localhost", &client, Some(&cache)))
+            .unwrap();
+        assert!(!out.is_empty());
     }
 }

@@ -22,8 +22,8 @@ mod mirror;
 mod proxy;
 
 pub use client::{NetworkClient, NetworkClientBuilder, NetworkConfig};
-pub use dns::{default_doh_servers, parse_doh_json, DnsConfig, DnsMode};
-pub use mirror::{default_mirrors, MirrorLatency, MirrorProvider, MirrorSource, MOJANG_HOSTS};
+pub use dns::{default_doh_servers, parse_doh_json, DnsCache, DnsConfig, DnsMode};
+pub use mirror::{default_mirrors, extended_mirrors, MirrorLatency, MirrorMode, MirrorProvider, MirrorSource, MOJANG_HOSTS};
 pub use proxy::ProxyConfig;
 
 #[cfg(test)]

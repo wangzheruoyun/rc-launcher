@@ -55,13 +55,23 @@
 //!   [`download::DownloadManager`] built on `tokio` + `reqwest` with SHA-1/MD5
 //!   verification, exponential-backoff retries and a cumulative progress
 //!   callback.
-//! * **`net`** (task 3) — China-mainland network optimisation: built-in
-//!   BMCLAPI/MCBBS/Aliyun mirrors with automatic speed-testing and selection,
-//!   DNS optimisation (DoH resolvers, static/custom resolvers, Happy Eyeballs,
-//!   connection reuse, timeouts and exponential backoff) and configurable
-//!   HTTP/HTTPS/SOCKS5 proxy. [`net::NetworkClient`] also implements
-//!   [`download::HttpSource`] so the download manager inherits every network
-//!   optimisation automatically.
+//! * **`net`** (task 3) — China-mainland network optimisation:
+//!   * Mirrors: built-in BMCLAPI/MCBBS/Aliyun plus an *extended* set
+//!     (Huawei Cloud, Tsinghua TUNA, USTC) via
+//!     [`net::extended_mirrors`]; [`net::MirrorProvider`] speed-tests and
+//!     pins the fastest reachable mirror, and [`net::MirrorMode`] (All /
+//!     MirrorsOnly / Auto / Off) chooses the candidate-ordering strategy
+//!     (Auto pre-selects the best mirror at build time).
+//!   * DNS: [`net::DnsMode`] (System / Static custom resolver / DoH) with
+//!     domestic DoH upstreams (Aliyun, DNSPod, 360) and global fallbacks,
+//!     a TTL-guarded [`net::DnsCache`], Happy Eyeballs via `hickory-dns`, and
+//!     graceful degradation (DoH → system resolver) when every upstream fails.
+//!   * Proxy: configurable HTTP/HTTPS/SOCKS5 ([`net::ProxyConfig`]); the DoH
+//!     bootstrap client also honours the proxy.
+//!   * [`net::NetworkClient`] ties it together with connection reuse, timeouts
+//!     and exponential-backoff retries, and implements
+//!     [`download::HttpSource`] so the resumable download manager inherits
+//!     mirror fallback, DoH and proxy support automatically.
 //! * **`game`** (task 4) — version manifest & dependency resolution: parses
 //!   Mojang's `version_manifest` and each `version.json`, resolves the
 //!   `inheritsFrom` chain, filters libraries by platform rules, and produces a

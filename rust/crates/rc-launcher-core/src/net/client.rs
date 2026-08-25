@@ -30,8 +30,8 @@ use tokio::io::{AsyncWrite, AsyncWriteExt};
 use crate::download::compute_backoff;
 use crate::download::{FetchResult, HttpSource};
 use crate::error::{RcError, RcResult};
-use crate::net::dns::{self, DnsConfig, DnsMode};
-use crate::net::mirror::{MirrorProvider, MirrorSource, MOJANG_HOSTS};
+use crate::net::dns::{self, DnsCache, DnsConfig, DnsMode};
+use crate::net::mirror::{extended_mirrors, MirrorMode, MirrorProvider, MirrorSource, MOJANG_HOSTS};
 use crate::net::proxy::ProxyConfig;
 
 const DEFAULT_USER_AGENT: &str = concat!("RC-Launcher/", env!("CARGO_PKG_VERSION"));
@@ -152,6 +152,10 @@ pub struct NetworkClient {
     mirrors: MirrorProvider,
     /// Resolved address overrides applied to the client (for transparency/logs).
     overrides: HashMap<String, Vec<IpAddr>>,
+    /// Shared, TTL-guarded DNS cache (build-time DoH results are stored here).
+    cache: DnsCache,
+    /// Mirror fallback strategy selected at build time.
+    mirror_mode: MirrorMode,
 }
 
 impl NetworkClient {
@@ -173,11 +177,32 @@ impl NetworkClient {
         &self.overrides
     }
 
-    /// Candidate URLs for `url`: original first, then mirrors (preferred first).
+    /// The mirror fallback strategy selected at build time.
+    pub fn mirror_mode(&self) -> MirrorMode {
+        self.mirror_mode
+    }
+
+    /// Shared, TTL-guarded DNS cache (build-time DoH results live here).
+    pub fn dns_cache(&self) -> &DnsCache {
+        &self.cache
+    }
+
+    /// Candidate URLs for `url`, ordered according to the configured
+    /// [`MirrorMode`]:
+    /// * `All` / `Auto` — origin first, then every mirror (preferred first);
+    /// * `MirrorsOnly` — mirrors only (origin skipped);
+    /// * `Off` — origin only.
     pub fn candidate_urls(&self, url: &str) -> Vec<String> {
-        let mut out = vec![url.to_string()];
-        out.extend(self.mirrors.rewrite_all(url));
-        out
+        let mirrors = self.mirrors.rewrite_all(url);
+        match self.mirror_mode {
+            MirrorMode::Off => vec![url.to_string()],
+            MirrorMode::MirrorsOnly => mirrors,
+            MirrorMode::All | MirrorMode::Auto => {
+                let mut out = vec![url.to_string()];
+                out.extend(mirrors);
+                out
+            }
+        }
     }
 
     /// Fetch a URL, trying each candidate (origin + mirrors) with retries and
@@ -230,6 +255,8 @@ impl NetworkClient {
 pub struct NetworkClientBuilder {
     config: NetworkConfig,
     mirrors: Vec<MirrorSource>,
+    /// How candidate URLs are ordered/selected (mirror fallback strategy).
+    mirror_mode: MirrorMode,
     /// Hosts to protect via DoH/static resolution (default: [`MOJANG_HOSTS`]).
     protected_hosts: Vec<String>,
 }
@@ -238,7 +265,8 @@ impl Default for NetworkClientBuilder {
     fn default() -> Self {
         Self {
             config: NetworkConfig::default(),
-            mirrors: crate::net::mirror::default_mirrors(),
+            mirrors: extended_mirrors(),
+            mirror_mode: MirrorMode::All,
             protected_hosts: MOJANG_HOSTS.iter().map(|s| s.to_string()).collect(),
         }
     }
@@ -270,6 +298,18 @@ impl NetworkClientBuilder {
         self
     }
 
+    /// Choose the mirror fallback strategy.
+    ///
+    /// * [`MirrorMode::All`] (default) tries the origin first, then every mirror.
+    /// * [`MirrorMode::MirrorsOnly`] only ever uses mirrors (origin is blocked).
+    /// * [`MirrorMode::Auto`] speed-tests the mirrors at build time and pins the
+    ///   fastest as primary.
+    /// * [`MirrorMode::Off`] disables mirrors entirely.
+    pub fn mirror_mode(mut self, m: MirrorMode) -> Self {
+        self.mirror_mode = m;
+        self
+    }
+
     /// Finalise: resolve DNS overrides (if any) and build the client.
     pub async fn build(self) -> RcResult<NetworkClient> {
         let proxy = self.config.proxy.to_reqwest()?;
@@ -289,6 +329,9 @@ impl NetworkClientBuilder {
             .build()
             .map_err(|e| RcError::Other(format!("build bootstrap client: {e}")))?;
 
+        // Shared TTL-guarded DNS cache; build-time DoH results are stored here.
+        let cache = DnsCache::new();
+
         // 2) Compute DNS overrides for the protected hosts.
         let mut overrides: HashMap<String, Vec<IpAddr>> = HashMap::new();
         match &self.config.dns.mode {
@@ -303,7 +346,7 @@ impl NetworkClientBuilder {
             }
             DnsMode::Doh { .. } => {
                 for h in &self.protected_hosts {
-                    match dns::resolve_host(&self.config.dns, h, &bootstrap).await {
+                    match dns::resolve_host(&self.config.dns, h, &bootstrap, Some(&cache)).await {
                         Ok(ips) => {
                             overrides.insert(h.clone(), ips);
                         }
@@ -344,11 +387,23 @@ impl NetworkClientBuilder {
             .build()
             .map_err(|e| RcError::Other(format!("build client: {e}")))?;
 
+        // Build the mirror provider, optionally pre-selecting the fastest mirror.
+        let provider = MirrorProvider::new(self.mirrors);
+        if self.mirror_mode == MirrorMode::Auto {
+            // Speed-test each mirror with the bootstrap client and pin the fastest
+            // reachable one as primary, so no runtime probe is needed later.
+            if let Some(best) = provider.speed_test(&bootstrap).await {
+                provider.set_best(&best);
+            }
+        }
+
         Ok(NetworkClient {
             client,
             config: self.config,
-            mirrors: MirrorProvider::new(self.mirrors),
+            mirrors: provider,
             overrides,
+            cache,
+            mirror_mode: self.mirror_mode,
         })
     }
 }
@@ -476,9 +531,76 @@ impl NetworkClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::download::{DownloadManager, DownloadOptions, DownloadTask, HttpSource, sha1_bytes};
     use crate::net::mirror::MirrorProvider;
     use async_trait::async_trait;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Arc;
     use std::sync::Mutex;
+
+    /// Minimal blocking HTTP/1.0 test server (no extra deps). `handler` returns
+    /// `(status_code, body)` for a request, given its path and parsed byte range.
+    /// `Connection: close` is forced so each request uses a fresh connection —
+    /// trivial for tests, and it lets a chunked download open one connection per
+    /// chunk against this single-threaded acceptor.
+    struct TestServer {
+        addr: std::net::SocketAddr,
+        _handle: std::thread::JoinHandle<()>,
+    }
+
+    fn parse_range_header(req: &str) -> Option<(u64, u64)> {
+        for line in req.lines() {
+            let l = line.trim();
+            if let Some(rest) = l.to_ascii_lowercase().strip_prefix("range:") {
+                let spec = rest.trim().strip_prefix("bytes=")?;
+                let (a, b) = spec.split_once('-')?;
+                let start = a.parse::<u64>().ok()?;
+                let end = if b.is_empty() {
+                    u64::MAX
+                } else {
+                    b.parse::<u64>().ok()? + 1
+                };
+                return Some((start, end));
+            }
+        }
+        None
+    }
+
+    fn start_server(
+        handler: impl Fn(&str, Option<(u64, u64)>) -> (u16, Vec<u8>) + Send + Sync + 'static,
+    ) -> TestServer {
+        let handler = Arc::new(handler);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            for mut s in listener.incoming().flatten() {
+                let mut buf = [0u8; 16384];
+                let n = match s.read(&mut buf) {
+                    Ok(n) if n > 0 => n,
+                    _ => continue,
+                };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = req
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or("/")
+                    .to_string();
+                let range = parse_range_header(&req);
+                let (status, body) = handler(&path, range);
+                let resp = format!(
+                    "HTTP/1.0 {status} OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = s.write_all(resp.as_bytes());
+                let _ = s.write_all(&body);
+                let _ = s.flush();
+            }
+        });
+        TestServer { addr, _handle: handle }
+    }
+
 
     /// Local, cloneable scripted outcome for the offline fetcher (`RcError` is not
     /// `Clone`, so we avoid storing it directly).
@@ -663,4 +785,139 @@ mod tests {
         // The proxy is applied internally; we just assert the client built.
         assert!(client.config().proxy.to_reqwest().unwrap().is_some());
     }
+
+    #[tokio::test]
+    async fn mirror_mode_off_disables_mirrors() {
+        let client = NetworkClient::builder()
+            .mirror_mode(MirrorMode::Off)
+            .build()
+            .await
+            .unwrap();
+        let url = "https://launcher.mojang.com/v1/objects/a/b.jar";
+        let cands = client.candidate_urls(url);
+        assert_eq!(cands, vec![url.to_string()]);
+    }
+
+    #[tokio::test]
+    async fn mirror_mode_mirrors_only_skips_origin() {
+        let client = NetworkClient::builder()
+            .mirror_mode(MirrorMode::MirrorsOnly)
+            .build()
+            .await
+            .unwrap();
+        let url = "https://launcher.mojang.com/v1/objects/a/b.jar";
+        let cands = client.candidate_urls(url);
+        assert!(!cands.is_empty(), "expected at least one mirror candidate");
+        assert!(
+            !cands[0].starts_with("https://launcher.mojang.com"),
+            "origin should be skipped in MirrorsOnly mode"
+        );
+    }
+
+    #[tokio::test]
+    async fn e2e_mirror_fallback_when_origin_fails() {
+        // Origin always answers 500; the (single custom) mirror answers 200.
+        let origin = start_server(|_, _| (500u16, Vec::new()));
+        let body = b"hello-from-mirror".to_vec();
+        let mirror = start_server(move |_, _| (200u16, body.clone()));
+        let mirror_url = format!("http://{}", mirror.addr);
+        let client = NetworkClient::builder()
+            .config(NetworkConfig {
+                dns: DnsConfig {
+                    happy_eyeballs: false,
+                    ..DnsConfig::default()
+                },
+                ..NetworkConfig::default()
+            })
+            .mirrors(vec![
+                MirrorSource::new("m", "M", &mirror_url).with_hosts(&["127.0.0.1"]),
+            ])
+            .build()
+            .await
+            .unwrap();
+        let url = format!("http://{}/file.jar", origin.addr);
+        let resp = client.get(&url).await.unwrap();
+        assert_eq!(resp.status().as_u16(), 200);
+        let text = resp.text().await.unwrap();
+        assert_eq!(text, "hello-from-mirror");
+    }
+
+    #[tokio::test]
+    async fn e2e_network_client_is_httpsource_with_range() {
+        let data: Vec<u8> = (0..2048u32).map(|i| (i % 251) as u8).collect();
+        let data_ref = data.clone();
+        let server = start_server(move |_, range| match range {
+            Some((s, e)) => {
+                let end = e.min(data_ref.len() as u64) as usize;
+                (206u16, data_ref[s as usize..end].to_vec())
+            }
+            None => (200u16, data_ref.clone()),
+        });
+        let client = NetworkClient::builder()
+            .config(NetworkConfig {
+                dns: DnsConfig {
+                    happy_eyeballs: false,
+                    ..DnsConfig::default()
+                },
+                ..NetworkConfig::default()
+            })
+            .build()
+            .await
+            .unwrap();
+        let url = format!("http://{}/game.jar", server.addr);
+        // Range fetch [10, 20] inclusive -> 11 bytes (data[10..21]).
+        let fr = client.fetch_range(url.as_str(), 10, Some(20)).await.unwrap();
+        assert_eq!(fr.bytes, data[10..21]);
+        assert!(fr.supports_range);
+        // Whole fetch.
+        let fr2 = client.fetch_range(url.as_str(), 0, None).await.unwrap();
+        assert_eq!(fr2.bytes, data);
+    }
+
+    #[tokio::test]
+    async fn e2e_chunked_download_via_download_manager() {
+        let data: Vec<u8> = (0..300_000u32).map(|i| (i % 251) as u8).collect();
+        let data_ref = data.clone();
+        let server = start_server(move |_, range| match range {
+            Some((s, e)) => {
+                let end = e.min(data_ref.len() as u64) as usize;
+                (206u16, data_ref[s as usize..end].to_vec())
+            }
+            None => (200u16, data_ref.clone()),
+        });
+        let client = NetworkClient::builder()
+            .config(NetworkConfig {
+                dns: DnsConfig {
+                    happy_eyeballs: false,
+                    ..DnsConfig::default()
+                },
+                ..NetworkConfig::default()
+            })
+            .build()
+            .await
+            .unwrap();
+        let url = format!("http://{}/game.jar", server.addr);
+        let dir = std::env::temp_dir().join(format!("rc_net_itest_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let dest = dir.join("game.jar");
+        let mgr = DownloadManager::new(
+            Arc::new(client),
+            DownloadOptions {
+                chunk_size: 64 * 1024,
+                concurrency: 4,
+                ..Default::default()
+            },
+        );
+        let summary = mgr
+            .download(
+                &DownloadTask::new(url.as_str(), dest.clone())
+                    .with_sha1(sha1_bytes(&data))
+                    .with_size(data.len() as u64),
+            )
+            .await
+            .expect("download must succeed against the local server");
+        assert_eq!(summary.size, data.len() as u64);
+        assert_eq!(std::fs::read(&dest).unwrap(), data);
+    }
+
 }
