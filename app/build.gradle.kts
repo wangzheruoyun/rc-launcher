@@ -118,13 +118,32 @@ android {
 // module we use to 1.6.8 (Kotlin 1.9.24 / Compose compiler 1.5.14 compatible),
 // applied as a resolution rule so it cannot float upward.
 configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "androidx.compose.ui" ||
-            requested.group == "androidx.compose.foundation" ||
-            requested.group == "androidx.compose.runtime" ||
-            requested.group == "androidx.compose.animation"
-        ) {
-            useVersion("1.6.8")
+    resolutionStrategy {
+        // Hard-pin the whole Compose stack to a single coherent 1.6.8 set.
+        // navigation-compose / material3 can otherwise pull a newer compose-ui
+        // (1.7.0+), which removed PointerButton / isSecondaryPressed and breaks
+        // the build. `force` wins over transitive `strictly` constraints so the
+        // version cannot float upward.
+        force(
+            "androidx.compose.ui:ui:1.6.8",
+            "androidx.compose.ui:ui-graphics:1.6.8",
+            "androidx.compose.ui:ui-tooling:1.6.8",
+            "androidx.compose.ui:ui-tooling-preview:1.6.8",
+            "androidx.compose.foundation:foundation:1.6.8",
+            "androidx.compose.runtime:runtime:1.6.8",
+            "androidx.compose.animation:animation:1.6.8",
+            "androidx.compose.material3:material3:1.2.1",
+            "androidx.compose.material:material-icons-extended:1.6.8",
+        )
+        eachDependency {
+            if (requested.group == "androidx.compose.ui" ||
+                requested.group == "androidx.compose.foundation" ||
+                requested.group == "androidx.compose.runtime" ||
+                requested.group == "androidx.compose.animation"
+            ) {
+                useVersion("1.6.8")
+                because("pin Compose to a single coherent 1.6.8 set")
+            }
         }
     }
 }
