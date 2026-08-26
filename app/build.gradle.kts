@@ -1,4 +1,3 @@
-import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -10,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.rc.launcher"
-    compileSdk = 37
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.rc.launcher"
@@ -100,23 +99,17 @@ android {
     }
 }
 
-// Kotlin 2.x: configure the compiler via the compilerOptions DSL (the old
-// `kotlinOptions { jvmTarget / freeCompilerArgs }` accessors are errors now).
-kotlin {
-    compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_17)
-        // The UI uses several experimental Material3 / Foundation / Animation APIs
-        // (ExposedDropdownMenu, SearchBar, ModalBottomSheet, etc.). Opt in
-        // project-wide instead of annotating every composable.
-        freeCompilerArgs.addAll(
-            listOf(
-                "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
-                "-Xopt-in=androidx.compose.material.ExperimentalMaterialApi",
-                "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
-                "-Xopt-in=androidx.compose.animation.ExperimentalAnimationApi"
-            )
-        )
-    }
+kotlinOptions {
+    jvmTarget = "17"
+    // The UI uses several experimental Material3 / Foundation / Animation APIs
+    // (ExposedDropdownMenu, SearchBar, ModalBottomSheet, etc.). Opt in
+    // project-wide instead of annotating every composable.
+    freeCompilerArgs += listOf(
+        "-Xopt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+        "-Xopt-in=androidx.compose.material.ExperimentalMaterialApi",
+        "-Xopt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+        "-Xopt-in=androidx.compose.animation.ExperimentalAnimationApi"
+    )
 }
 
 

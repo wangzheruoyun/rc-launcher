@@ -17,27 +17,27 @@
 #   `compose` / `material3` versions below.
 
 [versions]
-agp = "9.1.0"
+agp = "8.7.3"
 # Kotlin 2.4.x — the Compose compiler is now bundled into the Kotlin Gradle plugin
 # via `org.jetbrains.kotlin.plugin.compose` (no separate `composeCompiler` version).
-kotlin = "2.4.10"
+kotlin = "1.9.22"
 # Single, mutually-compatible Compose set, sourced from the official Compose BOM
 # (2026.08.00) so `compose` / `material3` / `materialIconsExtended` can never drift:
 #   androidx.compose.ui:*                            = 1.12.0
 #   androidx.compose.material3                       = 1.4.0
 #   androidx.compose.material:material-icons-extended = 1.7.8
-composeBom = "2026.08.00"
-compose = "1.12.0"
-material3 = "1.4.0"
-materialIconsExtended = "1.7.8"
+composeBom = "2024.06.00"
+compose = "1.5.4"
+material3 = "1.2.1"
+materialIconsExtended = "1.5.4"
 
 coreKtx = "1.13.1"
 lifecycle = "2.8.3"
 activityCompose = "1.9.0"
-navigationCompose = "2.9.8"
+navigationCompose = "2.7.7"
 # kotlinx-serialization backs Navigation Compose 2.9.x type-safe routes
 # (every @Serializable route class needs a generated serializer at compile time).
-kotlinxSerialization = "1.8.1"
+kotlinxSerialization = "1.7.3"
 
 junit = "4.13.2"
 robolectric = "4.12.2"
