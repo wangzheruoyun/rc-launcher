@@ -18,7 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.compose.hasRoute
+import androidx.navigation.hasRoute
 import com.rc.launcher.ui.navigation.AccountsRoute
 import com.rc.launcher.ui.navigation.AwtRoute
 import com.rc.launcher.ui.navigation.ControllerRoute
