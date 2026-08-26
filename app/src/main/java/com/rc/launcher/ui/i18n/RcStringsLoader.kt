@@ -24,6 +24,20 @@ interface StringsSource {
 }
 
 /**
+ * A source that can also serve a **dynamically loaded language pack** (task 20).
+ *
+ * A pack has no [AppLanguage] entry, so it is addressed by tag; only the core can
+ * resolve it (it owns the pack catalogue, its parent and its plural rule).
+ * Implemented by [CoreStringsSource] and forwarded by [CompositeStringsSource];
+ * [ResourcesStringsSource] cannot serve one (there are no generated resources for
+ * a language that did not exist at build time) and returns `null`.
+ */
+interface PackAwareStringsSource : StringsSource {
+    /** The fully resolved table for [option], or `null` when unavailable. */
+    fun loadTag(option: LanguageOption): RcStrings?
+}
+
+/**
  * The slice of [RustBridge] the i18n framework needs — top level so it can be
  * faked in a plain JVM unit test without loading the native library.
  */
@@ -48,7 +62,28 @@ object RustBridgeI18n : CoreI18nBridge {
  */
 class CoreStringsSource(
     private val bridge: CoreI18nBridge = RustBridgeI18n,
-) : StringsSource {
+) : PackAwareStringsSource {
+
+    /**
+     * Load a dynamically loaded pack by tag.
+     *
+     * The core has already resolved the pack through its parent chain, so the
+     * bundle is as complete as a built-in one — untranslated keys arrive as
+     * Chinese, never as raw keys.
+     */
+    override fun loadTag(option: LanguageOption): RcStrings? = runCatching {
+        bridge.setLanguage("""{"tag":"${option.tag}"}""")
+        val raw = bridge.bundle("""{"language":"${option.tag}"}""")
+        val messages = parseBundle(raw) ?: return null
+        if (messages.isEmpty()) return null
+        RcStrings.ofPack(
+            tag = option.tag,
+            parent = option.parent,
+            messages = messages,
+            // Prefer what the bundle reports; fall back to the picker row.
+            pluralRule = parsePluralRule(raw) ?: option.pluralRule,
+        )
+    }.getOrNull()
 
     override fun load(language: AppLanguage): RcStrings? {
         // SYSTEM is resolved to a catalogue by the caller; guard anyway.
@@ -64,6 +99,13 @@ class CoreStringsSource(
     }
 
     companion object {
+        /** The `plural` rule id reported by `i18nBundle`, when present. */
+        fun parsePluralRule(raw: String?): RcPluralRule? {
+            val root = parseJson(raw ?: return null) as? JsonValue.Obj ?: return null
+            val id = (root.entries["plural"] as? JsonValue.Str)?.value ?: return null
+            return RcPluralRule.parse(id)
+        }
+
         /** Extract `{"language":...,"messages":{k:v,...}}` into a flat map. */
         fun parseBundle(raw: String?): Map<String, String>? {
             if (raw.isNullOrBlank()) return null
@@ -103,8 +145,17 @@ class ResourcesStringsSource(context: Context) : StringsSource {
  * them fail the caller still gets a non-null, *empty* table whose lookups echo
  * the key — the UI must never crash because a translation is unavailable.
  */
-class CompositeStringsSource(private val sources: List<StringsSource>) : StringsSource {
+class CompositeStringsSource(private val sources: List<StringsSource>) : PackAwareStringsSource {
     override fun load(language: AppLanguage): RcStrings =
         sources.firstNotNullOfOrNull { runCatching { it.load(language) }.getOrNull() }
             ?: RcStrings.empty(language)
+
+    /**
+     * Only a [PackAwareStringsSource] can serve a pack; `null` when none can, so
+     * [LocaleEngine] falls back to the pack's parent language instead of showing
+     * an empty screen.
+     */
+    override fun loadTag(option: LanguageOption): RcStrings? =
+        sources.filterIsInstance<PackAwareStringsSource>()
+            .firstNotNullOfOrNull { runCatching { it.loadTag(option) }.getOrNull() }
 }

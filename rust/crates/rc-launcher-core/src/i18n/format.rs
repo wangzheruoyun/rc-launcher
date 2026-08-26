@@ -36,20 +36,64 @@ impl PluralCategory {
 
 use super::Language;
 
-/// The plural category of `count` in `language` (CLDR cardinal rules).
-pub fn plural_category(language: Language, count: i64) -> PluralCategory {
-    match language {
-        // zh has a single form.
-        Language::ZhCn | Language::ZhHant => PluralCategory::Other,
-        // en: `one` iff exactly 1 (0 and negatives are `other`).
-        Language::En => {
-            if count == 1 {
-                PluralCategory::One
-            } else {
-                PluralCategory::Other
+/// A CLDR cardinal *rule set*, i.e. how a language maps a count onto a
+/// [`PluralCategory`].
+///
+/// Split out from [`Language`] so a **runtime language pack** (`i18n::pack`) can
+/// declare its own rule with `_meta.plural = one_other`: a dynamically loaded
+/// `ru.properties` is not a compiled-in variant, so it cannot be a `match` arm.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PluralRule {
+    /// One single form for every count (zh, ja, ko, vi, th, …). The default,
+    /// because it is the base locale's rule and the safest guess for a new pack:
+    /// a `<key>.other` alone always renders.
+    #[default]
+    OtherOnly,
+    /// `one` iff exactly 1, `other` otherwise (en, de, es, it, nl, …).
+    OneOther,
+}
+
+impl PluralRule {
+    /// Parse a `_meta.plural` value; unknown text falls back to [`Self::OtherOnly`].
+    pub fn parse(text: &str) -> PluralRule {
+        match text
+            .trim()
+            .to_ascii_lowercase()
+            .replace(['-', ' '], "_")
+            .as_str()
+        {
+            "one_other" | "oneother" | "en" | "germanic" => PluralRule::OneOther,
+            // "other_only" / "other" / "single" / anything unrecognised.
+            _ => PluralRule::OtherOnly,
+        }
+    }
+
+    /// The canonical spelling (round-trips through [`Self::parse`]).
+    pub const fn id(self) -> &'static str {
+        match self {
+            PluralRule::OtherOnly => "other_only",
+            PluralRule::OneOther => "one_other",
+        }
+    }
+
+    /// The category `count` falls into under this rule.
+    pub const fn category(self, count: i64) -> PluralCategory {
+        match self {
+            PluralRule::OtherOnly => PluralCategory::Other,
+            PluralRule::OneOther => {
+                if count == 1 {
+                    PluralCategory::One
+                } else {
+                    PluralCategory::Other
+                }
             }
         }
     }
+}
+
+/// The plural category of `count` in `language` (CLDR cardinal rules).
+pub fn plural_category(language: Language, count: i64) -> PluralCategory {
+    language.plural_rule().category(count)
 }
 
 /// Build the plural sub-key for `base` (`"download.files"` + 1 -> `"download.files.one"`).

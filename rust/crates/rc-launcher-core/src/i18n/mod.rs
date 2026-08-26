@@ -36,6 +36,7 @@ pub mod catalog;
 pub mod format;
 pub mod language;
 pub mod number;
+pub mod pack;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -49,6 +50,7 @@ pub use number::{
     format_eta, format_fps, format_int, format_percent, format_rate, format_ratio_percent,
     format_relative_time, format_uint,
 };
+pub use pack::LanguagePack;
 
 /// The process-wide UI language, as a [`Language::index`].
 ///
@@ -96,20 +98,159 @@ pub fn current_language() -> Language {
 }
 
 /// Switch the active UI language. Cheap enough to call from a click handler.
+///
+/// Picking a *built-in* language deselects any active dynamic pack: the user
+/// asked for English, so they must get English and not a pack that happened to
+/// be loaded.
 pub fn set_language(language: Language) {
+    pack::set_active(None);
+    set_language_builtin(language);
+}
+
+/// Store the built-in language without touching the active pack.
+///
+/// Split out so [`set_language_tag`] can point [`current_language`] at a pack's
+/// parent while keeping the pack selected.
+fn set_language_builtin(language: Language) {
     CURRENT.store(language.index(), Ordering::Relaxed);
 }
 
-/// Switch by tag, negotiating the closest shipped catalogue.
+/// Where to resolve keys from: a compiled-in [`Language`], or a runtime
+/// [`pack::LanguagePack`] addressed by tag.
+///
+/// A pack is not a `Language` variant (it is loaded at runtime, so it cannot be
+/// one), yet everything that renders text — `t*`, [`bundle`], the value
+/// formatters in [`number`] — must be able to resolve through it. `Scope` is that
+/// one extra indirection, deliberately `Clone` and cheap (`Arc<str>` tag) so it
+/// can be passed per call without allocating a `String` each time.
+#[derive(Debug, Clone)]
+pub enum Scope {
+    /// A compiled-in catalogue (plus its overlay and fallback chain).
+    Builtin(Language),
+    /// A dynamically loaded language pack, falling through to its parent.
+    Pack(std::sync::Arc<str>),
+}
+
+impl Scope {
+    /// A scope for `tag`: the pack when one is registered, else the closest
+    /// built-in (Chinese-first, like [`set_language_tag`]).
+    pub fn for_tag(tag: &str) -> Scope {
+        match pack::canonical_tag(tag).filter(|t| pack::contains(t)) {
+            Some(t) => Scope::Pack(t.into()),
+            None => Scope::Builtin(
+                Language::from_tag(tag)
+                    .or_else(|| Language::negotiate(tag))
+                    .unwrap_or(Language::BASE),
+            ),
+        }
+    }
+
+    /// The canonical tag this scope renders as (what the UI persists / displays).
+    pub fn tag(&self) -> String {
+        match self {
+            Scope::Builtin(l) => l.tag().to_string(),
+            Scope::Pack(t) => t.to_string(),
+        }
+    }
+
+    /// The compiled-in language unresolved keys fall through to.
+    ///
+    /// For a pack this is its `_meta.parent` (default [`Language::BASE`]), which
+    /// is what keeps the chain terminating in Chinese.
+    pub fn language(&self) -> Language {
+        match self {
+            Scope::Builtin(l) => *l,
+            Scope::Pack(t) => pack::with(t, |p| p.parent()).unwrap_or(Language::BASE),
+        }
+    }
+
+    /// True when this scope is a dynamically loaded pack.
+    pub fn is_dynamic(&self) -> bool {
+        matches!(self, Scope::Pack(_))
+    }
+
+    /// The CLDR cardinal rule set to use for plurals in this scope.
+    pub fn plural_rule(&self) -> format::PluralRule {
+        match self {
+            Scope::Builtin(l) => l.plural_rule(),
+            Scope::Pack(t) => {
+                pack::with(t, |p| p.plural_rule()).unwrap_or_else(|| Language::BASE.plural_rule())
+            }
+        }
+    }
+
+    /// Right-to-left script?
+    pub fn is_rtl(&self) -> bool {
+        match self {
+            Scope::Builtin(l) => l.is_rtl(),
+            Scope::Pack(t) => pack::with(t, |p| p.is_rtl()).unwrap_or(false),
+        }
+    }
+}
+
+impl From<Language> for Scope {
+    fn from(language: Language) -> Scope {
+        Scope::Builtin(language)
+    }
+}
+
+impl From<&Scope> for Scope {
+    fn from(scope: &Scope) -> Scope {
+        scope.clone()
+    }
+}
+
+/// The scope the `t*` helpers and the value formatters resolve through.
+///
+/// A dynamically loaded pack, when the user picked one; otherwise the built-in
+/// [`current_language`].
+pub fn current_scope() -> Scope {
+    match pack::active() {
+        Some(tag) => Scope::Pack(tag.into()),
+        None => Scope::Builtin(current_language()),
+    }
+}
+
+/// The tag actually being rendered — a pack tag (`ja`) or a built-in (`zh-CN`).
+///
+/// [`current_language`] cannot express a pack, so this is what the UI should
+/// persist and show as "selected".
+pub fn current_language_tag() -> String {
+    current_scope().tag()
+}
+
+/// Resolve `key` in `scope`: the pack first (when the scope is one), then the
+/// built-in chain (overlay, then compiled-in, ending at the base locale).
+pub fn lookup_scoped(scope: &Scope, key: &str) -> Option<String> {
+    if let Scope::Pack(tag) = scope {
+        if let Some(v) = pack::lookup_exact(tag, key) {
+            return Some(v);
+        }
+    }
+    catalog::lookup(scope.language(), key)
+}
+
+/// Switch by tag, negotiating the closest shipped catalogue **or a loaded pack**.
 ///
 /// An empty / unknown / `"system"` tag resolves to the base locale, so the UI
 /// can pass the raw persisted value (or the device locale) straight through.
-/// Returns the language actually selected.
+/// Returns the built-in language selected — for a pack that is its parent, so a
+/// caller that only understands [`Language`] still gets something sane; use
+/// [`current_language_tag`] to see the pack.
 pub fn set_language_tag(tag: &str) -> Language {
+    // A registered pack wins over built-in negotiation, because a pack can only
+    // exist for a language we do *not* ship (`pack::LanguagePack::parse` rejects
+    // colliding tags), so there is nothing to steal.
+    if let Some(active) = pack::canonical_tag(tag).and_then(|t| pack::set_active(Some(&t))) {
+        let parent = pack::with(&active, |p| p.parent()).unwrap_or(Language::BASE);
+        set_language_builtin(parent);
+        return parent;
+    }
+    pack::set_active(None);
     let chosen = Language::from_tag(tag)
         .or_else(|| Language::negotiate(tag))
         .unwrap_or(Language::BASE);
-    set_language(chosen);
+    set_language_builtin(chosen);
     chosen
 }
 
@@ -119,7 +260,26 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    let chosen = Language::negotiate_list(preferred);
+    // Per preference, in order: a shipped catalogue first, then a loaded pack.
+    // Built-ins win because a pack can only exist for a language we do not ship,
+    // so there is never a real contest — but the *order across preferences*
+    // matters: ["ja", "en"] on a device must pick a `ja` pack over English.
+    for tag in preferred {
+        let tag = tag.as_ref();
+        if let Some(l) = Language::negotiate(tag) {
+            pack::set_active(None);
+            set_language_builtin(l);
+            return l;
+        }
+        if let Some(found) = pack::negotiate(tag) {
+            if pack::set_active(Some(&found)).is_some() {
+                let parent = pack::with(&found, |p| p.parent()).unwrap_or(Language::BASE);
+                set_language_builtin(parent);
+                return parent;
+            }
+        }
+    }
+    let chosen = Language::BASE;
     set_language(chosen);
     chosen
 }
@@ -147,9 +307,34 @@ pub fn t_in(language: Language, key: &str) -> String {
     }
 }
 
-/// Translate `key` in the [`current_language`].
+/// Translate `key` in the [`current_scope`] — i.e. through the active dynamic
+/// language pack when the user selected one, else the [`current_language`].
 pub fn t(key: &str) -> String {
-    t_in(current_language(), key)
+    t_scoped(&current_scope(), key)
+}
+
+/// Translate `key` in an explicit [`Scope`] (built-in language or pack).
+pub fn t_scoped(scope: &Scope, key: &str) -> String {
+    match lookup_scoped(scope, key) {
+        Some(v) => v,
+        None => {
+            record_missing(key);
+            key.to_string()
+        }
+    }
+}
+
+/// [`t_scoped`] plus `{name}` interpolation.
+pub fn t_args_scoped(scope: &Scope, key: &str, args: &[(&str, &str)]) -> String {
+    format::interpolate(&t_scoped(scope, key), args)
+}
+
+/// Plural-aware [`t_scoped`], using the scope's own CLDR rule set (a pack
+/// declares its own with `_meta.plural`).
+pub fn t_plural_scoped(scope: &Scope, base: &str, count: i64) -> String {
+    let key = format!("{}.{}", base, scope.plural_rule().category(count).suffix());
+    let n = count.to_string();
+    t_args_scoped(scope, &key, &[("count", n.as_str())])
 }
 
 /// Translate `key` in `language` and substitute `{name}` placeholders.
@@ -157,9 +342,9 @@ pub fn t_args_in(language: Language, key: &str, args: &[(&str, &str)]) -> String
     format::interpolate(&t_in(language, key), args)
 }
 
-/// Translate `key` in the current language and substitute placeholders.
+/// Translate `key` in the current scope and substitute placeholders.
 pub fn t_args(key: &str, args: &[(&str, &str)]) -> String {
-    t_args_in(current_language(), key, args)
+    t_args_scoped(&current_scope(), key, args)
 }
 
 /// Plural-aware translation: picks `<base>.one` / `<base>.other` per the
@@ -170,9 +355,9 @@ pub fn t_plural_in(language: Language, base: &str, count: i64) -> String {
     t_args_in(language, &key, &[("count", n.as_str())])
 }
 
-/// Plural-aware translation in the current language.
+/// Plural-aware translation in the current scope (pack-aware).
 pub fn t_plural(base: &str, count: i64) -> String {
-    t_plural_in(current_language(), base, count)
+    t_plural_scoped(&current_scope(), base, count)
 }
 
 /// Whether `key` resolves in `language` (including via fallback).
@@ -182,43 +367,44 @@ pub fn has_key(language: Language, key: &str) -> bool {
 
 // --- Locale-aware value formatting in the current language ----------------
 //
-// Thin `current_language()` wrappers over [`number`], so a call site that just
-// wants "1.4 GB" in whatever the user picked does not have to thread a
-// [`Language`] through. See `number` for the catalogue keys involved.
+// Thin [`current_scope`] wrappers over [`number`], so a call site that just
+// wants "1.4 GB" in whatever the user picked does not have to thread a scope
+// through. `current_scope` (not `current_language`) so a dynamically loaded
+// pack localises byte units and durations too. See `number` for the keys.
 
 /// [`number::format_bytes`] in the [`current_language`] (`1.4 GB`).
 pub fn bytes(value: u64) -> String {
-    number::format_bytes(current_language(), value)
+    number::format_bytes(current_scope(), value)
 }
 
 /// [`number::format_rate`] in the [`current_language`] (`1.2 MB/秒`).
 pub fn rate(bytes_per_second: u64) -> String {
-    number::format_rate(current_language(), bytes_per_second)
+    number::format_rate(current_scope(), bytes_per_second)
 }
 
 /// [`number::format_duration`] in the [`current_language`] (`3 分 20 秒`).
 pub fn duration(seconds: i64) -> String {
-    number::format_duration(current_language(), seconds)
+    number::format_duration(current_scope(), seconds)
 }
 
 /// [`number::format_eta`] in the [`current_language`] (`剩余 3 分 20 秒`).
 pub fn eta(seconds: i64) -> String {
-    number::format_eta(current_language(), seconds)
+    number::format_eta(current_scope(), seconds)
 }
 
 /// [`number::format_relative_time`] in the [`current_language`] (`3 分前`).
 pub fn relative_time(delta_seconds: i64) -> String {
-    number::format_relative_time(current_language(), delta_seconds)
+    number::format_relative_time(current_scope(), delta_seconds)
 }
 
 /// [`number::format_percent`] in the [`current_language`] (`42.5%`).
 pub fn percent(value: f64, fraction_digits: usize) -> String {
-    number::format_percent(current_language(), value, fraction_digits)
+    number::format_percent(current_scope(), value, fraction_digits)
 }
 
 /// [`number::format_int`] in the [`current_language`] (`1,234,567`).
 pub fn integer(value: i64) -> String {
-    number::format_int(current_language(), value)
+    number::format_int(current_scope(), value)
 }
 
 // --- Bundles (for the UI / FFI) -------------------------------------------
@@ -254,6 +440,22 @@ pub fn bundle(language: Language) -> BTreeMap<String, String> {
         .into_iter()
         .filter_map(|k| catalog::lookup(language, &k).map(|v| (k, v)))
         .collect()
+}
+
+/// The whole catalogue of `scope`, resolved through pack + fallback chain.
+///
+/// The pack case is what lets Compose hydrate a dynamically loaded language in
+/// one JNI crossing, exactly like a built-in one.
+pub fn bundle_scoped(scope: &Scope) -> BTreeMap<String, String> {
+    all_keys()
+        .into_iter()
+        .filter_map(|k| lookup_scoped(scope, &k).map(|v| (k, v)))
+        .collect()
+}
+
+/// [`bundle_scoped`] for a tag, which may name a pack (`ja`) or a built-in.
+pub fn bundle_for_tag(tag: &str) -> BTreeMap<String, String> {
+    bundle_scoped(&Scope::for_tag(tag))
 }
 
 /// [`bundle`] as JSON (`{ "<key>": "<message>", ... }`).
@@ -302,11 +504,20 @@ pub struct LanguageInfo {
     pub base: bool,
     /// Right-to-left script.
     pub rtl: bool,
+    /// True when this language was **loaded at runtime** from a language pack
+    /// rather than compiled in. The picker uses it to offer "remove".
+    pub dynamic: bool,
+    /// CLDR cardinal rule id (`other_only` / `one_other`) — the Compose port
+    /// needs it to pluralise a dynamic language it knows nothing else about.
+    pub plural: String,
+    /// The compiled-in language unresolved keys fall through to.
+    pub parent: String,
 }
 
-/// Every shipped language, base first — drives the settings picker.
+/// Every selectable language — the shipped ones (base first), then every loaded
+/// pack (sorted by tag). Drives the settings picker.
 pub fn available_languages() -> Vec<LanguageInfo> {
-    Language::ALL
+    let mut out: Vec<LanguageInfo> = Language::ALL
         .into_iter()
         .map(|l| LanguageInfo {
             tag: l.tag().to_string(),
@@ -317,8 +528,53 @@ pub fn available_languages() -> Vec<LanguageInfo> {
             messages: catalog::embedded_for(l).len(),
             base: l == Language::BASE,
             rtl: l.is_rtl(),
+            dynamic: false,
+            plural: l.plural_rule().id().to_string(),
+            parent: Language::BASE.tag().to_string(),
         })
-        .collect()
+        .collect();
+
+    // Dynamically loaded packs are first-class citizens of the picker.
+    let required: Vec<String> = catalog::embedded_for(Language::BASE)
+        .keys()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+    for tag in pack::tags() {
+        if let Some(info) = pack::with(&tag, |p| LanguageInfo {
+            tag: p.tag().to_string(),
+            native_name: p.native_name().to_string(),
+            english_name: p.english_name().to_string(),
+            android_qualifier: None,
+            completeness: p.completeness(refs.iter().copied()),
+            messages: p.len(),
+            base: false,
+            rtl: p.is_rtl(),
+            dynamic: true,
+            plural: p.plural_rule().id().to_string(),
+            parent: p.parent().tag().to_string(),
+        }) {
+            out.push(info);
+        }
+    }
+    out
+}
+
+/// [`completeness`] for a tag that may name a pack.
+pub fn completeness_for_tag(tag: &str) -> f32 {
+    match Scope::for_tag(tag) {
+        Scope::Builtin(l) => completeness(l),
+        Scope::Pack(t) => {
+            let required: Vec<String> = catalog::embedded_for(Language::BASE)
+                .keys()
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+            let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+            pack::with(&t, |p| p.completeness(refs.iter().copied())).unwrap_or(1.0)
+        }
+    }
 }
 
 /// A machine-readable health report of the catalogues.
@@ -366,13 +622,57 @@ pub fn diagnostics() -> serde_json::Value {
         }));
     }
 
+    // Dynamically loaded packs, with the same health fields plus their own
+    // provenance, so a user can tell *why* a community translation looks wrong.
+    let required: Vec<String> = base_keys.iter().map(|k| (*k).to_string()).collect();
+    let packs: Vec<serde_json::Value> = pack::tags()
+        .into_iter()
+        .filter_map(|tag| {
+            pack::describe(&tag, &required).map(|mut info| {
+                let orphan: Vec<String> = pack::with(&tag, |p| {
+                    p.keys_owned()
+                        .into_iter()
+                        .filter(|k| !base_keys.contains(k.as_str()))
+                        .collect()
+                })
+                .unwrap_or_default();
+                let mismatch: Vec<serde_json::Value> = pack::with(&tag, |p| {
+                    p.keys_owned()
+                        .into_iter()
+                        .filter_map(|k| {
+                            let want = format::placeholders(base.get(&k)?);
+                            let got = format::placeholders(p.get(&k)?);
+                            (want != got).then(|| {
+                                serde_json::json!({
+                                    "key": k,
+                                    "expected": want.into_iter().collect::<Vec<_>>(),
+                                    "actual": got.into_iter().collect::<Vec<_>>(),
+                                })
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+                if let Some(obj) = info.as_object_mut() {
+                    obj.insert("orphan_keys".into(), serde_json::json!(orphan));
+                    obj.insert("placeholder_mismatch".into(), serde_json::json!(mismatch));
+                }
+                info
+            })
+        })
+        .collect();
+
     serde_json::json!({
         "current": current_language().tag(),
+        "current_tag": current_language_tag(),
         "base": Language::BASE.tag(),
         "total_keys": base.len(),
         "overlay_active": catalog::has_overlay(),
         "missing_at_runtime": missing_keys(),
         "languages": per_language,
+        "packs": packs,
+        "pack_count": pack::count(),
+        "active_pack": pack::active(),
     })
 }
 
@@ -655,7 +955,14 @@ mod tests {
 
     #[test]
     fn available_languages_describe_the_picker() {
-        let langs = available_languages();
+        // The picker now also lists dynamically loaded packs, which the pack tests
+        // install and remove concurrently: hold the shared lock and judge the
+        // compiled-in rows, so this asserts a stable contract either way.
+        let _g = global_lock();
+        let langs: Vec<LanguageInfo> = available_languages()
+            .into_iter()
+            .filter(|l| !l.dynamic)
+            .collect();
         assert_eq!(langs.len(), 3);
         assert!(langs[0].base, "the base locale must come first");
         assert_eq!(langs[0].tag, "zh-CN");

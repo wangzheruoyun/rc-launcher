@@ -74,6 +74,19 @@ enum class AppLanguage(
         }
 
         /**
+         * Exact-tag lookup that returns `null` for an unknown tag.
+         *
+         * [fromTag] folds anything unrecognised onto [SYSTEM], which is right for a
+         * persisted preference but wrong when we need to tell "this is a shipped
+         * language" apart from "this is a dynamically loaded pack".
+         */
+        fun fromTagOrNull(tag: String?): AppLanguage? {
+            if (tag.isNullOrBlank()) return null
+            val t = tag.trim()
+            return catalogues.firstOrNull { it.tag.equals(t, ignoreCase = true) }
+        }
+
+        /**
          * Resolve one device locale tag onto a shipped catalogue, or `null` when
          * we ship nothing for that language.
          *

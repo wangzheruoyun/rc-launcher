@@ -23,6 +23,10 @@ Checks, in order:
      set, the byte-unit ladder and the duration units — the two are hand-ported
      mirrors, so drift there means the core and the UI would render the same
      byte count differently;
+ 11b. dynamic language packs (`i18n/pack.rs`): the plural-rule ids are the same
+     on both sides of the FFI, every `_meta.*` key the parser reads is documented,
+     `_meta.` cannot collide with a shipped key, the picker consumes the fields the
+     core emits, and a pack still cannot shadow a built-in language;
  12. the Rust->Kotlin golden fixture (`i18n_format_golden.tsv`) exists, is
      well formed, covers every language and every `i18nFormat` kind, leaks no
      placeholder, and is byte-identical to a fresh render (so a wording or
@@ -413,6 +417,82 @@ def main() -> int:
         "i18nFormat advertises kinds and RustBridge documents them",
         len(advertised) >= 10 and set(advertised) <= documented,
         f"advertised {sorted(advertised)} undocumented {sorted(set(advertised) - documented)}",
+    )
+
+    # 11b) dynamic language packs: the two sides must agree on the plural rules,
+    # on the `_meta.*` vocabulary and on the limits, or a pack would behave
+    # differently in the core and in the picker.
+    pack_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/pack.rs")
+    format_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/format.rs")
+    option_kt = os.path.join(
+        C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/LanguageOption.kt"
+    )
+    strings_kt = os.path.join(
+        C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/RcStrings.kt"
+    )
+    with open(pack_rs, encoding="utf-8") as fh:
+        pack_src = fh.read()
+    with open(format_rs, encoding="utf-8") as fh:
+        format_src = fh.read()
+    with open(option_kt, encoding="utf-8") as fh:
+        option_src = fh.read()
+    with open(strings_kt, encoding="utf-8") as fh:
+        strings_src = fh.read()
+
+    # The plural rule ids are a wire contract (`_meta.plural`, `i18nBundle.plural`).
+    rust_rules = set(re.findall(r'PluralRule::\w+ => "([a-z_]+)"', format_src))
+    # Scope to the `RcPluralRule` enum body: `RcStringFormat.Plural` next door
+    # also spells its suffixes as `NAME("one")`, which would over-match.
+    kt_rule_block = re.search(
+        r"enum class RcPluralRule\(val id: String\) \{(.*?)\n    ;", strings_src, re.S
+    )
+    kt_rule_ids = (
+        set(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', kt_rule_block.group(1)))
+        if kt_rule_block
+        else set()
+    )
+    check(
+        "plural rule ids agree between core and Compose",
+        rust_rules and rust_rules == kt_rule_ids,
+        f"rust {sorted(rust_rules)} vs kotlin {sorted(kt_rule_ids)}",
+    )
+
+    # Every `_meta.*` key the parser reads must be documented in the module docs,
+    # so a translator writing a pack has one authoritative list.
+    meta_read = set(re.findall(r'meta\.get\("([a-z_]+)"\)', pack_src))
+    meta_documented = set(re.findall(r"//! _meta\.([a-z_]+)", pack_src))
+    check(
+        "every `_meta.*` key the pack parser reads is documented",
+        meta_read and meta_read <= meta_documented,
+        f"read {sorted(meta_read)} undocumented {sorted(meta_read - meta_documented)}",
+    )
+
+    # `_meta.` must be namespaced away from real UI keys, or a pack could inject a
+    # message the catalogue gate knows nothing about.
+    check(
+        "no shipped key collides with the pack metadata namespace",
+        not [k for k in base_keys if k.startswith("_meta.")],
+        f"{[k for k in base_keys if k.startswith('_meta.')]}",
+    )
+
+    # The picker rows must expose the fields the core actually emits.
+    emitted = set(re.findall(r'"(\w+)":', pack_src[pack_src.find("pub fn describe") :]))
+    consumed = set(re.findall(r'entries\["(\w+)"\]', option_src))
+    required_fields = {"tag", "native_name", "completeness", "dynamic", "plural", "parent"}
+    check(
+        "the picker consumes the pack fields the core emits",
+        required_fields <= emitted and required_fields <= consumed,
+        f"core-missing {sorted(required_fields - emitted)} "
+        f"kotlin-missing {sorted(required_fields - consumed)}",
+    )
+
+    # A pack must never be able to shadow a shipped language (that is the
+    # overlay's job) — the guard is what keeps the picker honest.
+    check(
+        "packs cannot shadow a built-in language",
+        "is a built-in language" in pack_src
+        and "Language::from_tag(&tag).is_some()" in pack_src,
+        "the built-in collision guard is gone from pack.rs",
     )
 
     # 12) the Rust->Kotlin golden fixture must exist and be fresh

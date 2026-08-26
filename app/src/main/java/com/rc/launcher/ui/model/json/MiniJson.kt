@@ -71,6 +71,10 @@ private class JsonParser(private val src: String) {
         if (peek() == '}') { pos++; return JsonValue.Obj(emptyMap()) }
         val map = LinkedHashMap<String, JsonValue>()
         while (true) {
+            // Skip whitespace *before* the key: `parseValue`/`parseArray` already
+            // do, but an object member arrives here straight after the `,`, so
+            // pretty-printed JSON (`{"a": 1,\n "b": 2}`) used to be rejected.
+            skipWs()
             val key = parseString() ?: return null
             skipWs()
             if (peek() != ':') return null

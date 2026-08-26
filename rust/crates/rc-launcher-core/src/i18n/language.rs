@@ -97,6 +97,19 @@ impl Language {
         false
     }
 
+    /// The CLDR cardinal rule set this language uses.
+    ///
+    /// A runtime language pack declares its own with `_meta.plural`; see
+    /// [`crate::i18n::pack`].
+    pub const fn plural_rule(self) -> super::format::PluralRule {
+        use super::format::PluralRule;
+        match self {
+            // Chinese has a single form.
+            Language::ZhCn | Language::ZhHant => PluralRule::OtherOnly,
+            Language::En => PluralRule::OneOther,
+        }
+    }
+
     /// Key-by-key fallback chain, most specific first, always ending at
     /// [`Language::BASE`]. A missing key therefore degrades to Chinese rather
     /// than to a raw key.

@@ -21,9 +21,12 @@
 //!    and percentages assembled from catalogue skeletons (so the units are
 //!    translated, not hardcoded), including a translator-supplied overlay that
 //!    changes the grouping/decimal separators and the unit names.
+//! 10. **Dynamic language loading** — a community `.properties` pack registered at
+//!     runtime becomes a selectable language (picker, negotiation, plurals, value
+//!     formatting, bundle), and uninstalling it reverts the UI cleanly.
 
 use rc_launcher::error::RcError;
-use rc_launcher::i18n::{self, number, Language};
+use rc_launcher::i18n::{self, number, pack, Language};
 use rc_launcher::launch::crash::diagnose;
 
 fn rule(title: &str) {
@@ -236,6 +239,85 @@ fn main() {
     assert_eq!(number::format_int(Language::En, 1_234_567), "1 234 567");
     i18n::clear_overlay();
     assert_eq!(number::format_bytes(Language::En, 1_536), "1.5 KB");
+
+    rule("10. Dynamic language loading (a community pack, no rebuild)");
+    // A whole new language dropped in at runtime — `Language` has no `Ja` variant.
+    pack::clear();
+    let ja = "_meta.tag = ja\n\
+              _meta.native_name = \u{65e5}\u{672c}\u{8a9e}\n\
+              _meta.english_name = Japanese\n\
+              _meta.plural = other_only\n\
+              nav.home = \u{30db}\u{30fc}\u{30e0}\n\
+              nav.settings = \u{8a2d}\u{5b9a}\n\
+              format.rate = {value} {unit}/\u{79d2}\n\
+              duration.minute.other = {count}\u{5206}\n\
+              duration.second.other = {count}\u{79d2}\n";
+    let tag = pack::install_text(ja, None).expect("pack installs");
+    println!("  installed pack: {tag}");
+    let listed = i18n::available_languages();
+    println!(
+        "  picker now offers {} languages: {}",
+        listed.len(),
+        listed
+            .iter()
+            .map(|l| format!("{}{}", l.native_name, if l.dynamic { "*" } else { "" }))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    assert!(listed.iter().any(|l| l.tag == "ja" && l.dynamic));
+
+    i18n::set_language_tag("ja");
+    assert_eq!(i18n::current_language_tag(), "ja");
+    println!("  nav.home     = {}", i18n::t("nav.home"));
+    println!("  rate         = {}", i18n::rate(1_258_291));
+    println!("  duration     = {}", i18n::duration(200));
+    // Untranslated keys fall back to Chinese, never to a raw key.
+    println!(
+        "  nav.accounts = {}  (untranslated -> Chinese)",
+        i18n::t("nav.accounts")
+    );
+    assert_eq!(i18n::t("nav.home"), "\u{30db}\u{30fc}\u{30e0}");
+    assert_eq!(
+        i18n::t("nav.accounts"),
+        i18n::t_in(Language::ZhCn, "nav.accounts")
+    );
+    // The pack ships the formatter skeletons, so derived copy is Japanese too.
+    assert!(i18n::rate(1_258_291).ends_with("/\u{79d2}"));
+    assert_eq!(i18n::duration(200), "3\u{5206} 20\u{79d2}");
+    // A pack bundle is as complete as a built-in one (no holes for the UI).
+    assert_eq!(
+        i18n::bundle_for_tag("ja").len(),
+        i18n::bundle(Language::BASE).len()
+    );
+
+    // A device whose locale list starts with Japanese now finds the pack.
+    i18n::set_language_from_preferences(["ja-JP", "en-US"]);
+    assert_eq!(i18n::current_language_tag(), "ja");
+    // A shipped language still wins when it comes first.
+    i18n::set_language_from_preferences(["en-US", "ja-JP"]);
+    assert_eq!(i18n::current_language_tag(), "en");
+
+    // Packs that would confuse the user are refused with a readable reason.
+    for (doc, why) in [
+        ("nav.home = Home\n", "built-in tag (en)"),
+        ("_meta.tag = ja\n", "no messages"),
+    ] {
+        let fallback = if doc.starts_with("_meta") {
+            None
+        } else {
+            Some("en")
+        };
+        let err = pack::install_text(doc, fallback).expect_err(why);
+        println!("  refused ({why}): {err}");
+    }
+
+    // Uninstalling the *active* pack reverts the UI instead of dangling.
+    i18n::set_language_tag("ja");
+    assert!(pack::remove("ja"));
+    assert_eq!(i18n::current_language_tag(), "zh-CN");
+    assert_eq!(i18n::t("nav.home"), "\u{4e3b}\u{9875}");
+    println!("  uninstalled -> back to {}", i18n::current_language_tag());
+    pack::clear();
 
     i18n::set_language(Language::BASE);
     println!("\n\x1b[32mAll i18n invariants held.\x1b[0m");

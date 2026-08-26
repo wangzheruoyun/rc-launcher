@@ -141,6 +141,20 @@ impl Catalog {
         &self.problems
     }
 
+    /// Insert one message, replacing any previous value for `key`.
+    ///
+    /// Lets a caller assemble a catalogue programmatically — used by
+    /// [`super::pack::LanguagePack::parse`] to split the `_meta.*` block out of a
+    /// dynamically loaded pack.
+    pub fn insert(&mut self, key: String, value: String) {
+        self.entries.insert(key, value);
+    }
+
+    /// Record a non-fatal problem (a rejected pack line, ...).
+    pub fn note_problem(&mut self, problem: String) {
+        self.problems.push(problem);
+    }
+
     /// Merge `other` into `self`, `other` winning. Used by the overlay.
     pub fn merge(&mut self, other: &Catalog) {
         for (k, v) in &other.entries {

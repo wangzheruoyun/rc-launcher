@@ -14,6 +14,44 @@ package com.rc.launcher.ui.i18n
  *  * `{{` / `}}` are literal braces;
  *  * extra arguments are ignored.
  */
+/**
+ * A CLDR cardinal *rule set* — how a language maps a count onto a plural
+ * category. Mirrors the Rust `i18n::format::PluralRule`.
+ *
+ * Split out of [AppLanguage] because a **dynamically loaded language pack** is
+ * not an enum entry: a `ru.properties` dropped in at runtime declares its rule
+ * with `_meta.plural = one_other`, and the core reports it back through
+ * `i18nBundle` / `i18nLanguages`.
+ */
+enum class RcPluralRule(val id: String) {
+    /** One single form for every count (zh, ja, ko, …) — the safe default. */
+    OTHER_ONLY("other_only"),
+
+    /** `one` iff exactly 1, `other` otherwise (en, de, …). */
+    ONE_OTHER("one_other"),
+    ;
+
+    /** The category [count] falls into under this rule. */
+    fun category(count: Long): RcStringFormat.Plural = when (this) {
+        OTHER_ONLY -> RcStringFormat.Plural.OTHER
+        ONE_OTHER -> if (count == 1L) RcStringFormat.Plural.ONE else RcStringFormat.Plural.OTHER
+    }
+
+    companion object {
+        /** Parse a `_meta.plural` / `i18nBundle` value; unknown text is safe. */
+        fun parse(id: String?): RcPluralRule =
+            entries.firstOrNull { it.id.equals(id?.trim(), ignoreCase = true) } ?: OTHER_ONLY
+
+        /** The rule of a compiled-in language (must match `Language::plural_rule`). */
+        fun of(language: AppLanguage): RcPluralRule = when (language) {
+            AppLanguage.EN -> ONE_OTHER
+            // Chinese has a single form; SYSTEM is resolved before this matters,
+            // and defaults to the base locale's rule.
+            else -> OTHER_ONLY
+        }
+    }
+}
+
 object RcStringFormat {
 
     /** CLDR plural categories used by the shipped languages. */
@@ -110,6 +148,17 @@ data class RcStrings(
     private val messages: Map<String, String>,
     /** Where the table came from — surfaced in the settings diagnostics card. */
     val source: Source = Source.CORE,
+    /**
+     * The plural rule to use. Normally derived from [language]; a dynamically
+     * loaded pack supplies its own, because it has no [AppLanguage] entry.
+     */
+    val pluralRule: RcPluralRule = RcPluralRule.of(language),
+    /**
+     * The tag actually being rendered. Equal to `language.tag` for a built-in
+     * catalogue, and the **pack tag** (`ja`) for a dynamically loaded one — which
+     * is what the picker highlights and what gets persisted.
+     */
+    val tag: String = language.tag,
 ) {
     enum class Source { CORE, RESOURCES, EMPTY }
 
@@ -138,7 +187,7 @@ data class RcStrings(
      * rules and supplies `{count}` automatically.
      */
     fun plural(base: String, count: Long, vararg args: Pair<String, String>): String {
-        val key = RcStringFormat.pluralKey(language, base, count)
+        val key = "$base.${pluralRule.category(count).suffix}"
         val merged = HashMap<String, String>(args.size + 1)
         merged["count"] = count.toString()
         for ((k, v) in args) merged[k] = v
@@ -158,7 +207,27 @@ data class RcStrings(
             RcStrings(language, emptyMap(), Source.EMPTY)
 
         /** A table built from an explicit map (tests, previews). */
-        fun of(language: AppLanguage, messages: Map<String, String>, source: Source = Source.CORE): RcStrings =
-            RcStrings(language, messages, source)
+        fun of(
+            language: AppLanguage,
+            messages: Map<String, String>,
+            source: Source = Source.CORE,
+            pluralRule: RcPluralRule = RcPluralRule.of(language),
+            tag: String = language.tag,
+        ): RcStrings = RcStrings(language, messages, source, pluralRule, tag)
+
+        /**
+         * A table for a **dynamically loaded language pack**.
+         *
+         * [language] is the pack's *parent* (where its untranslated keys already
+         * fell back to, core-side), while [tag] and [pluralRule] describe the pack
+         * itself.
+         */
+        fun ofPack(
+            tag: String,
+            parent: AppLanguage,
+            messages: Map<String, String>,
+            pluralRule: RcPluralRule,
+            source: Source = Source.CORE,
+        ): RcStrings = RcStrings(parent, messages, source, pluralRule, tag)
     }
 }

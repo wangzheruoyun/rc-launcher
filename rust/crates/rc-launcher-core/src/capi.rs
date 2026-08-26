@@ -306,6 +306,19 @@ pub unsafe extern "C" fn rc_i18n_format(request_json: *const c_char) -> *mut c_c
     i18n_call(request_json, crate::ffi::i18n_format_json)
 }
 
+/// Manage **dynamic language packs** as JSON (see `ffi::i18n_language_packs_json`).
+///
+/// `{"action":"load","path":"/data/.../i18n"}` registers every `*.properties`
+/// pack in a directory as a selectable language; `{"action":"list"}` reports
+/// them. Lets a non-JNI consumer ship community translations without a rebuild.
+///
+/// # Safety
+/// `request_json` must be a NUL-terminated UTF-8 string (or null).
+#[no_mangle]
+pub unsafe extern "C" fn rc_i18n_language_packs(request_json: *const c_char) -> *mut c_char {
+    i18n_call(request_json, crate::ffi::i18n_language_packs_json)
+}
+
 /// Catalogue health report as JSON (missing keys, placeholder drift, ...).
 #[no_mangle]
 pub extern "C" fn rc_i18n_diagnostics() -> *mut c_char {
@@ -416,6 +429,48 @@ mod tests {
         let s = CStr::from_ptr(ptr).to_str().unwrap().to_string();
         rc_string_free(ptr);
         s
+    }
+
+    #[test]
+    fn c_api_loads_a_dynamic_language_pack() {
+        let _g = crate::i18n::GLOBAL_I18N_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        crate::i18n::pack::clear();
+        unsafe {
+            let call = |body: &str| -> serde_json::Value {
+                let req = CString::new(body).unwrap();
+                serde_json::from_str(&take(rc_i18n_language_packs(req.as_ptr()))).unwrap()
+            };
+            // Build the request with serde rather than by hand: a literal
+            // newline inside a JSON string is invalid, and hand-escaping it in a
+            // Rust raw string is exactly the kind of mistake that makes the call
+            // silently degrade to "list" instead of failing loudly.
+            let doc = concat!(
+                "_meta.tag = ja\n",
+                "_meta.native_name = \u{65e5}\u{672c}\u{8a9e}\n",
+                "nav.home = \u{30db}\u{30fc}\u{30e0}\n",
+            );
+            let out = call(&serde_json::json!({ "action": "install", "text": doc }).to_string());
+            assert_eq!(out["ok"], true, "{out}");
+            assert_eq!(out["count"], 1);
+
+            // A non-JNI consumer can now render the new language.
+            let b = CString::new(r#"{"language":"ja"}"#).unwrap();
+            let bundle: serde_json::Value =
+                serde_json::from_str(&take(rc_i18n_bundle(b.as_ptr()))).unwrap();
+            assert_eq!(bundle["dynamic"], true);
+            assert_eq!(bundle["messages"]["nav.home"], "\u{30db}\u{30fc}\u{30e0}");
+
+            // Null / malformed input reports state instead of crashing.
+            let out: serde_json::Value =
+                serde_json::from_str(&take(rc_i18n_language_packs(std::ptr::null()))).unwrap();
+            assert_eq!(out["action"], "list");
+            assert_eq!(call("{ not json ")["action"], "list");
+
+            assert_eq!(call(r#"{"action":"clear"}"#)["count"], 0);
+        }
+        crate::i18n::pack::clear();
     }
 
     #[test]

@@ -45,7 +45,7 @@
 //! assert_eq!(number::format_duration(Language::ZhCn, 200), "3 分 20 秒");
 //! ```
 
-use super::{catalog, format, Language};
+use super::{format, Scope};
 
 /// Compiled-in separator used when `format.group_separator` is unavailable.
 const DEFAULT_GROUP_SEPARATOR: &str = ",";
@@ -97,8 +97,8 @@ const RELATIVE_NOW_THRESHOLD: i64 = 60;
 /// Unlike [`super::t_in`] a miss is *not* recorded as a diagnostic and never
 /// echoes the key: a half-formatted `unit.mib` in the middle of a progress
 /// label would be worse than a plain `MB`.
-fn skeleton(language: Language, key: &str, fallback: &str) -> String {
-    match catalog::lookup(language, key) {
+fn skeleton(scope: &Scope, key: &str, fallback: &str) -> String {
+    match super::lookup_scoped(scope, key) {
         Some(value) if !value.is_empty() => value,
         _ => fallback.to_string(),
     }
@@ -113,8 +113,8 @@ fn skeleton(language: Language, key: &str, fallback: &str) -> String {
 /// honoured rather than silently replaced by `,`. Only an *absent* key falls back.
 ///
 /// `RcValueFormat.groupSeparator` mirrors this exactly.
-fn group_separator(language: Language) -> String {
-    match catalog::lookup(language, "format.group_separator") {
+fn group_separator(scope: &Scope) -> String {
+    match super::lookup_scoped(scope, "format.group_separator") {
         Some(v) => v,
         None => DEFAULT_GROUP_SEPARATOR.to_string(),
     }
@@ -145,8 +145,9 @@ fn group_digits(digits: &str, separator: &str) -> String {
 }
 
 /// Group an integer with `language`'s separator (`1,234,567`).
-pub fn format_int(language: Language, value: i64) -> String {
-    let separator = group_separator(language);
+pub fn format_int(language: impl Into<Scope>, value: i64) -> String {
+    let scope = language.into();
+    let separator = group_separator(&scope);
     // `unsigned_abs` so `i64::MIN` cannot overflow.
     let grouped = group_digits(&value.unsigned_abs().to_string(), &separator);
     if value < 0 {
@@ -157,8 +158,9 @@ pub fn format_int(language: Language, value: i64) -> String {
 }
 
 /// Group an unsigned integer with `language`'s separator.
-pub fn format_uint(language: Language, value: u64) -> String {
-    let separator = group_separator(language);
+pub fn format_uint(language: impl Into<Scope>, value: u64) -> String {
+    let scope = language.into();
+    let separator = group_separator(&scope);
     group_digits(&value.to_string(), &separator)
 }
 
@@ -185,9 +187,10 @@ fn round_half_away_from_zero(value: f64, digits: usize) -> f64 {
 /// `language`'s decimal separator.
 ///
 /// Non-finite input yields `format.invalid_number`.
-pub fn format_decimal(language: Language, value: f64, fraction_digits: usize) -> String {
+pub fn format_decimal(language: impl Into<Scope>, value: f64, fraction_digits: usize) -> String {
+    let scope = language.into();
     if !value.is_finite() {
-        return skeleton(language, "format.invalid_number", "—");
+        return skeleton(&scope, "format.invalid_number", "—");
     }
     let digits = fraction_digits.min(MAX_FRACTION_DIGITS);
     let rendered = format!(
@@ -200,11 +203,11 @@ pub fn format_decimal(language: Language, value: f64, fraction_digits: usize) ->
         None => (rendered.as_str(), None),
     };
 
-    let group = group_separator(language);
+    let group = group_separator(&scope);
     // A blank *decimal* separator would fuse "1" and "5" into "15", so unlike the
     // grouping separator it always falls back.
     let decimal = skeleton(
-        language,
+        &scope,
         "format.decimal_separator",
         DEFAULT_DECIMAL_SEPARATOR,
     );
@@ -259,70 +262,78 @@ fn scale_bytes(bytes: u64) -> (f64, usize) {
 }
 
 /// Render `bytes` through the `format.size` skeleton (`1.4 GB`).
-pub fn format_bytes(language: Language, bytes: u64) -> String {
+pub fn format_bytes(language: impl Into<Scope>, bytes: u64) -> String {
+    let scope = language.into();
     let (value, idx) = scale_bytes(bytes);
-    let unit = skeleton(language, BYTE_UNIT_KEYS[idx], BYTE_UNIT_FALLBACK[idx]);
-    let number = format_decimal(language, value, byte_fraction_digits(idx));
-    let pattern = skeleton(language, "format.size", "{value} {unit}");
+    let unit = skeleton(&scope, BYTE_UNIT_KEYS[idx], BYTE_UNIT_FALLBACK[idx]);
+    let number = format_decimal(&scope, value, byte_fraction_digits(idx));
+    let pattern = skeleton(&scope, "format.size", "{value} {unit}");
     format::interpolate(&pattern, &[("value", &number), ("unit", &unit)])
 }
 
 /// Render a transfer rate through the `format.rate` skeleton (`1.2 MB/秒`).
-pub fn format_rate(language: Language, bytes_per_second: u64) -> String {
+pub fn format_rate(language: impl Into<Scope>, bytes_per_second: u64) -> String {
+    let scope = language.into();
     let (value, idx) = scale_bytes(bytes_per_second);
-    let unit = skeleton(language, BYTE_UNIT_KEYS[idx], BYTE_UNIT_FALLBACK[idx]);
-    let number = format_decimal(language, value, byte_fraction_digits(idx));
-    let pattern = skeleton(language, "format.rate", "{value} {unit}/s");
+    let unit = skeleton(&scope, BYTE_UNIT_KEYS[idx], BYTE_UNIT_FALLBACK[idx]);
+    let number = format_decimal(&scope, value, byte_fraction_digits(idx));
+    let pattern = skeleton(&scope, "format.rate", "{value} {unit}/s");
     format::interpolate(&pattern, &[("value", &number), ("unit", &unit)])
 }
 
 /// `12.3 MB / 45.6 MB` — a byte-progress pair via `format.progress_of`.
-pub fn format_byte_progress(language: Language, done: u64, total: u64) -> String {
-    let pattern = skeleton(language, "format.progress_of", "{done} / {total}");
+pub fn format_byte_progress(language: impl Into<Scope>, done: u64, total: u64) -> String {
+    let scope = language.into();
+    let pattern = skeleton(&scope, "format.progress_of", "{done} / {total}");
     format::interpolate(
         &pattern,
         &[
-            ("done", &format_bytes(language, done)),
-            ("total", &format_bytes(language, total)),
+            ("done", &format_bytes(&scope, done)),
+            ("total", &format_bytes(&scope, total)),
         ],
     )
 }
 
 /// Render an already-scaled percentage (`42.5` -> `42.5%`).
-pub fn format_percent(language: Language, percent: f64, fraction_digits: usize) -> String {
-    let number = format_decimal(language, percent, fraction_digits);
-    let pattern = skeleton(language, "format.percent", "{value}%");
+pub fn format_percent(language: impl Into<Scope>, percent: f64, fraction_digits: usize) -> String {
+    let scope = language.into();
+    let number = format_decimal(&scope, percent, fraction_digits);
+    let pattern = skeleton(&scope, "format.percent", "{value}%");
     format::interpolate(&pattern, &[("value", &number)])
 }
 
 /// Percentage of `done` out of `total`; a zero `total` is 0 % (never `NaN`).
 pub fn format_ratio_percent(
-    language: Language,
+    language: impl Into<Scope>,
     done: u64,
     total: u64,
     fraction_digits: usize,
 ) -> String {
+    let scope = language.into();
     let percent = if total == 0 {
         0.0
     } else {
         done as f64 * 100.0 / total as f64
     };
-    format_percent(language, percent, fraction_digits)
+    format_percent(&scope, percent, fraction_digits)
 }
 
 /// `59.9 FPS` — the AWT/renderer overlay's frame-rate readout.
-pub fn format_fps(language: Language, fps: f64) -> String {
-    let number = format_decimal(language, fps, 1);
-    let pattern = skeleton(language, "format.fps", "{value} FPS");
+pub fn format_fps(language: impl Into<Scope>, fps: f64) -> String {
+    let scope = language.into();
+    let number = format_decimal(&scope, fps, 1);
+    let pattern = skeleton(&scope, "format.fps", "{value} FPS");
     format::interpolate(&pattern, &[("value", &number)])
 }
 
 /// One duration piece (`3 minutes`), plural-aware, with a compiled-in fallback.
 ///
 /// Deliberately *not* [`super::t_plural_in`]: see [`DURATION_UNITS`].
-fn duration_piece(language: Language, base: &str, fallback: &str, count: i64) -> String {
-    let key = format::plural_key(language, base, count);
-    let template = match catalog::lookup(language, &key) {
+fn duration_piece(scope: &Scope, base: &str, fallback: &str, count: i64) -> String {
+    // The scope's own plural rule, so a pack declaring `_meta.plural = one_other`
+    // pluralises correctly even though it is not a `Language` variant.
+    let key = format!("{}.{}", base, scope.plural_rule().category(count).suffix());
+    let template = match super::lookup_scoped(scope, &key) {
         Some(v) if !v.is_empty() => v,
         _ => fallback.to_string(),
     };
@@ -333,16 +344,18 @@ fn duration_piece(language: Language, base: &str, fallback: &str, count: i64) ->
 /// Humanise a duration, showing at most [`DEFAULT_DURATION_PARTS`] units.
 ///
 /// The sign is ignored (use [`format_relative_time`] for direction).
-pub fn format_duration(language: Language, seconds: i64) -> String {
-    format_duration_parts(language, seconds, DEFAULT_DURATION_PARTS)
+pub fn format_duration(language: impl Into<Scope>, seconds: i64) -> String {
+    let scope = language.into();
+    format_duration_parts(&scope, seconds, DEFAULT_DURATION_PARTS)
 }
 
 /// [`format_duration`] with an explicit cap on how many units to show.
 ///
 /// Zero-valued units are skipped rather than terminating the walk, so 3605 s is
 /// the honest `1 hour 5 seconds` instead of a lossy `1 hour`.
-pub fn format_duration_parts(language: Language, seconds: i64, max_parts: usize) -> String {
-    let zero = || skeleton(language, "duration.zero", "0 s");
+pub fn format_duration_parts(language: impl Into<Scope>, seconds: i64, max_parts: usize) -> String {
+    let scope = language.into();
+    let zero = || skeleton(&scope, "duration.zero", "0 s");
     let mut remaining = seconds.saturating_abs();
     if remaining == 0 || max_parts == 0 {
         return zero();
@@ -358,10 +371,10 @@ pub fn format_duration_parts(language: Language, seconds: i64, max_parts: usize)
             continue;
         }
         remaining -= n * size;
-        parts.push(duration_piece(language, base, fallback, n));
+        parts.push(duration_piece(&scope, base, fallback, n));
     }
 
-    let pattern = skeleton(language, "format.duration_join", "{first} {second}");
+    let pattern = skeleton(&scope, "format.duration_join", "{first} {second}");
     let mut it = parts.into_iter();
     let mut acc = match it.next() {
         Some(first) => first,
@@ -375,24 +388,26 @@ pub fn format_duration_parts(language: Language, seconds: i64, max_parts: usize)
 
 /// Phrase a timestamp relative to now: `delta_seconds = now - timestamp`, so a
 /// **positive** delta is in the past.
-pub fn format_relative_time(language: Language, delta_seconds: i64) -> String {
+pub fn format_relative_time(language: impl Into<Scope>, delta_seconds: i64) -> String {
+    let scope = language.into();
     if delta_seconds.saturating_abs() < RELATIVE_NOW_THRESHOLD {
-        return skeleton(language, "relative.now", "just now");
+        return skeleton(&scope, "relative.now", "just now");
     }
-    let duration = format_duration(language, delta_seconds);
+    let duration = format_duration(&scope, delta_seconds);
     let key = if delta_seconds > 0 {
         "relative.past"
     } else {
         "relative.future"
     };
-    let pattern = skeleton(language, key, "{duration}");
+    let pattern = skeleton(&scope, key, "{duration}");
     format::interpolate(&pattern, &[("duration", &duration)])
 }
 
 /// `剩余 3 分 20 秒` — a download ETA; negative input is treated as zero.
-pub fn format_eta(language: Language, seconds: i64) -> String {
-    let duration = format_duration(language, seconds.max(0));
-    let pattern = skeleton(language, "download.eta", "{duration}");
+pub fn format_eta(language: impl Into<Scope>, seconds: i64) -> String {
+    let scope = language.into();
+    let duration = format_duration(&scope, seconds.max(0));
+    let pattern = skeleton(&scope, "download.eta", "{duration}");
     format::interpolate(&pattern, &[("duration", &duration)])
 }
 
@@ -427,6 +442,7 @@ pub fn required_keys() -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::i18n::{catalog, Language};
 
     fn lock() -> std::sync::MutexGuard<'static, ()> {
         super::super::GLOBAL_I18N_TEST_LOCK

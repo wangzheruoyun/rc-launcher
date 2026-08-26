@@ -112,8 +112,10 @@ jobs:
 
       # Task 20 - drive the i18n framework end-to-end: locale negotiation
       # (Chinese-first), runtime language switching, placeholder/plural
-      # rendering, localised crash + error copy, the fallback chain and the
-      # runtime translation overlay. Asserts its own invariants, so a broken
+      # rendering, localised crash + error copy, the fallback chain, the runtime
+      # translation overlay and *dynamic language loading* (a community
+      # .properties pack registered at runtime becoming a selectable language,
+      # then cleanly uninstalled). Asserts its own invariants, so a broken
       # catalogue fails the build.
       - name: i18n end-to-end demo
         working-directory: rust

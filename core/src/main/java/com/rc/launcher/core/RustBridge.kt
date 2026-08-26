@@ -352,6 +352,29 @@ object RustBridge {
     external fun i18nDiagnostics(): String
 
     /**
+     * **Dynamic language loading** — register whole new languages at runtime from
+     * `.properties` packs, without a new APK.
+     *
+     * `{"action":"load","path":"/data/.../files/i18n"}` scans a directory,
+     * `{"action":"install","text":"_meta.tag = ja\n…"}` registers one document,
+     * `{"action":"remove","tag":"ja"}` / `{"action":"clear"}` unregister, and
+     * `{"action":"list"}` (the default) just reports state.
+     *
+     * Returns `{"ok","loaded":[tag…],"skipped":["file: reason"…],"packs":[…],
+     * "count","active","current","limits"}`. A loaded pack is a **first-class
+     * language**: it shows up in [i18nLanguages], [i18nSetLanguage] can select it
+     * and [i18nBundle] hydrates the UI from it.
+     *
+     * `skipped` carries a human-readable reason per rejected file (too large, tag
+     * collides with a built-in language, no messages, bad encoding, …) so the
+     * settings screen can tell the user why their pack did not appear.
+     *
+     * Distinct from [i18nOverlay]: an overlay *re-words* a language we ship, a
+     * pack *adds* one we do not.
+     */
+    external fun i18nLanguagePacks(requestJson: String): String
+
+    /**
      * Install / clear a runtime translation overlay (community translations and
      * wording hot-fixes without a new APK):
      * `{"action":"install","language":"en","text":"key = value\n"}`,

@@ -2374,8 +2374,12 @@ mod awt_tests {
 pub fn i18n_languages_json() -> serde_json::Value {
     serde_json::json!({
         "base": crate::i18n::Language::BASE.tag(),
+        // `current` stays the built-in tag for backwards compatibility;
+        // `current_tag` is the truth when a dynamic pack is selected.
         "current": crate::i18n::current_language().tag(),
+        "current_tag": crate::i18n::current_language_tag(),
         "languages": crate::i18n::available_languages(),
+        "pack_count": crate::i18n::pack::count(),
     })
 }
 
@@ -2399,11 +2403,26 @@ pub fn i18n_set_language_json(request: &serde_json::Value) -> serde_json::Value 
         "android_qualifier": chosen.android_qualifier(),
         "rtl": chosen.is_rtl(),
         "base": chosen == crate::i18n::Language::BASE,
+        // The pack tag when a dynamic language was selected.
+        "tag_effective": crate::i18n::current_language_tag(),
+        "dynamic": crate::i18n::current_scope().is_dynamic(),
     })
 }
 
 /// Resolve the language a request refers to: an explicit `language` tag,
 /// otherwise the current UI language.
+/// The [`crate::i18n::Scope`] a request addresses: a dynamically loaded language
+/// pack when `language` names one, else the closest built-in.
+///
+/// Every JSON-in/JSON-out i18n helper resolves through this, so `{"language":"ja"}`
+/// works for a runtime pack exactly as `{"language":"en"}` does for a built-in.
+fn requested_scope(request: &serde_json::Value) -> crate::i18n::Scope {
+    match request.get("language").and_then(|v| v.as_str()) {
+        Some(tag) => crate::i18n::Scope::for_tag(tag),
+        None => crate::i18n::current_scope(),
+    }
+}
+
 fn requested_language(request: &serde_json::Value) -> crate::i18n::Language {
     match request.get("language").and_then(|v| v.as_str()) {
         Some(tag) => crate::i18n::Language::from_tag(tag)
@@ -2423,13 +2442,13 @@ fn requested_language(request: &serde_json::Value) -> crate::i18n::Language {
 /// automatically. A missing key echoes back as `value == key` with
 /// `"missing": true`, so the UI can still render *something*.
 pub fn i18n_translate_json(request: &serde_json::Value) -> serde_json::Value {
-    let language = requested_language(request);
+    let scope = requested_scope(request);
     let key = request.get("key").and_then(|v| v.as_str()).unwrap_or("");
     if key.is_empty() {
         return serde_json::json!({
             "key": "",
             "value": "",
-            "language": language.tag(),
+            "language": scope.tag(),
             "missing": true,
         });
     }
@@ -2459,15 +2478,17 @@ pub fn i18n_translate_json(request: &serde_json::Value) -> serde_json::Value {
         .collect();
 
     let effective_key = match count {
-        Some(n) => crate::i18n::format::plural_key(language, key, n),
+        // The *scope's* plural rule, so a pack declaring `_meta.plural` works.
+        Some(n) => format!("{}.{}", key, scope.plural_rule().category(n).suffix()),
         None => key.to_string(),
     };
-    let missing = !crate::i18n::has_key(language, &effective_key);
+    let missing = crate::i18n::lookup_scoped(&scope, &effective_key).is_none();
     serde_json::json!({
         "key": effective_key,
-        "value": crate::i18n::t_args_in(language, &effective_key, &args),
-        "language": language.tag(),
+        "value": crate::i18n::t_args_scoped(&scope, &effective_key, &args),
+        "language": scope.tag(),
         "missing": missing,
+        "dynamic": scope.is_dynamic(),
     })
 }
 
@@ -2489,7 +2510,7 @@ pub fn i18n_translate_json(request: &serde_json::Value) -> serde_json::Value {
 pub fn i18n_format_json(request: &serde_json::Value) -> serde_json::Value {
     use crate::i18n::number;
 
-    let language = requested_language(request);
+    let scope = requested_scope(request);
     let kind = request
         .get("kind")
         .and_then(|v| v.as_str())
@@ -2531,33 +2552,34 @@ pub fn i18n_format_json(request: &serde_json::Value) -> serde_json::Value {
 
     let mut supported = true;
     let text = match kind.as_str() {
-        "bytes" | "size" => number::format_bytes(language, uint("value")),
-        "rate" | "speed" => number::format_rate(language, uint("value")),
+        "bytes" | "size" => number::format_bytes(&scope, uint("value")),
+        "rate" | "speed" => number::format_rate(&scope, uint("value")),
         "byte_progress" | "progress" => {
-            number::format_byte_progress(language, uint("value"), uint("total"))
+            number::format_byte_progress(&scope, uint("value"), uint("total"))
         }
-        "int" | "integer" | "count" => number::format_int(language, int("value")),
-        "decimal" | "number" => number::format_decimal(language, num("value"), digits),
-        "percent" => number::format_percent(language, num("value"), digits),
-        "ratio" => number::format_ratio_percent(language, uint("value"), uint("total"), digits),
+        "int" | "integer" | "count" => number::format_int(&scope, int("value")),
+        "decimal" | "number" => number::format_decimal(&scope, num("value"), digits),
+        "percent" => number::format_percent(&scope, num("value"), digits),
+        "ratio" => number::format_ratio_percent(&scope, uint("value"), uint("total"), digits),
         "duration" => match request.get("parts").and_then(|v| v.as_u64()) {
-            Some(parts) => number::format_duration_parts(language, int("value"), parts as usize),
-            None => number::format_duration(language, int("value")),
+            Some(parts) => number::format_duration_parts(&scope, int("value"), parts as usize),
+            None => number::format_duration(&scope, int("value")),
         },
-        "eta" => number::format_eta(language, int("value")),
-        "relative" | "relative_time" => number::format_relative_time(language, int("value")),
-        "fps" => number::format_fps(language, num("value")),
+        "eta" => number::format_eta(&scope, int("value")),
+        "relative" | "relative_time" => number::format_relative_time(&scope, int("value")),
+        "fps" => number::format_fps(&scope, num("value")),
         _ => {
             supported = false;
-            number::format_int(language, int("value"))
+            number::format_int(&scope, int("value"))
         }
     };
 
     serde_json::json!({
         "kind": kind,
         "text": text,
-        "language": language.tag(),
+        "language": scope.tag(),
         "supported": supported,
+        "dynamic": scope.is_dynamic(),
     })
 }
 
@@ -2585,10 +2607,117 @@ pub fn i18n_format_kinds() -> &'static [&'static str] {
 /// than crossing the JNI boundary per string) keeps the UI allocation-free while
 /// scrolling and guarantees it renders the same copy as the core.
 pub fn i18n_bundle_json(request: &serde_json::Value) -> serde_json::Value {
-    let language = requested_language(request);
+    let scope = requested_scope(request);
+    let messages: serde_json::Map<String, serde_json::Value> = crate::i18n::bundle_scoped(&scope)
+        .into_iter()
+        .map(|(k, v)| (k, serde_json::Value::String(v)))
+        .collect();
     serde_json::json!({
-        "language": language.tag(),
-        "messages": crate::i18n::bundle_json(language),
+        "language": scope.tag(),
+        "dynamic": scope.is_dynamic(),
+        "plural": scope.plural_rule().id(),
+        "rtl": scope.is_rtl(),
+        "messages": serde_json::Value::Object(messages),
+    })
+}
+
+/// Pure core of `RustBridge.i18nLanguagePacks` — **dynamic language loading**.
+///
+/// `request` = `{ "action": "list"|"load"|"install"|"remove"|"clear",
+///                "path"?: "/data/.../files/i18n",   // load
+///                "text"?: "_meta.tag = ja\n...",    // install
+///                "tag"?:  "ja" }`                   // install fallback / remove
+///
+/// | action | effect |
+/// |---|---|
+/// | `list` (default) | every registered pack, plus the active one |
+/// | `load` | scan a directory for `*.properties` packs |
+/// | `install` | register one pack from an in-memory document |
+/// | `remove` | unregister one pack (reverting the UI if it was active) |
+/// | `clear` | unregister every pack |
+///
+/// This is what makes a community translation a *first-class language* rather
+/// than a wording overlay: after `load`, the new tag appears in
+/// `i18nLanguages()`, `i18nSetLanguage {"tag":"ja"}` selects it and
+/// `i18nBundle {"language":"ja"}` hydrates the UI from it.
+///
+/// Never fails. Every rejected file is reported in `skipped` with a human reason
+/// (too big, built-in tag, no messages, bad encoding, …) so the settings screen
+/// can *show* the user why their pack did not appear — the single most common
+/// support question for user-supplied translations.
+pub fn i18n_language_packs_json(request: &serde_json::Value) -> serde_json::Value {
+    use crate::i18n::pack;
+
+    let action = request
+        .get("action")
+        .and_then(|v| v.as_str())
+        .unwrap_or("list")
+        .trim()
+        .to_ascii_lowercase();
+    let tag_arg = request.get("tag").and_then(|v| v.as_str());
+
+    let mut loaded: Vec<String> = Vec::new();
+    let mut skipped: Vec<String> = Vec::new();
+    let mut ok = true;
+
+    match action.as_str() {
+        "load" | "dir" => match request.get("path").and_then(|v| v.as_str()) {
+            Some(path) => {
+                let report = pack::load_dir(std::path::Path::new(path));
+                loaded = report.loaded;
+                skipped = report.skipped;
+            }
+            None => {
+                ok = false;
+                skipped.push("no `path` given".to_string());
+            }
+        },
+        "install" | "text" => match request.get("text").and_then(|v| v.as_str()) {
+            Some(text) => match pack::install_text(text, tag_arg) {
+                Ok(tag) => loaded.push(tag),
+                Err(reason) => {
+                    ok = false;
+                    skipped.push(reason);
+                }
+            },
+            None => {
+                ok = false;
+                skipped.push("no `text` given".to_string());
+            }
+        },
+        "remove" | "uninstall" => match tag_arg {
+            Some(tag) => {
+                ok = pack::remove(tag);
+                if !ok {
+                    skipped.push(format!("{tag} is not a loaded language pack"));
+                }
+            }
+            None => {
+                ok = false;
+                skipped.push("no `tag` given".to_string());
+            }
+        },
+        "clear" => pack::clear(),
+        // "list" and anything unrecognised: report state without mutating it.
+        _ => {}
+    }
+
+    let required: Vec<String> = crate::i18n::all_keys().into_iter().collect();
+    let packs: Vec<serde_json::Value> = pack::tags()
+        .into_iter()
+        .filter_map(|t| pack::describe(&t, &required))
+        .collect();
+
+    serde_json::json!({
+        "action": action,
+        "ok": ok,
+        "loaded": loaded,
+        "skipped": skipped,
+        "packs": packs,
+        "count": pack::count(),
+        "active": pack::active(),
+        "current": crate::i18n::current_language_tag(),
+        "limits": { "max_packs": pack::MAX_PACKS, "max_bytes": pack::MAX_PACK_BYTES },
     })
 }
 
@@ -2737,6 +2866,16 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_i18nDiagnostics(
         }
     }));
     built.unwrap_or(std::ptr::null_mut())
+}
+
+/// `RustBridge.i18nLanguagePacks(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_i18nLanguagePacks(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({ i18n_json_call(&mut env, &request, i18n_language_packs_json) })
 }
 
 /// `RustBridge.i18nOverlay(requestJson): String`
@@ -3018,6 +3157,128 @@ mod i18n_tests {
             "zh-CN"
         );
         crate::i18n::set_language(restore);
+    }
+
+    #[test]
+    fn language_packs_load_select_and_unload_over_the_ffi() {
+        let _g = lock();
+        crate::i18n::pack::clear();
+        let restore = crate::i18n::current_language();
+
+        // Nothing loaded yet.
+        let out = i18n_language_packs_json(&json!({ "action": "list" }));
+        assert_eq!(out["count"], 0);
+        assert_eq!(out["active"], serde_json::Value::Null);
+        assert_eq!(out["limits"]["max_packs"], crate::i18n::pack::MAX_PACKS);
+
+        // Install a pack from an in-memory document.
+        let out = i18n_language_packs_json(&json!({
+            "action": "install",
+            "text": "_meta.tag = ja\n_meta.native_name = \u{65e5}\u{672c}\u{8a9e}\nnav.home = \u{30db}\u{30fc}\u{30e0}\n",
+        }));
+        assert_eq!(out["ok"], true, "{out}");
+        assert_eq!(out["loaded"], json!(["ja"]));
+        assert_eq!(out["count"], 1);
+        assert_eq!(out["packs"][0]["native_name"], "\u{65e5}\u{672c}\u{8a9e}");
+        assert_eq!(out["packs"][0]["dynamic"], true);
+
+        // It is now a first-class picker row.
+        let langs = i18n_languages_json();
+        assert_eq!(langs["pack_count"], 1);
+        let listed = langs["languages"].as_array().unwrap();
+        assert_eq!(listed.len(), 4);
+        assert!(listed
+            .iter()
+            .any(|l| l["tag"] == "ja" && l["dynamic"] == true));
+
+        // Selecting it by tag works, and reports the pack as effective.
+        let set = i18n_set_language_json(&json!({ "tag": "ja" }));
+        assert_eq!(set["tag_effective"], "ja");
+        assert_eq!(set["dynamic"], true);
+        assert_eq!(crate::i18n::current_language_tag(), "ja");
+
+        // Translate + bundle resolve through the pack, falling back to Chinese.
+        let t = i18n_translate_json(&json!({ "key": "nav.home", "language": "ja" }));
+        assert_eq!(t["value"], "\u{30db}\u{30fc}\u{30e0}");
+        assert_eq!(t["dynamic"], true);
+        let t = i18n_translate_json(&json!({ "key": "nav.accounts", "language": "ja" }));
+        assert_eq!(
+            t["value"], "\u{8d26}\u{6237}",
+            "untranslated -> Chinese, not a key"
+        );
+        let b = i18n_bundle_json(&json!({ "language": "ja" }));
+        assert_eq!(b["language"], "ja");
+        assert_eq!(b["dynamic"], true);
+        assert_eq!(b["plural"], "other_only");
+        let msgs = b["messages"].as_object().unwrap();
+        assert_eq!(msgs["nav.home"], "\u{30db}\u{30fc}\u{30e0}");
+        // Same key set as a built-in bundle: the UI never sees a hole.
+        let zh = i18n_bundle_json(&json!({ "language": "zh-CN" }));
+        assert_eq!(msgs.len(), zh["messages"].as_object().unwrap().len());
+        // Value formatting follows the pack scope too.
+        let f = i18n_format_json(&json!({ "kind": "bytes", "value": 1536, "language": "ja" }));
+        assert_eq!(f["dynamic"], true);
+        assert_eq!(f["language"], "ja");
+
+        // Unloading the *active* pack must revert, not dangle.
+        let out = i18n_language_packs_json(&json!({ "action": "remove", "tag": "ja" }));
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["count"], 0);
+        assert_eq!(out["active"], serde_json::Value::Null);
+        assert_eq!(crate::i18n::current_language_tag(), "zh-CN");
+
+        crate::i18n::pack::clear();
+        crate::i18n::set_language(restore);
+    }
+
+    #[test]
+    fn language_packs_degrade_instead_of_failing() {
+        let _g = lock();
+        crate::i18n::pack::clear();
+
+        // Missing arguments are reported, never panics.
+        for req in [
+            json!({ "action": "load" }),
+            json!({ "action": "install" }),
+            json!({ "action": "remove" }),
+        ] {
+            let out = i18n_language_packs_json(&req);
+            assert_eq!(out["ok"], false, "{req}");
+            assert!(!out["skipped"].as_array().unwrap().is_empty(), "{req}");
+        }
+        // A tag that collides with a built-in is refused with a readable reason.
+        let out = i18n_language_packs_json(&json!({
+            "action": "install", "text": "nav.home = Home\n", "tag": "en"
+        }));
+        assert_eq!(out["ok"], false);
+        assert!(
+            out["skipped"][0].as_str().unwrap().contains("built-in"),
+            "{out}"
+        );
+        // A non-existent directory loads nothing and is not an error state.
+        let out = i18n_language_packs_json(&json!({
+            "action": "load", "path": "/definitely/not/here/rc-i18n"
+        }));
+        assert_eq!(out["loaded"], json!([]));
+        assert_eq!(out["count"], 0);
+        // Unknown action / null request: report state, mutate nothing.
+        assert_eq!(
+            i18n_language_packs_json(&json!({ "action": "explode" }))["count"],
+            0
+        );
+        let out = i18n_language_packs_json(&serde_json::Value::Null);
+        assert_eq!(out["action"], "list");
+        assert_eq!(out["ok"], true);
+        // Removing something that was never there.
+        let out = i18n_language_packs_json(&json!({ "action": "remove", "tag": "ko" }));
+        assert_eq!(out["ok"], false);
+
+        // An unknown `language` tag still renders (Chinese-first), never errors.
+        let t = i18n_translate_json(&json!({ "key": "nav.home", "language": "ja" }));
+        assert_eq!(t["dynamic"], false);
+        assert_eq!(t["value"], "\u{4e3b}\u{9875}");
+
+        crate::i18n::pack::clear();
     }
 
     #[test]

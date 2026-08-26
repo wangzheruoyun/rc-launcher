@@ -1,6 +1,7 @@
 package com.rc.launcher.ui.model.json
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -77,5 +78,38 @@ class MiniJsonTest {
         assertEquals("\"line1\\nline2\\ttab\\\"quote\\\\slash / 中文\"", text)
         val parsed = (parseJson(text) as JsonValue.Str).value
         assertEquals(original, parsed)
+    }
+
+    @Test
+    fun parsesPrettyPrintedObjectsWithWhitespaceAfterCommas() {
+        // Regression: the object loop resumed straight after the `,` without
+        // skipping whitespace, so any indented / pretty-printed payload was
+        // rejected (a number followed by a newline was the common shape).
+        val pretty = """
+            {
+              "a": 1,
+              "b": 2.5,
+              "c": true,
+              "d": null,
+              "e": "x",
+              "f": [1, 2],
+              "g": { "h": 3 }
+            }
+        """.trimIndent()
+        val obj = parseJson(pretty) as JsonValue.Obj
+        assertEquals(7, obj.entries.size)
+        assertEquals(1.0, (obj.entries["a"] as JsonValue.Num).value, 0.0)
+        assertEquals(2.5, (obj.entries["b"] as JsonValue.Num).value, 0.0)
+        assertEquals(true, (obj.entries["c"] as JsonValue.Bool).value)
+        assertEquals(JsonValue.Null, obj.entries["d"])
+        assertEquals("x", (obj.entries["e"] as JsonValue.Str).value)
+        assertEquals(2, (obj.entries["f"] as JsonValue.Arr).items.size)
+        assertEquals(1, (obj.entries["g"] as JsonValue.Obj).entries.size)
+        // Every whitespace flavour, and CRLF.
+        assertNotNull(parseJson("{\"a\":1,\r\n\t\"b\":2}"))
+        assertNotNull(parseJson("{\n\t\"a\" : 1 , \"b\" : 2\n}"))
+        // Still rejects genuinely malformed input.
+        assertNull(parseJson("{\"a\":1,}"))
+        assertNull(parseJson("{\"a\":1 \"b\":2}"))
     }
 }

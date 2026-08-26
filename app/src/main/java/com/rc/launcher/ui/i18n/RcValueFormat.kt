@@ -257,7 +257,10 @@ object RcValueFormat {
         fallback: String,
         count: Long,
     ): String {
-        val key = RcStringFormat.pluralKey(strings.language, base, count)
+        // The table's own rule, so a dynamically loaded pack declaring
+        // `_meta.plural = one_other` pluralises correctly (mirrors
+        // `Scope::plural_rule` in the core).
+        val key = "$base.${strings.pluralRule.category(count).suffix}"
         val template = if (strings.has(key)) strings[key].ifBlank { fallback } else fallback
         return RcStringFormat.interpolate(template, mapOf("count" to count.toString()))
     }
