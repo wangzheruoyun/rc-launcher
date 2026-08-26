@@ -24,6 +24,9 @@ use crate::game::manifest::VersionManifest;
 use crate::game::platform::{Arch, Features, OsName, Platform};
 use crate::game::resolve::{ArtifactKind, DependencyResolver, DownloadPlan};
 use crate::game::version::{merge_chain, VersionJson};
+use crate::mods::resource_pack::ResourcePackManager;
+use crate::mods::shader::ShaderPackManager;
+use crate::mods::{ModIssueKind, ModManager};
 use crate::net::MirrorProvider;
 
 /// A unique scratch directory for an integration test.
@@ -55,7 +58,7 @@ async fn download_then_resume_preserves_checksum_integrity() {
     let summary = mgr
         .download(
             &DownloadTask::new("http://mock/game.jar", dest.clone())
-                .with_sha1(sha)
+                .with_sha1(sha.clone())
                 .with_size(data.len() as u64),
         )
         .await
@@ -372,4 +375,426 @@ fn resolve_version_into_deduplicated_download_plan() {
     let tasks = plan.into_tasks();
     assert_eq!(tasks.len(), 4);
     assert!(tasks.iter().any(|t| t.checksum.is_some()));
+}
+
+// ───────────────────── mods / resource-pack / shader (task 8) ─────────────────────
+//
+// End-to-end coverage for the per-instance Mod / resource-pack / shader managers
+// (task 8). Mirrors FCL's `ModManager` pre-launch validation: install archives,
+// scan them into typed records, resolve dependency / conflict / MC-version issues,
+// and toggle enable-disable durably via the `.disabled` name suffix.
+
+use zip::write::SimpleFileOptions;
+use zip::ZipWriter;
+
+/// Helper: write a `.jar` / `.zip` archive with the given (name, content) entries.
+fn write_archive(path: &std::path::Path, entries: &[(&str, &str)]) {
+    let file = std::fs::File::create(path).unwrap();
+    let mut zip = ZipWriter::new(file);
+    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    for (name, content) in entries {
+        zip.start_file(*name, opts).unwrap();
+        zip.write_all(content.as_bytes()).unwrap();
+    }
+    zip.finish().unwrap();
+}
+
+#[test]
+fn mods_install_scan_resolve_missing_dependency_e2e() {
+    let base = scratch();
+    let mgr = ModManager::new(base.join("mods"));
+
+    // Fabric mod "sodium" depends on mod "iris" (any version).
+    let sodium_src = base.join("sodium.jar");
+    write_archive(
+        &sodium_src,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"sodium","version":"0.5","name":"Sodium","depends":{"minecraft":">=1.16","iris":"*"}}"#,
+        )],
+    );
+    let installed = mgr.install(&sodium_src).unwrap();
+    assert_eq!(installed.primary().unwrap().modid, "sodium");
+    assert!(installed.is_enabled());
+
+    // First resolve: iris is missing.
+    let issues = mgr.resolve(Some("1.18.2")).unwrap();
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.kind == ModIssueKind::MissingDependency
+                && i.target.as_deref() == Some("iris")),
+        "expected a missing-dependency issue for iris, got {issues:?}"
+    );
+
+    // Install iris (satisfies the dependency) and re-resolve.
+    let iris_src = base.join("iris.jar");
+    write_archive(
+        &iris_src,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"iris","version":"1.6","name":"Iris","depends":{"minecraft":">=1.16"}}"#,
+        )],
+    );
+    let iris = mgr.install(&iris_src).unwrap();
+    assert_eq!(iris.primary().unwrap().modid, "iris");
+
+    let issues = mgr.resolve(Some("1.18.2")).unwrap();
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.kind == ModIssueKind::MissingDependency),
+        "loadout should be clean after installing iris, got {issues:?}"
+    );
+
+    // Disabling sodium removes it from the resolvable set (durable state).
+    let disabled = mgr.set_enabled(&installed, false).unwrap();
+    assert!(!disabled.is_enabled());
+    let disabled_name = disabled.path.file_name().unwrap().to_str().unwrap();
+    assert!(disabled_name.ends_with(".disabled"));
+    // iris alone declares no hard dep on sodium, so still clean.
+    let issues = mgr.resolve(Some("1.18.2")).unwrap();
+    assert!(!issues
+        .iter()
+        .any(|i| i.kind == ModIssueKind::MissingDependency));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn mods_conflict_duplicate_and_version_isolation_e2e() {
+    let base = scratch();
+    // Two independent instances → version isolation.
+    let mgr_a = ModManager::new(base.join("instance_a").join("mods"));
+    let mgr_b = ModManager::new(base.join("instance_b").join("mods"));
+
+    // Mod "a" breaks mod "b"; mod "b" conflicts with "a".
+    let a_src = base.join("a.jar");
+    write_archive(
+        &a_src,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"a","version":"1","name":"A","breaks":{"b":"*"}}"#,
+        )],
+    );
+    let b_src = base.join("b.jar");
+    write_archive(
+        &b_src,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"b","version":"1","name":"B","conflicts":{"a":"*"}}"#,
+        )],
+    );
+    mgr_a.install(&a_src).unwrap();
+    mgr_a.install(&b_src).unwrap();
+
+    // Instance B is empty → version isolation means no issues there.
+    let issues_b = mgr_b.resolve(Some("1.18.2")).unwrap();
+    assert!(
+        issues_b.is_empty(),
+        "empty instance must be clean, got {issues_b:?}"
+    );
+
+    let issues_a = mgr_a.resolve(Some("1.18.2")).unwrap();
+    assert!(
+        issues_a.iter().any(|i| i.kind == ModIssueKind::Conflict),
+        "expected a conflict between a and b, got {issues_a:?}"
+    );
+
+    // Two files declaring the same mod id → DuplicateMod.
+    let dup1 = base.join("dup1.jar");
+    let dup2 = base.join("dup2.jar");
+    write_archive(
+        &dup1,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"dup","version":"1","name":"Dup1"}"#,
+        )],
+    );
+    write_archive(
+        &dup2,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"dup","version":"2","name":"Dup2"}"#,
+        )],
+    );
+    mgr_a.install(&dup1).unwrap();
+    mgr_a.install(&dup2).unwrap();
+    let issues_a = mgr_a.resolve(Some("1.18.2")).unwrap();
+    assert!(
+        issues_a
+            .iter()
+            .any(|i| i.kind == ModIssueKind::DuplicateMod),
+        "expected a duplicate-mod issue, got {issues_a:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn mods_incompatible_minecraft_version_e2e() {
+    let base = scratch();
+    let mgr = ModManager::new(base.join("mods"));
+
+    // Mod pinned to MC >= 1.20, but the instance runs 1.16.5.
+    let src = base.join("modern.jar");
+    write_archive(
+        &src,
+        &[(
+            "fabric.mod.json",
+            r#"{"schemaVersion":1,"id":"modern","version":"1","name":"Modern","depends":{"minecraft":">=1.20"}}"#,
+        )],
+    );
+    mgr.install(&src).unwrap();
+
+    let issues = mgr.resolve(Some("1.16.5")).unwrap();
+    assert!(
+        issues
+            .iter()
+            .any(|i| i.kind == ModIssueKind::IncompatibleMinecraft),
+        "expected incompatible-minecraft issue, got {issues:?}"
+    );
+    // On a compatible version the same loadout is clean.
+    let issues = mgr.resolve(Some("1.20.4")).unwrap();
+    assert!(!issues
+        .iter()
+        .any(|i| i.kind == ModIssueKind::IncompatibleMinecraft));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn resource_pack_install_scan_compat_e2e() {
+    let base = scratch();
+    let mgr = ResourcePackManager::new(base.join("resourcepacks"));
+
+    let src = base.join("faithful.zip");
+    write_archive(
+        &src,
+        &[(
+            "pack.mcmeta",
+            r#"{"pack":{"pack_format":8,"description":"Faithful"}}"#,
+        )],
+    );
+    let pack = mgr.install(&src).unwrap();
+    assert!(pack.enabled);
+    assert_eq!(pack.pack_format, Some(8));
+    assert_eq!(pack.description.as_deref(), Some("Faithful"));
+
+    // pack_format 8 loads on MC 1.18+, not on 1.12.2.
+    assert!(pack.is_compatible("1.18.2"));
+    assert!(!pack.is_compatible("1.12.2"));
+
+    let scanned = mgr.scan().unwrap();
+    assert_eq!(scanned.len(), 1);
+
+    let disabled = mgr.set_enabled(&pack, false).unwrap();
+    assert!(!disabled.enabled);
+    let scanned = mgr.scan().unwrap();
+    assert!(scanned.iter().all(|p| !p.enabled));
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn shader_pack_install_scan_validate_e2e() {
+    let base = scratch();
+    let mgr = ShaderPackManager::new(base.join("shaderpacks"));
+
+    let src = base.join("bsl.zip");
+    write_archive(&src, &[("shaders/dummy.fsh", "void main(){}\n")]);
+    let pack = mgr.install(&src).unwrap();
+    assert!(pack.enabled);
+    assert!(pack.valid);
+    assert_eq!(pack.name, "bsl.zip");
+
+    let scanned = mgr.scan().unwrap();
+    assert_eq!(scanned.len(), 1);
+    assert!(scanned[0].valid);
+
+    let disabled = mgr.set_enabled(&pack, false).unwrap();
+    assert!(!disabled.enabled);
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Mirror fallback (download/validate pillar): when the primary host is dead,
+/// the manager must transparently fall back to a configured mirror and still
+/// assemble byte-identical content. This exercises the per-task multi-mirror
+/// resilience that task 2 introduced and that task 21's download leg must
+/// guarantee end-to-end (a flaky origin degrades to a working mirror instead of
+/// failing the whole game download).
+#[tokio::test]
+async fn mirror_fallback_succeeds_when_primary_host_is_dead() {
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+    let sha = sha1_bytes(&data);
+    let dir = scratch();
+    let dest = dir.join("game.jar");
+
+    // Every request whose URL contains "primary" fails forever; the mirror URL
+    // does not contain that substring, so it always answers.
+    let src = Arc::new(MockSource::new(data.clone()));
+    src.fail_url_containing("primary", usize::MAX);
+    let mgr = DownloadManager::new(
+        src.clone(),
+        DownloadOptions {
+            chunk_size: 64 * 1024,
+            concurrency: 4,
+            // Keep the per-retry backoff tiny so the failing primary attempts
+            // don't slow the suite down.
+            retry_base: std::time::Duration::from_millis(1),
+            retry_max: std::time::Duration::from_millis(4),
+            ..Default::default()
+        },
+    );
+
+    let summary = mgr
+        .download(
+            &DownloadTask::new("http://primary/game.jar", dest.clone())
+                .with_mirror("http://mirror/game.jar")
+                .with_sha1(sha.clone())
+                .with_size(data.len() as u64),
+        )
+        .await
+        .expect("download must succeed via mirror fallback");
+
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+    // The dead primary was probed (and rejected) before the mirror answered.
+    assert!(src.call_count() > 0);
+}
+
+/// Resume robustness (resume pillar): a previous run crashed leaving a `.meta`
+/// that claims half the chunks are done, but the `.part` file on disk is
+/// truncated (shorter than the expected total). The manager must NOT trust the
+/// stale meta — it must reset the completed set and re-fetch every chunk,
+/// otherwise the final checksum would see zero-filled/garbage ranges and fail
+/// (the `resets_stale_meta_when_temp_truncated` discipline from task 2).
+#[tokio::test]
+async fn resume_resets_stale_meta_when_part_file_truncated() {
+    let data: Vec<u8> = (0..300_000u32).map(|i| (i % 197) as u8).collect();
+    let sha = sha1_bytes(&data);
+    let dir = scratch();
+    let dest = dir.join("game.jar");
+    let temp = dir.join("game.jar.part");
+    let meta = dir.join("game.jar.part.meta");
+    let chunk_size = 64 * 1024u64;
+    let plan = plan_chunks(data.len() as u64, chunk_size);
+
+    // Truncated temp: only 10 bytes present, but the meta claims half done.
+    std::fs::write(&temp, vec![0u8; 10]).unwrap();
+    let half = plan.len() / 2;
+    let completed: Vec<u64> = (0..half).map(|i| (i as u64) * chunk_size).collect();
+    let json = serde_json::json!({
+        "total_size": data.len() as u64,
+        "chunk_size": chunk_size,
+        "completed": completed,
+    });
+    std::fs::write(&meta, serde_json::to_vec(&json).unwrap()).unwrap();
+
+    let src = Arc::new(MockSource::new(data.clone()));
+    let mgr = DownloadManager::new(
+        src.clone(),
+        DownloadOptions {
+            chunk_size,
+            concurrency: 4,
+            ..Default::default()
+        },
+    );
+
+    let summary = mgr
+        .download(
+            &DownloadTask::new("http://mock/game.jar", dest.clone())
+                .with_sha1(sha.clone())
+                .with_size(data.len() as u64),
+        )
+        .await
+        .expect("resume with stale meta must succeed after reset");
+
+    // Because the temp was truncated, the manager discards the stale completed
+    // set and re-fetches every chunk (none of the claimed progress is trusted).
+    assert_eq!(
+        src.call_count() as usize,
+        plan.len(),
+        "stale meta must trigger a full re-fetch of all chunks"
+    );
+    assert!(!summary.resumed);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Checksum validation (validate pillar): both supported digest algorithms
+/// must accept the correct digest, and a file whose bytes are corrupt (but
+/// claims the right size) must be rejected by the verifier. This pins the
+/// SHA-1 / MD5 acceptance paths and the negative case so a regression in the
+/// integrity gate fails the build rather than shipping a corrupt artifact.
+#[tokio::test]
+async fn validate_accepts_sha1_and_md5_and_rejects_corruption() {
+    let good: Vec<u8> = (0..4096u32).map(|i| (i % 37) as u8).collect();
+    let sha = sha1_bytes(&good);
+    let md5 = md5_bytes(&good);
+    let dir = scratch();
+
+    // SHA-1 acceptance.
+    let dest_sha = dir.join("a.bin");
+    let mgr_sha = DownloadManager::new(
+        Arc::new(MockSource::new(good.clone())),
+        DownloadOptions {
+            chunk_size: 1024,
+            concurrency: 2,
+            ..Default::default()
+        },
+    );
+    mgr_sha
+        .download(
+            &DownloadTask::new("http://mock/a.bin", dest_sha.clone())
+                .with_sha1(sha.clone())
+                .with_size(good.len() as u64),
+        )
+        .await
+        .expect("sha1 must accept the correct digest");
+    assert_eq!(std::fs::read(&dest_sha).unwrap(), good);
+
+    // MD5 acceptance.
+    let dest_md5 = dir.join("b.bin");
+    let mgr_md5 = DownloadManager::new(
+        Arc::new(MockSource::new(good.clone())),
+        DownloadOptions {
+            chunk_size: 1024,
+            concurrency: 2,
+            ..Default::default()
+        },
+    );
+    mgr_md5
+        .download(
+            &DownloadTask::new("http://mock/b.bin", dest_md5.clone())
+                .with_md5(md5)
+                .with_size(good.len() as u64),
+        )
+        .await
+        .expect("md5 must accept the correct digest");
+    assert_eq!(std::fs::read(&dest_md5).unwrap(), good);
+
+    // Corruption: the server returns different bytes than the expected digest,
+    // so the verifier must reject (never materialise a corrupt artifact).
+    let corrupt: Vec<u8> = (0..4096u32).map(|i| (i % 11) as u8).collect();
+    let dest_bad = dir.join("c.bin");
+    let mgr_bad = DownloadManager::new(
+        Arc::new(MockSource::new(corrupt)),
+        DownloadOptions {
+            chunk_size: 1024,
+            concurrency: 2,
+            ..Default::default()
+        },
+    );
+    let res = mgr_bad
+        .download(
+            &DownloadTask::new("http://mock/c.bin", dest_bad.clone())
+                .with_sha1(sha.clone())
+                .with_size(good.len() as u64),
+        )
+        .await;
+    assert!(
+        res.is_err(),
+        "checksum mismatch must reject corrupt content (validate pillar)"
+    );
 }
