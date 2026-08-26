@@ -248,17 +248,17 @@ jobs:
         run: |
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.12
+          gradle-version: 9.3.1
 
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            gradle wrapper --gradle-version 8.12
+            gradle wrapper --gradle-version 9.3.1
           fi
 
       # Decode the release keystore from the KEYSTORE_BASE64 secret (when
@@ -297,7 +297,7 @@ jobs:
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -n1)
           test -n "$APK" || { echo "no release APK produced"; exit 1; }
-          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify "$APK"             && echo "APK signature OK: $APK"             || { echo "APK is NOT signed: $APK"; exit 1; }
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify "$APK"             && echo "APK signature OK: $APK"             || { echo "APK is NOT signed: $APK"; exit 1; }
 
       # Enforce the single-ABI, APK-only deliverable contract (task 22):
       #   * exactly one release .apk is produced (never an .aab or a .zip),
@@ -356,15 +356,15 @@ jobs:
         run: |
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "cmdline-tools;latest" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.12
+          gradle-version: 9.3.1
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            gradle wrapper --gradle-version 8.12
+            gradle wrapper --gradle-version 9.3.1
           fi
       - name: Run unit + Compose UI tests
         run: ./gradlew testDebugUnitTest --continue

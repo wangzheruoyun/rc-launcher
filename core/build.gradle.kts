@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
@@ -7,7 +8,7 @@ plugins {
 
 android {
     namespace = "com.rc.launcher.core"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
@@ -45,8 +46,10 @@ android {
     }
 }
 
-kotlinOptions {
-    jvmTarget = "17"
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 dependencies {
