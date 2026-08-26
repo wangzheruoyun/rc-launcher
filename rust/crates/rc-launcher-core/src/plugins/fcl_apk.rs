@@ -236,7 +236,10 @@ pub fn manifest() -> &'static FclApkRendererManifest {
 /// scoped to `arm64-v8a` (the only ABI this APK provides).
 pub fn preset_registry() -> RendererRegistry {
     use crate::launch::options::Renderer;
-    let mut reg = RendererRegistry::builtin();
+    // Start from an empty registry (not `builtin()`): the preset is the FCL APK
+    // inventory (the 5 GL translation stacks it bundles), so it must not carry
+    // the extra LWJGL SDL backend that `builtin()` adds on top.
+    let mut reg = RendererRegistry::default();
     for r in manifest().renderers() {
         let base = match r.id {
             "opengles2" => Renderer::Gl4es,

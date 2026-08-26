@@ -24,7 +24,18 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.nativeKeyCode
@@ -37,6 +48,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtMouseButton
 import com.rc.launcher.ui.awt.AwtPointerPhase
 import com.rc.launcher.ui.awt.awtKeyNameForAndroidKeyCode
@@ -68,7 +80,15 @@ import com.rc.launcher.ui.viewmodel.AwtSurfaceViewModel
  *   releases every held button/modifier (nothing stays stuck when the app goes to
  *   the background). Hardware keys are forwarded by name, and anything without an
  *   AWT code degrades to typed text (IME included).
+ * * **The control plane.** Everything that crosses the bridge but is not a pixel
+ *   is drained on the same frame loop, because most of it repaints *nothing*: the
+ *   cursor shape the JVM asked for is drawn as a pointer overlay, a
+ *   `Clipboard.setContents` lands on the Android clipboard, a
+ *   `Clipboard.getContents` is **answered** with it (a Swing thread may be
+ *   blocked on that call), a focused text field pops the soft keyboard, and
+ *   `Toolkit.beep()` becomes a haptic tick.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun AwtCanvasSurface(
     viewModel: AwtSurfaceViewModel,
@@ -80,6 +100,10 @@ fun AwtCanvasSurface(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val focusRequester = remember { FocusRequester() }
+    // Android-side services the ViewModel deliberately does not know about.
+    val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    val keyboard = LocalSoftwareKeyboardController.current
 
     val screenWidth = state.info.screenWidth
     val screenHeight = state.info.screenHeight
@@ -104,6 +128,24 @@ fun AwtCanvasSurface(
         while (true) {
             withFrameNanos { }
             val update = viewModel.poll()
+            // *Before* the `continue` below: a cursor change, a clipboard
+            // hand-off or a paste request repaints nothing at all, so tying the
+            // control plane to a changed frame would stall it on an idle desktop
+            // (and hang a JVM thread blocked in `getContents()`).
+            val control = viewModel.pumpControl()
+            if (control.messages.isNotEmpty()) {
+                control.clipboardSet?.let { text ->
+                    runCatching { clipboard.setText(AnnotatedString(text)) }
+                }
+                control.clipboardRequestSeq?.let { seq ->
+                    // `null` is still an answer: never leave the JVM waiting.
+                    val text = runCatching { clipboard.getText()?.text }.getOrNull()
+                    viewModel.answerClipboard(text, seq)
+                }
+                if (control.beeps > 0) {
+                    runCatching { haptics.performHapticFeedback(HapticFeedbackType.LongPress) }
+                }
+            }
             if (!update.changed) continue
             val buffer = viewModel.frameBuffer ?: continue
             // `copyPixelsFromBuffer` reads from the buffer's position; the core
@@ -188,6 +230,9 @@ fun AwtCanvasSurface(
             Text(placeholder, color = Color.White, style = MaterialTheme.typography.bodyMedium)
         } else {
             val placement = state.placement
+            val cursor = state.cursor
+            val pointer = state.lastInput.pointer
+            val viewport = state.viewport
             Canvas(modifier = Modifier.fillMaxSize()) {
                 // Reading `frameTick` inside the draw lambda is what ties a
                 // repaint to a freshly uploaded frame (the Bitmap is mutated in
@@ -196,6 +241,14 @@ fun AwtCanvasSurface(
                 if (tick >= 0) {
                     drawAwtDesktop(image, placement.x, placement.y, placement.width, placement.height)
                 }
+                // The pointer overlay: Android has no cursor to hand to a window
+                // manager, so the shape the JVM asked for is drawn here. It is the
+                // only cue that the thing under the finger is a text field (I-beam)
+                // or a link (hand).
+                if (cursor != AwtCursorKind.DEFAULT) {
+                    val (sx, sy) = viewport.mapToSurface(pointer.x, pointer.y)
+                    drawAwtCursor(cursor, Offset(sx, sy))
+                }
             }
         }
     }
@@ -203,6 +256,83 @@ fun AwtCanvasSurface(
     LaunchedEffect(state.open) {
         if (state.open) runCatching { focusRequester.requestFocus() }
     }
+
+    // A Swing text component gained / lost focus inside the JVM: offer or retract
+    // the soft keyboard. Without this the user would have to guess that the
+    // invisible `JTextField` under the finger wants input.
+    LaunchedEffect(state.wantsKeyboard) {
+        runCatching {
+            if (state.wantsKeyboard) keyboard?.show() else keyboard?.hide()
+        }
+    }
+}
+
+/**
+ * Draw the AWT cursor shape at [at] (surface pixels).
+ *
+ * Deliberately vector-drawn instead of bitmap assets: it stays crisp at every
+ * density, costs nothing to ship, and cannot fail to load. Every shape is drawn
+ * twice (a black outline under a white body) so it stays visible over both a
+ * white `JOptionPane` and a dark game frame.
+ */
+private fun DrawScope.drawAwtCursor(kind: AwtCursorKind, at: Offset) {
+    val s = 12f
+    val body = Color.White
+    val edge = Color.Black
+    fun stroke(from: Offset, to: Offset) {
+        drawLine(edge, from, to, strokeWidth = 4f, cap = StrokeCap.Round)
+        drawLine(body, from, to, strokeWidth = 2f, cap = StrokeCap.Round)
+    }
+    when (kind) {
+        AwtCursorKind.TEXT -> {
+            // I-beam.
+            stroke(Offset(at.x, at.y - s), Offset(at.x, at.y + s))
+            stroke(Offset(at.x - s / 3, at.y - s), Offset(at.x + s / 3, at.y - s))
+            stroke(Offset(at.x - s / 3, at.y + s), Offset(at.x + s / 3, at.y + s))
+        }
+        AwtCursorKind.CROSSHAIR -> {
+            stroke(Offset(at.x - s, at.y), Offset(at.x + s, at.y))
+            stroke(Offset(at.x, at.y - s), Offset(at.x, at.y + s))
+        }
+        AwtCursorKind.WAIT -> {
+            // Hourglass-ish: a ring is the clearest "busy" hint at this size.
+            drawCircle(edge, radius = s * 0.75f, center = at, style = Stroke(width = 4f))
+            drawCircle(body, radius = s * 0.75f, center = at, style = Stroke(width = 2f))
+            stroke(at, Offset(at.x, at.y - s * 0.75f))
+        }
+        AwtCursorKind.HAND -> {
+            // A pointing finger, reduced to its silhouette.
+            drawRoundedCursorBody(at, Size(s * 0.9f, s * 1.3f), edge, body)
+            stroke(Offset(at.x, at.y), Offset(at.x, at.y - s))
+        }
+        AwtCursorKind.MOVE -> {
+            stroke(Offset(at.x - s, at.y), Offset(at.x + s, at.y))
+            stroke(Offset(at.x, at.y - s), Offset(at.x, at.y + s))
+            drawCircle(body, radius = 3f, center = at)
+        }
+        else -> {
+            // Resize grips: a double-headed arrow along the grip direction.
+            val (dx, dy) = when (kind) {
+                AwtCursorKind.N_RESIZE, AwtCursorKind.S_RESIZE -> 0f to 1f
+                AwtCursorKind.W_RESIZE, AwtCursorKind.E_RESIZE -> 1f to 0f
+                AwtCursorKind.NE_RESIZE, AwtCursorKind.SW_RESIZE -> 1f to -1f
+                else -> 1f to 1f
+            }
+            stroke(Offset(at.x - s * dx, at.y - s * dy), Offset(at.x + s * dx, at.y + s * dy))
+        }
+    }
+}
+
+private fun DrawScope.drawRoundedCursorBody(at: Offset, size: Size, edge: Color, body: Color) {
+    val path = Path().apply {
+        moveTo(at.x - size.width / 2, at.y)
+        lineTo(at.x + size.width / 2, at.y)
+        lineTo(at.x + size.width / 2, at.y + size.height)
+        lineTo(at.x - size.width / 2, at.y + size.height)
+        close()
+    }
+    drawPath(path, edge, style = Stroke(width = 4f))
+    drawPath(path, body, style = Stroke(width = 2f))
 }
 
 /** Blit the whole desktop into the (letterboxed) destination rectangle. */

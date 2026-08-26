@@ -132,11 +132,11 @@ for longer than the FFI marshalling.
 ## 4. Build & release pipeline
 
 ```
-                rust-core (matrix: 4 ABIs, cargo-ndk)
+                rust-core (matrix: arm64-v8a only, cargo-ndk)
                           │  libcrc_launcher.so
                 rust-test  (host cargo test) ── gate ─┐
                           │                           │
-                      android (assemble + sign APK/AAB)│
+                      android (assemble + sign APK)│
                           │                           │
                        release (tag → GitHub Release + SHA-256)
                           │
@@ -144,7 +144,7 @@ for longer than the FFI marshalling.
 ```
 
 The Rust `.so` artifacts are assembled into `core/src/main/jniLibs/<abi>/` so
-the Android library packages them into the final APK/AAB automatically. Full
+the Android library packages them into the final APK automatically. Full
 commands and the signing/keystore flow are in [`BUILD.md`](BUILD.md); the
 code-style gate that must pass before merge is in
 [`stylecheck.yml`](../.github/workflows/stylecheck.yml) and

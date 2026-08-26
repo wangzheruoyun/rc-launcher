@@ -218,6 +218,181 @@ impl LwjglNativeBundle {
     }
 }
 
+/// A native library a renderer's OpenGL→OpenGL ES translation backend needs on
+/// disk (task 17 robustness: the LWJGL natives are only half the story — without
+/// the GL4ES / ANGLE / Mesa / Zink backing `.so`, the chosen renderer dies at
+/// the first GL call with an opaque `UnsatisfiedLinkError` or `EGL_BAD_CONFIG`,
+/// long after the JVM has booted).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RendererNativeLib {
+    /// File name inside the renderer's `nativeLibraryDir`.
+    pub file_name: &'static str,
+    /// `true` for the libs the renderer *cannot* initialise without.
+    pub required: bool,
+}
+
+/// The backing native libraries for a renderer's translation stack, taken from
+/// `FCL_NATIVE_LIBRARIES.md` (the 30 `.so` files FCL bundles) and matched to
+/// each [`Renderer`]'s `gl_libname()` (the library LWJGL `dlopen`s).
+///
+/// * GL4ES / NG-GL4ES `dlopen` `libgl4es_114.so` / `libng_gl4es.so` and dispatch
+///   through `libglapi.so` (optional on devices where it is statically folded in).
+/// * ANGLE needs `libGLESv2_angle.so` (the `gl_libname`) **and** `libEGL_angle.so`
+///   for the EGL context — both are required.
+/// * Zink (`libOSMesa_8.so`) cannot rasterise without the `libzink_dri.so` DRI
+///   driver, so both are required.
+/// * VirGL / SDL need only their single `gl_libname`.
+pub fn renderer_native_manifest(renderer: Renderer) -> &'static [RendererNativeLib] {
+    match renderer {
+        Renderer::Gl4es => &[
+            RendererNativeLib {
+                file_name: "libgl4es_114.so",
+                required: true,
+            },
+            RendererNativeLib {
+                file_name: "libglapi.so",
+                required: false,
+            },
+        ],
+        Renderer::NgGl4es => &[
+            RendererNativeLib {
+                file_name: "libng_gl4es.so",
+                required: true,
+            },
+            RendererNativeLib {
+                file_name: "libglapi.so",
+                required: false,
+            },
+        ],
+        Renderer::VirGl => &[RendererNativeLib {
+            file_name: "libvgpu.so",
+            required: true,
+        }],
+        Renderer::Zink => &[
+            RendererNativeLib {
+                file_name: "libOSMesa_8.so",
+                required: true,
+            },
+            RendererNativeLib {
+                file_name: "libzink_dri.so",
+                required: true,
+            },
+        ],
+        Renderer::Angle => &[
+            RendererNativeLib {
+                file_name: "libGLESv2_angle.so",
+                required: true,
+            },
+            RendererNativeLib {
+                file_name: "libEGL_angle.so",
+                required: true,
+            },
+        ],
+        Renderer::Sdl => &[RendererNativeLib {
+            file_name: "liblwjgl_sdl.so",
+            required: true,
+        }],
+    }
+}
+
+/// A discovered, validated set of renderer backing libraries on disk.
+///
+/// Produced by [`RendererNativeBundle::discover`]. The launch engine preflights
+/// with it so a missing `libGLESv2_angle.so` / `libzink_dri.so` fails *before*
+/// the JVM is spawned (completing the task-17 preflight that the LWJGL-native
+/// check started).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RendererNativeBundle {
+    /// The renderer whose backing libs were scanned.
+    pub renderer: Renderer,
+    /// The dir that was scanned (`nativeLibraryDir`), if any.
+    pub native_lib_dir: Option<PathBuf>,
+    /// Every expected backing lib that is actually present on disk.
+    pub present: Vec<RendererNativeLib>,
+    /// Expected backing libs that are missing.
+    pub missing: Vec<RendererNativeLib>,
+}
+
+impl RendererNativeBundle {
+    /// Scan the renderer's `nativeLibraryDir` and classify every expected backing
+    /// lib as present or missing. Never errors — the caller decides what the
+    /// missing set means via [`RendererNativeBundle::is_complete`] /
+    /// [`RendererNativeBundle::discover`].
+    pub fn scan(native_lib_dir: Option<&Path>, renderer: Renderer) -> Self {
+        let manifest = renderer_native_manifest(renderer);
+        let mut present = Vec::new();
+        let mut missing = Vec::new();
+        if let Some(dir) = native_lib_dir {
+            for lib in manifest {
+                if dir.join(lib.file_name).is_file() {
+                    present.push(*lib);
+                } else {
+                    missing.push(*lib);
+                }
+            }
+        } else {
+            // No dir to look in: everything is "missing" from our point of view.
+            missing.extend_from_slice(manifest);
+        }
+        Self {
+            renderer,
+            native_lib_dir: native_lib_dir.map(|p| p.to_path_buf()),
+            present,
+            missing,
+        }
+    }
+
+    /// Discover & validate: missing *required* backing libs become an
+    /// [`RcError::MissingFile`] that lists every absent required native.
+    ///
+    /// Validation is *best-effort*: when `native_lib_dir` is `None` or does not
+    /// exist on disk we cannot check the libs (they may still resolve from the
+    /// APK's own `lib/` dir at runtime), so we accept the scan instead of
+    /// failing. Only an existing directory that is missing required libs errors.
+    pub fn discover(native_lib_dir: Option<&Path>, renderer: Renderer) -> RcResult<Self> {
+        let bundle = Self::scan(native_lib_dir, renderer);
+        match native_lib_dir {
+            None => Ok(bundle),
+            Some(dir) => {
+                if !dir.is_dir() {
+                    return Ok(bundle);
+                }
+                let missing_required: Vec<&str> = bundle.missing_required();
+                if !missing_required.is_empty() {
+                    return Err(RcError::MissingFile(format!(
+                        "renderer {} backing libraries are incomplete in {}; missing required: {}",
+                        bundle.renderer.id(),
+                        dir.display(),
+                        missing_required.join(", ")
+                    )));
+                }
+                Ok(bundle)
+            }
+        }
+    }
+
+    /// `true` when every required backing lib is present on disk.
+    pub fn is_complete(&self) -> bool {
+        self.missing.iter().all(|l| !l.required)
+    }
+
+    /// Only the required backing libs that are missing.
+    pub fn missing_required(&self) -> Vec<&'static str> {
+        self.missing
+            .iter()
+            .filter(|l| l.required)
+            .map(|l| l.file_name)
+            .collect()
+    }
+
+    /// Absolute paths of every backing lib that is present (diagnostics).
+    pub fn present_paths(&self) -> Vec<PathBuf> {
+        match &self.native_lib_dir {
+            Some(dir) => self.present.iter().map(|l| dir.join(l.file_name)).collect(),
+            None => Vec::new(),
+        }
+    }
+}
 /// Graphics performance profile (task 17 perf tuning).
 ///
 /// Cheap devices cannot afford desktop-GL error checking; turning it off trades
@@ -290,6 +465,8 @@ pub struct RenderIntegration {
     renderer: Renderer,
     /// The app's `nativeLibraryDir` (holds `libgl4es_114.so`, `libGLESv2_angle.so`, …).
     native_lib_dir: Option<PathBuf>,
+    /// The renderer's OpenGL→OpenGL ES backing libs, scanned (never fails).
+    renderer_native: RendererNativeBundle,
 }
 
 impl RenderIntegration {
@@ -300,16 +477,40 @@ impl RenderIntegration {
         renderer: Renderer,
         native_lib_dir: Option<PathBuf>,
     ) -> Self {
+        let renderer_native = RendererNativeBundle::scan(native_lib_dir.as_deref(), renderer);
         Self {
             bundle,
             renderer,
             native_lib_dir,
+            renderer_native,
         }
     }
 
     /// The underlying, already-validated LWJGL native bundle.
     pub fn bundle(&self) -> &LwjglNativeBundle {
         &self.bundle
+    }
+
+    /// The scanned renderer backing-library set (see [`RendererNativeBundle`]).
+    pub fn renderer_native_bundle(&self) -> &RendererNativeBundle {
+        &self.renderer_native
+    }
+
+    /// `true` when the renderer's required backing libs are all present on disk.
+    pub fn renderer_backing_ok(&self) -> bool {
+        self.renderer_native.is_complete()
+    }
+
+    /// Preflight the renderer's OpenGL→OpenGL ES backing libraries.
+    ///
+    /// Returns the validated [`RendererNativeBundle`], or an
+    /// [`RcError::MissingFile`] when an *existing* `nativeLibraryDir` is missing a
+    /// required backing lib (e.g. `libGLESv2_angle.so`, `libzink_dri.so`). A
+    /// `None` / absent dir is accepted — the libs may still resolve from the
+    /// APK's own `lib/` dir at runtime (see [`RendererNativeBundle::discover`]).
+    /// This completes the task-17 preflight the LWJGL-native check started.
+    pub fn preflight_renderer(&self) -> RcResult<RendererNativeBundle> {
+        RendererNativeBundle::discover(self.native_lib_dir.as_deref(), self.renderer)
     }
 
     /// Native-library search dirs, in loader order:
@@ -354,13 +555,13 @@ impl RenderIntegration {
     /// A one-line summary for the launch log header (diagnostics).
     pub fn describe(&self) -> String {
         format!(
-            "renderer={} (gl_libname={}) lwjgl={} abi={} natives={} perf={}",
+            "renderer={} (gl_libname={}) lwjgl={} abi={} natives_ok={} renderer_backing_ok={}",
             self.renderer.id(),
             self.renderer.gl_libname(),
             self.bundle.version.as_dir(),
             self.bundle.abi,
-            self.bundle.natives_dir.display(),
             self.bundle.is_complete(),
+            self.renderer_native.is_complete(),
         )
     }
 }
@@ -396,6 +597,12 @@ pub fn gl_translation_env(
         Renderer::VirGl | Renderer::Zink => {
             // Mesa Gallium (virgl/zink) loads its driver .so from nativeLibraryDir;
             // the engine already sets LIBGL_DRIVERS_PATH, so nothing extra here.
+            Vec::new()
+        }
+        Renderer::Sdl => {
+            // SDL2 backend (LWJGL 3.4.1) renders to an Android surface; the
+            // engine already wires `java.library.path` to the LWJGL natives dir
+            // where `liblwjgl_sdl.so` lives, so no extra GL/Gallium env is needed.
             Vec::new()
         }
     }
@@ -574,5 +781,132 @@ mod tests {
         assert!(keys.iter().any(|k| k.as_str() == "LIBGL_NOERROR"));
         assert!(keys.iter().any(|k| k.as_str() == "LIBGL_FPS"));
         assert!(ri.describe().contains("renderer=opengles3_angle"));
+    }
+    #[test]
+    fn renderer_native_manifest_groups_required_and_optional() {
+        // GL4ES: gl_libname required, glapi optional
+        let g = renderer_native_manifest(Renderer::Gl4es);
+        assert_eq!(g.iter().filter(|l| l.required).count(), 1);
+        assert!(g
+            .iter()
+            .any(|l| l.file_name == "libgl4es_114.so" && l.required));
+        assert!(g
+            .iter()
+            .any(|l| l.file_name == "libglapi.so" && !l.required));
+        // ANGLE needs both GLESv2 + EGL
+        let a = renderer_native_manifest(Renderer::Angle);
+        assert!(a.iter().all(|l| l.required));
+        assert!(a.iter().any(|l| l.file_name == "libGLESv2_angle.so"));
+        assert!(a.iter().any(|l| l.file_name == "libEGL_angle.so"));
+        // Zink needs the OSMesa lib + the zink DRI driver
+        let z = renderer_native_manifest(Renderer::Zink);
+        assert_eq!(z.len(), 2);
+        assert!(z.iter().all(|l| l.required));
+        assert!(z.iter().any(|l| l.file_name == "libOSMesa_8.so"));
+        assert!(z.iter().any(|l| l.file_name == "libzink_dri.so"));
+        // SDL's libname is the lwjgl sdl binding
+        assert!(renderer_native_manifest(Renderer::Sdl)
+            .iter()
+            .any(|l| l.file_name == "liblwjgl_sdl.so"));
+    }
+
+    #[test]
+    fn renderer_native_scan_classifies_present_and_missing() {
+        let td = tempfile::tempdir().unwrap();
+        let dir = td.path();
+        // only one of the two required ANGLE libs present
+        std::fs::write(dir.join("libGLESv2_angle.so"), b"so").unwrap();
+        let b = RendererNativeBundle::scan(Some(dir), Renderer::Angle);
+        assert!(!b.is_complete());
+        assert!(b
+            .present
+            .iter()
+            .any(|l| l.file_name == "libGLESv2_angle.so"));
+        assert!(b.missing.iter().any(|l| l.file_name == "libEGL_angle.so"));
+    }
+
+    #[test]
+    fn renderer_native_discover_accepts_unknown_dir() {
+        // None → cannot validate → accepted (incomplete but no error)
+        let b = RendererNativeBundle::discover(None, Renderer::Angle).unwrap();
+        assert!(!b.is_complete());
+        // non-existent dir → treated like unknown → accepted
+        let b2 = RendererNativeBundle::discover(
+            Some(std::path::Path::new("/no/such/dir/rc-launcher")),
+            Renderer::Angle,
+        )
+        .unwrap();
+        assert!(!b2.is_complete());
+    }
+
+    #[test]
+    fn renderer_native_discover_rejects_missing_required() {
+        let td = tempfile::tempdir().unwrap();
+        let dir = td.path();
+        // GL4ES dir missing its required libgl4es_114.so (only the optional lib present)
+        std::fs::write(dir.join("libglapi.so"), b"so").unwrap();
+        let err = RendererNativeBundle::discover(Some(dir), Renderer::Gl4es).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("incomplete"), "{msg}");
+        assert!(msg.contains("libgl4es_114.so"), "{msg}");
+        assert!(
+            !msg.contains("libglapi.so"),
+            "optional libs must not be reported: {msg}"
+        );
+    }
+
+    #[test]
+    fn renderer_native_discover_accepts_optional_missing() {
+        let td = tempfile::tempdir().unwrap();
+        let dir = td.path();
+        // only the required gl4es lib; optional glapi absent
+        std::fs::write(dir.join("libgl4es_114.so"), b"so").unwrap();
+        let b = RendererNativeBundle::discover(Some(dir), Renderer::Gl4es).unwrap();
+        assert!(b.is_complete());
+        assert!(b.missing.iter().any(|l| l.file_name == "libglapi.so"));
+    }
+
+    #[test]
+    fn render_integration_preflight_rejects_missing_backing() {
+        let td = tempfile::tempdir().unwrap();
+        let rt = AppRuntime::new(td.path());
+        let dir = rt.lwjgl_natives_dir(LwjglVersion::V3_3_3, Abi::Arm64V8a);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("liblwjgl.so"), b"so").unwrap();
+        std::fs::write(dir.join("liblwjgl_opengl.so"), b"so").unwrap();
+        let bundle = LwjglNativeBundle::discover(&rt, LwjglVersion::V3_3_3, Abi::Arm64V8a).unwrap();
+        // ANGLE selected and its backing dir *exists* but is missing
+        // libGLESv2_angle.so — an existing, incomplete dir must be rejected.
+        let ndir = td.path().join("nativeLibraryDir");
+        std::fs::create_dir_all(&ndir).unwrap();
+        let ri = RenderIntegration::new(bundle, Renderer::Angle, Some(ndir));
+        assert!(!ri.renderer_backing_ok());
+        let err = ri.preflight_renderer().unwrap_err();
+        assert!(err.to_string().contains("libGLESv2_angle.so"), "{}", err);
+    }
+
+    #[test]
+    fn render_integration_preflight_accepts_present_backing() {
+        let td = tempfile::tempdir().unwrap();
+        let rt = AppRuntime::new(td.path());
+        let dir = rt.lwjgl_natives_dir(LwjglVersion::V3_3_3, Abi::Arm64V8a);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("liblwjgl.so"), b"so").unwrap();
+        std::fs::write(dir.join("liblwjgl_opengl.so"), b"so").unwrap();
+        let bundle = LwjglNativeBundle::discover(&rt, LwjglVersion::V3_3_3, Abi::Arm64V8a).unwrap();
+        // create the ANGLE backing dir + both required libs
+        let ndir = td.path().join("nativeLibraryDir");
+        std::fs::create_dir_all(&ndir).unwrap();
+        std::fs::write(ndir.join("libGLESv2_angle.so"), b"so").unwrap();
+        std::fs::write(ndir.join("libEGL_angle.so"), b"so").unwrap();
+        let ri = RenderIntegration::new(bundle, Renderer::Angle, Some(ndir));
+        assert!(ri.renderer_backing_ok());
+        let b = ri.preflight_renderer().unwrap();
+        assert!(b.is_complete());
+        // describe() now reports renderer backing completeness (fixes the old
+        // `perf=` placeholder that actually printed the LWJGL natives state)
+        let d = ri.describe();
+        assert!(d.contains("renderer=opengles3_angle"));
+        assert!(d.contains("renderer_backing_ok=true"), "{d}");
     }
 }

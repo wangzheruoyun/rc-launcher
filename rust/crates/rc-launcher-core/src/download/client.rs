@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
+use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE, RETRY_AFTER};
 use reqwest::StatusCode;
 use tokio::io::{AsyncWrite, AsyncWriteExt};
 
@@ -106,6 +106,17 @@ impl HttpSource for ReqwestSource {
             .map_err(|e| RcError::Network(format!("request failed for {url}: {e}")))?;
 
         let status = resp.status();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            // Surface a rate-limit together with the server's own `Retry-After`
+            // hint so the downloader (and the unified retry/backoff layer, task
+            // 19) can honour it instead of blindly hammering the endpoint.
+            let retry_after = resp
+                .headers()
+                .get(RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(parse_retry_after);
+            return Err(RcError::RateLimited { retry_after });
+        }
         if status != StatusCode::PARTIAL_CONTENT && status != StatusCode::OK {
             return Err(RcError::Download(format!(
                 "unexpected HTTP status {status} for {url}"
@@ -169,6 +180,17 @@ impl HttpSource for ReqwestSource {
             .await
             .map_err(|e| RcError::Network(format!("request failed for {url}: {e}")))?;
         let status = resp.status();
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            // Surface a rate-limit together with the server's own `Retry-After`
+            // hint so the downloader (and the unified retry/backoff layer, task
+            // 19) can honour it instead of blindly hammering the endpoint.
+            let retry_after = resp
+                .headers()
+                .get(RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(parse_retry_after);
+            return Err(RcError::RateLimited { retry_after });
+        }
         if status != StatusCode::PARTIAL_CONTENT && status != StatusCode::OK {
             return Err(RcError::Download(format!(
                 "unexpected HTTP status {status} for {url}"
@@ -199,6 +221,15 @@ fn parse_content_range_total(value: &str) -> Option<u64> {
     value[slash + 1..].trim().parse::<u64>().ok()
 }
 
+/// Parse an HTTP `Retry-After` value into a `Duration`.
+///
+/// Supports the delta-seconds form (`Retry-After: 120`), which is what Mojang
+/// and the mirror CDNs emit. Returns `None` for unparseable values so the
+/// caller keeps its default backoff policy.
+fn parse_retry_after(value: &str) -> Option<Duration> {
+    value.trim().parse::<u64>().ok().map(Duration::from_secs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,5 +245,13 @@ mod tests {
     fn build_client_defaults() {
         let c = ReqwestSource::with_defaults();
         assert!(c.is_ok());
+    }
+
+    #[test]
+    fn parses_retry_after_delta_seconds() {
+        assert_eq!(parse_retry_after("120"), Some(Duration::from_secs(120)));
+        assert_eq!(parse_retry_after(" 30 "), Some(Duration::from_secs(30)));
+        assert_eq!(parse_retry_after("not-a-number"), None);
+        assert_eq!(parse_retry_after(""), None);
     }
 }

@@ -10,7 +10,6 @@
 //! in without touching the rest of the pipeline.
 
 use std::collections::HashSet;
-use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -18,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{RcError, RcResult};
 use crate::runtime::Abi;
 
-use super::native_lib::NativeLibSource;
+use super::native_lib::{LibVerify, NativeLibSource};
 use super::renderer::{RendererPlugin, TrustLevel};
 
 /// Everything the validator needs about the host to decide if a plugin is safe.
@@ -117,6 +116,116 @@ impl SignatureVerifier for HashTrustStoreVerifier {
     }
 }
 
+/// A real, keyed-HMAC signature verifier (HMAC-SHA1, built on the `sha1` crate
+/// already used for integrity).
+///
+/// This turns the pluggable [`SignatureVerifier`] trait into something that
+/// actually works: a launcher (or trusted author) signs a plugin's canonical
+/// integrity hash with a shared key and the validator verifies it before
+/// granting trust — the Zalith `VerifiedPluginLoad` / FCL `RendererPlugin`
+/// safe-loading pattern, implemented without pulling in an Ed25519 dependency.
+/// The default [`HashTrustStoreVerifier`] stays as the explicit "never
+/// rubber-stamp" fallback for stores that carry no signing key.
+pub struct HmacSha1Verifier {
+    /// The shared verification key (held by the launcher / trust store).
+    pub key: Vec<u8>,
+}
+
+impl HmacSha1Verifier {
+    pub fn new(key: impl Into<Vec<u8>>) -> Self {
+        Self { key: key.into() }
+    }
+
+    /// Sign `message` (typically a plugin's `integrity_hash()`) and return the
+    /// hex signature, for use by signing tooling and tests.
+    pub fn sign(&self, message: &str) -> String {
+        hex_encode(&hmac_sha1(&self.key, message.as_bytes()))
+    }
+}
+
+impl SignatureVerifier for HmacSha1Verifier {
+    fn verify(&self, message: &str, signature: &str) -> bool {
+        let expected = hmac_sha1(&self.key, message.as_bytes());
+        let got = match hex_decode(signature) {
+            Some(b) => b,
+            None => return false,
+        };
+        if expected.len() != got.len() {
+            return false;
+        }
+        // constant-time comparison so the key is not leaked via timing
+        let mut diff = 0u8;
+        for (a, b) in expected.iter().zip(got.iter()) {
+            diff |= a ^ b;
+        }
+        diff == 0
+    }
+}
+
+/// SHA-1 over `data` (the same primitive used for native-lib integrity).
+fn sha1_bytes(data: &[u8]) -> Vec<u8> {
+    use sha1::{Digest, Sha1};
+    let mut h = Sha1::new();
+    h.update(data);
+    h.finalize().to_vec()
+}
+
+/// HMAC-SHA1 (RFC 2104) over `msg` with `key`.
+fn hmac_sha1(key: &[u8], msg: &[u8]) -> Vec<u8> {
+    const BLOCK: usize = 64;
+    let mut k = if key.len() > BLOCK {
+        sha1_bytes(key)
+    } else {
+        key.to_vec()
+    };
+    k.resize(BLOCK, 0);
+    let mut ipad = Vec::with_capacity(BLOCK + msg.len());
+    let mut opad = Vec::with_capacity(BLOCK);
+    for &ki in k.iter().take(BLOCK) {
+        ipad.push(ki ^ 0x36);
+        opad.push(ki ^ 0x5c);
+    }
+    ipad.extend_from_slice(msg);
+    let inner = sha1_bytes(&ipad);
+    let mut outer = opad;
+    outer.extend_from_slice(&inner);
+    sha1_bytes(&outer)
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    s
+}
+
+fn hex_decode(s: &str) -> Option<Vec<u8>> {
+    let bytes = s.as_bytes();
+    if !bytes.len().is_multiple_of(2) {
+        return None;
+    }
+    let val = |c: u8| -> Option<u8> {
+        match c {
+            b'0'..=b'9' => Some(c - b'0'),
+            b'a'..=b'f' => Some(c - b'a' + 10),
+            b'A'..=b'F' => Some(c - b'A' + 10),
+            _ => None,
+        }
+    };
+    let mut out = Vec::with_capacity(bytes.len() / 2);
+    let mut i = 0;
+    while i < bytes.len() {
+        let hi = val(bytes[i])?;
+        let lo = val(bytes[i + 1])?;
+        out.push((hi << 4) | lo);
+        i += 2;
+    }
+    Some(out)
+}
+
 /// Trust store: the set of authors / integrity hashes the launcher trusts.
 ///
 /// Mirrors Zalith's `trusted-authors.json` + `.sig`: instead of embedding a
@@ -201,6 +310,31 @@ pub fn validate(
     ctx: &ValidationContext,
     store: &TrustStore,
 ) -> ValidationReport {
+    validate_with_verifier(plugin, ctx, store, None)
+}
+
+/// Validate `plugin` against `ctx` and `store`, optionally verifying a detached
+/// signature with `verifier`, producing a [`ValidationReport`].
+///
+/// The checks (order matters):
+/// 1. **Path safety** — every native lib name is a safe bare file name.
+/// 2. **ABI support** — the host ABI is covered by `supported_abis` (if set).
+/// 3. **Native-lib presence + integrity** — non-optional libs exist under
+///    `native_lib_dir` *and* match their preset size + SHA-1
+///    ([`crate::plugins::native_lib::NativeLib::verify_on_disk`]), so a tampered
+///    lib is rejected rather than silently trusted.
+/// 4. **Detached signature** (if the plugin ships one) — verified against the
+///    canonical integrity hash via `verifier`. A missing verifier degrades to a
+///    warning instead of a silent pass.
+/// 5. **Trust** — `System` plugins always pass; others must be trusted by
+///    `store` (author or integrity hash) or be `UserApproved`; if
+///    `requires_validation` and untrusted, that is an error.
+pub fn validate_with_verifier(
+    plugin: &RendererPlugin,
+    ctx: &ValidationContext,
+    store: &TrustStore,
+    verifier: Option<&dyn SignatureVerifier>,
+) -> ValidationReport {
     let mut issues: Vec<ValidationIssue> = Vec::new();
     let hash = plugin.integrity_hash();
 
@@ -223,7 +357,7 @@ pub fn validate(
         ));
     }
 
-    // 3) native-lib presence
+    // 3) native-lib presence + integrity
     for lib in plugin.native_libs_for(ctx.abi) {
         let dir = match lib.source {
             NativeLibSource::NativeLibDir => ctx.native_lib_dir.clone(),
@@ -234,37 +368,79 @@ pub fn validate(
             NativeLibSource::JreLib => ctx.native_lib_dir.join("jre-lib"),
         };
         let path = dir.join(&lib.file_name);
-        if !path.exists() {
-            if lib.optional {
-                issues.push(ValidationIssue::warning(
-                    "missing_optional_native_lib",
-                    format!("optional native lib missing: {}", path.display()),
-                ));
-            } else {
-                issues.push(ValidationIssue::error(
-                    "missing_native_lib",
-                    format!("required native lib missing: {}", path.display()),
-                ));
-            }
-        } else if let Some(exp) = lib.expected_size {
-            // integrity: the lib is present, confirm its size matches the
-            // preset (e.g. the FCL APK inventory) before trusting it.
-            if let Ok(meta) = fs::metadata(&path) {
-                if meta.len() != exp {
+        // Delegate to `NativeLib::verify_on_disk` so a *present* lib is checked
+        // for both size and SHA-1 against its preset (the FCL APK inventory),
+        // not merely existence. A tampered/mismatched lib becomes a hard error
+        // instead of being silently trusted.
+        match lib.verify_on_disk(&path) {
+            Ok(LibVerify::Match) => {}
+            Ok(LibVerify::Missing) => {
+                if lib.optional {
+                    issues.push(ValidationIssue::warning(
+                        "missing_optional_native_lib",
+                        format!("optional native lib missing: {}", path.display()),
+                    ));
+                } else {
                     issues.push(ValidationIssue::error(
-                        "native_lib_size_mismatch",
-                        format!(
-                            "native lib {} has size {} but the preset expects {}",
-                            path.display(),
-                            meta.len(),
-                            exp
-                        ),
+                        "missing_native_lib",
+                        format!("required native lib missing: {}", path.display()),
                     ));
                 }
+            }
+            Ok(LibVerify::SizeMismatch) => {
+                issues.push(ValidationIssue::error(
+                    "native_lib_size_mismatch",
+                    format!(
+                        "native lib {} size does not match the preset",
+                        path.display()
+                    ),
+                ));
+            }
+            Ok(LibVerify::HashMismatch) => {
+                issues.push(ValidationIssue::error(
+                    "native_lib_hash_mismatch",
+                    format!(
+                        "native lib {} SHA-1 does not match the preset (tampered?)",
+                        path.display()
+                    ),
+                ));
+            }
+            Err(e) => {
+                issues.push(ValidationIssue::error(
+                    "native_lib_read_error",
+                    format!("failed to read native lib {}: {e}", path.display()),
+                ));
             }
         }
     }
 
+    // 4) detached signature (if the plugin ships one)
+    if let Some(sig) = &plugin.signature {
+        match verifier {
+            Some(v) => {
+                if !v.verify(&hash, sig) {
+                    issues.push(ValidationIssue::error(
+                        "signature_mismatch",
+                        format!(
+                            "renderer `{}` detached signature does not verify against its integrity hash",
+                            plugin.id
+                        ),
+                    ));
+                }
+            }
+            None => {
+                issues.push(ValidationIssue::warning(
+                    "signature_unverifiable",
+                    format!(
+                        "renderer `{}` ships a signature but no verifier was supplied",
+                        plugin.id
+                    ),
+                ));
+            }
+        }
+    }
+
+    // 5) trust
     // 4) trust
     let trusted_by_author = store.is_trusted_author(plugin.author.as_deref());
     let trusted_by_hash = store.is_trusted_hash(&hash);
@@ -302,9 +478,12 @@ pub fn validate(
 mod tests {
     use super::*;
     use crate::launch::options::Renderer;
+    use crate::plugins::native_lib::NativeLib;
     use crate::plugins::renderer::{
         renderer_plugin, RendererPlugin, RendererRegistry, TrustLevel, WindowingBackend,
     };
+    use sha1::{Digest, Sha1};
+    use tempfile;
 
     #[test]
     fn system_plugin_is_always_safe() {
@@ -424,5 +603,124 @@ mod tests {
         assert_eq!(report.trust, TrustLevel::System);
         // unknown id is an error
         assert!(reg.validate_plugin("nope", &ctx, &store).is_err());
+    }
+
+    #[test]
+    fn hmac_signature_verifies() {
+        let mut p = RendererPlugin::builder("sdl", "SDL Renderer")
+            .gl_libname("liblwjgl_sdl.so")
+            .backend(WindowingBackend::Sdl)
+            .requires_validation(true)
+            .author("trusted-dev")
+            .build();
+        let hash = p.integrity_hash();
+        let verifier = HmacSha1Verifier::new(b"launcher-key");
+        p.signature = Some(verifier.sign(&hash));
+        let ctx = ValidationContext::new(Abi::Arm64V8a, "/data/app/lib/arm64");
+        let mut store = TrustStore::empty();
+        store.trust_author("trusted-dev");
+        let report = validate_with_verifier(&p, &ctx, &store, Some(&verifier));
+        assert!(
+            !report.issues.iter().any(|i| i.code == "signature_mismatch"),
+            "valid signature should verify"
+        );
+    }
+
+    #[test]
+    fn hmac_signature_rejects_tamper() {
+        let mut p = RendererPlugin::builder("sdl", "SDL Renderer")
+            .gl_libname("liblwjgl_sdl.so")
+            .backend(WindowingBackend::Sdl)
+            .build();
+        let hash = p.integrity_hash();
+        let verifier = HmacSha1Verifier::new(b"launcher-key");
+        p.signature = Some(verifier.sign(&hash));
+        // tamper with the descriptor after signing
+        p.display_name = "Evil".into();
+        let ctx = ValidationContext::new(Abi::Arm64V8a, "/data/app/lib/arm64");
+        let store = TrustStore::empty();
+        let report = validate_with_verifier(&p, &ctx, &store, Some(&verifier));
+        assert!(
+            report.issues.iter().any(|i| i.code == "signature_mismatch"),
+            "tampered descriptor must fail signature verification"
+        );
+    }
+
+    #[test]
+    fn signature_without_verifier_warns() {
+        let mut p = RendererPlugin::builder("sdl", "SDL Renderer")
+            .gl_libname("liblwjgl_sdl.so")
+            .backend(WindowingBackend::Sdl)
+            .build();
+        let verifier = HmacSha1Verifier::new(b"launcher-key");
+        p.signature = Some(verifier.sign(&p.integrity_hash()));
+        let ctx = ValidationContext::new(Abi::Arm64V8a, "/data/app/lib/arm64");
+        let store = TrustStore::empty();
+        // no verifier supplied -> warning, never a silent pass
+        let report = validate(&p, &ctx, &store);
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.code == "signature_unverifiable"));
+        assert!(!report.issues.iter().any(|i| i.code == "signature_mismatch"));
+    }
+
+    #[test]
+    fn integrity_check_rejects_sha1_mismatch() {
+        let td = tempfile::tempdir().unwrap();
+        // present lib: size matches the preset but bytes do not
+        std::fs::write(td.path().join("libfake.so"), b"abcd").unwrap();
+        let mut lib = NativeLib::in_native_lib_dir("libfake.so");
+        lib.expected_size = Some(4);
+        lib.expected_sha1 = Some("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef".to_string());
+        let p = RendererPlugin::builder("fake", "Fake")
+            .gl_libname("libfake.so")
+            .native_lib(lib)
+            .build();
+        let ctx = ValidationContext::new(Abi::Arm64V8a, td.path());
+        let store = TrustStore::empty();
+        let report = validate(&p, &ctx, &store);
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.code == "native_lib_hash_mismatch"),
+            "tampered present lib must be flagged"
+        );
+    }
+
+    #[test]
+    fn integrity_check_passes_when_sha1_matches() {
+        let td = tempfile::tempdir().unwrap();
+        let bytes = b"hello-world";
+        std::fs::write(td.path().join("libfake.so"), bytes).unwrap();
+        let mut h = Sha1::new();
+        h.update(bytes);
+        let sha1_hex = {
+            let out = h.finalize();
+            let mut s = String::new();
+            for b in out {
+                s.push_str(&format!("{:02x}", b));
+            }
+            s
+        };
+        let mut lib = NativeLib::in_native_lib_dir("libfake.so");
+        lib.expected_size = Some(bytes.len() as u64);
+        lib.expected_sha1 = Some(sha1_hex);
+        let p = RendererPlugin::builder("fake", "Fake")
+            .gl_libname("libfake.so")
+            .native_lib(lib)
+            .build();
+        let ctx = ValidationContext::new(Abi::Arm64V8a, td.path());
+        let store = TrustStore::empty();
+        let report = validate(&p, &ctx, &store);
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.severity == IssueSeverity::Error),
+            "matching size+sha1 should pass: {:?}",
+            report.issues
+        );
     }
 }

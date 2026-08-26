@@ -2,6 +2,12 @@ package com.rc.launcher.ui.viewmodel
 
 import com.rc.launcher.ui.awt.AwtCanvasBridge
 import com.rc.launcher.ui.awt.AwtConfigureRequest
+import com.rc.launcher.ui.awt.AwtControlBatch
+import com.rc.launcher.ui.awt.AwtControlKind
+import com.rc.launcher.ui.awt.AwtControlRequest
+import com.rc.launcher.ui.awt.AwtControlResult
+import com.rc.launcher.ui.awt.AwtControlWire
+import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtFrameUpdate
 import com.rc.launcher.ui.awt.AwtInputEvent
 import com.rc.launcher.ui.awt.AwtInputResult
@@ -242,6 +248,97 @@ class AwtSurfaceViewModelTest {
         assertEquals(AwtInputResult.EMPTY, v.flushInput())
     }
 
+    // ---- Control plane ------------------------------------------------------
+
+    @Test
+    fun theControlPlaneIsProjectedIntoTheUiState() {
+        val bridge = FakeAwtCanvasBridge()
+        val v = vm(bridge)
+        v.open(screenWidth = 64, screenHeight = 32)
+        assertEquals(AwtCursorKind.DEFAULT, v.state.value.cursor)
+        assertFalse(v.state.value.wantsKeyboard)
+
+        bridge.submitControl(AwtControlWire.encodeCursor(AwtCursorKind.TEXT))
+        bridge.submitControl(AwtControlWire.encode(AwtControlKind.TITLE, text = "Forge"))
+        bridge.submitControl(AwtControlWire.encodeImeShow(32, 16, 8))
+        val batch = v.pumpControl()
+
+        assertEquals(3, batch.messages.size)
+        assertEquals(AwtCursorKind.TEXT, v.state.value.cursor)
+        assertEquals("Forge", v.state.value.title)
+        assertTrue(v.state.value.wantsKeyboard)
+        assertEquals(3L, v.state.value.controlMessages)
+        // The caret is mapped through the very viewport the pixels use, so the IME
+        // anchor cannot drift onto the letterbox bars.
+        val caret = v.state.value.caretOnSurface
+        assertNotNull(caret)
+        assertEquals(v.state.value.viewport.mapToSurface(32, 16), caret)
+        // Draining is destructive.
+        assertTrue(v.pumpControl().isEmpty)
+        assertEquals(3L, v.state.value.controlMessages)
+    }
+
+    @Test
+    fun aClipboardRequestIsAnsweredEvenWhenAndroidHasNoText() {
+        val bridge = FakeAwtCanvasBridge()
+        val v = vm(bridge)
+        v.open()
+        bridge.submitControl(AwtControlWire.encodeClipboardRequest(7))
+        val batch = v.pumpControl()
+        assertEquals(7, batch.clipboardRequestSeq)
+
+        v.answerClipboard(null, batch.clipboardRequestSeq)
+        assertEquals(listOf<String?>(null), bridge.clipboardAnswers)
+        v.answerClipboard("pasted")
+        assertEquals(listOf(null, "pasted"), bridge.clipboardAnswers)
+        assertNull(v.state.value.message)
+    }
+
+    @Test
+    fun aClosedSessionHasNoCursorAndWantsNoKeyboard() {
+        val bridge = FakeAwtCanvasBridge()
+        val v = vm(bridge)
+        v.open()
+        bridge.submitControl(AwtControlWire.encodeCursor(AwtCursorKind.HAND))
+        bridge.submitControl(AwtControlWire.encodeImeShow(1, 1, 1))
+        v.pumpControl()
+        assertTrue(v.state.value.wantsKeyboard)
+
+        v.close()
+        assertEquals(AwtCursorKind.DEFAULT, v.state.value.cursor)
+        assertFalse("the soft keyboard must retract", v.state.value.wantsKeyboard)
+        assertNull(v.state.value.title)
+        // The control plane is inert without a session.
+        assertTrue(v.pumpControl().isEmpty)
+    }
+
+    @Test
+    fun resettingTheControlPlaneForgetsTheCursor() {
+        val bridge = FakeAwtCanvasBridge()
+        val v = vm(bridge)
+        v.open()
+        bridge.submitControl(AwtControlWire.encodeCursor(AwtCursorKind.WAIT))
+        v.pumpControl()
+        assertEquals(AwtCursorKind.WAIT, v.state.value.cursor)
+        v.resetControl()
+        assertEquals(AwtCursorKind.DEFAULT, v.state.value.cursor)
+    }
+
+    @Test
+    fun aFailingControlPlaneBecomesAMessageNotACrash() {
+        val v = vm(BoomBridge())
+        v.open()
+        v.clearMessage()
+        // No session is open (the bridge blew up), so the control plane is a no-op…
+        assertTrue(v.pumpControl().isEmpty)
+        // …and an explicit answer still degrades to a visible message.
+        val result = v.answerClipboard("x")
+        assertNotNull(result.error)
+        assertNotNull(v.state.value.message)
+        assertFalse(v.submitControl(AwtControlWire.encode(AwtControlKind.BEEP)))
+        assertNotNull(v.resetControl().error)
+    }
+
     @Test
     fun aFailingBridgeBecomesAMessageNotACrash() {
         val v = vm(BoomBridge())
@@ -269,5 +366,10 @@ class AwtSurfaceViewModelTest {
         override fun submitFrame(frame: ByteArray): AwtFrameUpdate = throw IllegalStateException("boom")
         override fun poll(buffer: ByteBuffer): AwtFrameUpdate = throw IllegalStateException("boom")
         override fun drainEvents(): ByteArray = throw IllegalStateException("boom")
+        override fun drainControl(): AwtControlBatch = throw IllegalStateException("boom")
+        override fun control(request: AwtControlRequest): AwtControlResult =
+            throw IllegalStateException("boom")
+        override fun submitControl(message: ByteArray): Boolean =
+            throw IllegalStateException("boom")
     }
 }

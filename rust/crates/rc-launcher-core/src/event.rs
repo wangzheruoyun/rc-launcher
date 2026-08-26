@@ -86,6 +86,13 @@ pub struct Event {
     /// Optional structured payload (progress fractions, log level, …).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<Value>,
+    /// Optional machine-readable error code (only meaningful for `error`
+    /// events and terminal `lifecycle` events). Lets the Kotlin/Compose
+    /// side branch on *what* failed without string-matching the
+    /// human-readable `message` (task 10: structured error passthrough
+    /// across the JNI/C boundary).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 fn default_scope() -> String {
@@ -114,6 +121,7 @@ impl Event {
             kind: EventKind::Progress,
             message: message.into(),
             scope: scope.to_string(),
+            code: None,
             data: Some(data),
         }
     }
@@ -125,6 +133,7 @@ impl Event {
             kind: EventKind::Log,
             message: line.into(),
             scope: scope.to_string(),
+            code: None,
             data: Some(json!({ "level": level })),
         }
     }
@@ -136,6 +145,7 @@ impl Event {
             kind: EventKind::Lifecycle,
             message: message.into(),
             scope: scope.to_string(),
+            code: None,
             data: Some(json!({ "phase": phase })),
         }
     }
@@ -147,6 +157,7 @@ impl Event {
             kind: EventKind::Error,
             message: message.into(),
             scope: scope.to_string(),
+            code: None,
             data: None,
         }
     }
@@ -158,7 +169,47 @@ impl Event {
             kind: EventKind::Status,
             message: message.into(),
             scope: scope.to_string(),
+            code: None,
             data: Some(data),
+        }
+    }
+
+    /// Build an `error` event that also carries a machine-readable `code`
+    /// (e.g. `"download_failed"`, `"io_error"`). The Kotlin/Compose side can
+    /// branch on `code` instead of parsing `message` (task 10: structured error
+    /// passthrough across the JNI/C boundary).
+    pub fn error_with_code(
+        scope: &str,
+        code: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        Event {
+            seq: 0,
+            kind: EventKind::Error,
+            message: message.into(),
+            scope: scope.to_string(),
+            code: Some(code.into()),
+            data: None,
+        }
+    }
+
+    /// Build a `lifecycle` event whose payload carries a structured `result`
+    /// (e.g. a download summary). Async jobs report their outcome exclusively
+    /// through the bus, so the result travels here rather than as a return value
+    /// (task 10: async callback + progress event bus).
+    pub fn lifecycle_with_result(
+        scope: &str,
+        phase: &str,
+        message: impl Into<String>,
+        result: Value,
+    ) -> Self {
+        Event {
+            seq: 0,
+            kind: EventKind::Lifecycle,
+            message: message.into(),
+            scope: scope.to_string(),
+            code: None,
+            data: Some(json!({ "phase": phase, "result": result })),
         }
     }
 
@@ -430,6 +481,34 @@ mod tests {
         // Must not panic out of `publish`.
         bus.publish(Event::status("g", "x", json!({})));
         bus.unsubscribe();
+    }
+
+    #[test]
+    fn structured_error_and_result_serialise_across_boundary() {
+        let bus = EventBus::new();
+        let c = Arc::new(Collector::default());
+        bus.subscribe(c.clone());
+
+        // Machine-readable code travels on the error event...
+        bus.publish(Event::error_with_code("s", "download_failed", "boom"));
+        // ...and the structured outcome travels on the lifecycle:completed event.
+        bus.publish(Event::lifecycle_with_result(
+            "s",
+            "completed",
+            "done",
+            json!({ "succeeded": 1, "tasks": 1 }),
+        ));
+
+        let g = c.events.lock().unwrap();
+        assert_eq!(g.len(), 2);
+        assert_eq!(g[0].kind, EventKind::Error);
+        assert_eq!(g[0].code.as_deref(), Some("download_failed"));
+        // The Kotlin/C side decodes `code` straight from the JSON string.
+        let ej = g[0].to_json();
+        assert!(ej.contains("code"));
+        assert!(ej.contains("download_failed"));
+        assert_eq!(g[1].kind, EventKind::Lifecycle);
+        assert_eq!(g[1].data.as_ref().unwrap()["result"]["succeeded"], 1);
     }
 }
 

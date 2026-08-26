@@ -191,3 +191,33 @@ fun offlineUuid(username: String): String {
     return "${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-" +
         "${hex.substring(16, 20)}-${hex.substring(20, 32)}"
 }
+
+
+/**
+ * Seconds until the Microsoft access token expires. Returns 0 when the expiry is
+ * unknown (<= 0) or already in the past. The clock is sampled at call time so it
+ * is safe to read from Compose UI without a fixed "now" injection (task 16).
+ */
+val MicrosoftAccount.remainingSecs: Long
+    get() {
+        val delta = expiresAt - nowSecs()
+        return if (delta < 0) 0 else delta
+    }
+
+/**
+ * Human-readable duration, e.g. "2天3小时", "5小时12分", "3分4秒", "45秒".
+ * A non-positive [totalSecs] renders as "已过期". Pure + unit-tested (task 16).
+ */
+fun formatDuration(totalSecs: Long): String {
+    if (totalSecs <= 0) return "已过期"
+    val days = totalSecs / 86400
+    val hours = (totalSecs % 86400) / 3600
+    val mins = (totalSecs % 3600) / 60
+    val secs = totalSecs % 60
+    return when {
+        days > 0 -> "${days}天${hours}小时"
+        hours > 0 -> "${hours}小时${mins}分"
+        mins > 0 -> "${mins}分${secs}秒"
+        else -> "${secs}秒"
+    }
+}

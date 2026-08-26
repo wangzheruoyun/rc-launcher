@@ -44,6 +44,10 @@ pub struct RetryPolicy {
     /// Jitter fraction in `[0, 1]`: the actual delay is multiplied by a factor
     /// in `[1 - jitter, 1 + jitter]` so retries desynchronise.
     pub jitter: f64,
+    /// An overall time budget for the *entire* retry sequence. When set, retries
+    /// stop once `start_elapsed + penalty` would exceed it, surfacing the last
+    /// error instead of spinning forever on a dead link (task 19).
+    pub max_elapsed: Option<Duration>,
 }
 
 impl Default for RetryPolicy {
@@ -53,6 +57,7 @@ impl Default for RetryPolicy {
             base: Duration::from_millis(400),
             max_delay: Duration::from_secs(20),
             jitter: 0.25,
+            max_elapsed: None,
         }
     }
 }
@@ -67,6 +72,7 @@ impl RetryPolicy {
             base: Duration::from_millis(1),
             max_delay: Duration::from_millis(2),
             jitter: 0.0,
+            max_elapsed: None,
         }
     }
 }
@@ -87,6 +93,7 @@ where
     Fut: Future<Output = Result<T, E>>,
     C: Fn(&E) -> bool,
 {
+    let start = tokio::time::Instant::now();
     let mut attempt: u32 = 0;
     loop {
         match op().await {
@@ -98,6 +105,12 @@ where
                 }
                 let backoff =
                     compute_backoff(attempt + 1, policy.base, policy.max_delay, policy.jitter);
+                // Never sleep past the overall time budget.
+                if let Some(max_elapsed) = policy.max_elapsed {
+                    if start.elapsed().saturating_add(backoff) > max_elapsed {
+                        return Err(e);
+                    }
+                }
                 tokio::time::sleep(backoff).await;
                 attempt += 1;
             }
@@ -107,12 +120,38 @@ where
 
 /// Convenience retry for [`RcResult`] operations: replays only errors for which
 /// [`RcError::is_retryable`] is `true` (i.e. `Transient` network failures).
-pub async fn retry<F, Fut, T>(policy: &RetryPolicy, op: F) -> RcResult<T>
+pub async fn retry<F, Fut, T>(policy: &RetryPolicy, mut op: F) -> RcResult<T>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = RcResult<T>>,
 {
-    retry_with_policy(policy, |e: &RcError| e.is_retryable(), op).await
+    let start = tokio::time::Instant::now();
+    let mut attempt: u32 = 0;
+    loop {
+        match op().await {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                if !e.is_retryable() || attempt + 1 >= policy.max_attempts {
+                    return Err(e);
+                }
+                let mut backoff =
+                    compute_backoff(attempt + 1, policy.base, policy.max_delay, policy.jitter);
+                // Honour an explicit retry-after from a rate-limited response.
+                if let Some(suggested) = e.suggested_backoff() {
+                    if suggested > backoff {
+                        backoff = suggested;
+                    }
+                }
+                if let Some(max_elapsed) = policy.max_elapsed {
+                    if start.elapsed().saturating_add(backoff) > max_elapsed {
+                        return Err(e);
+                    }
+                }
+                tokio::time::sleep(backoff).await;
+                attempt += 1;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -254,5 +293,76 @@ mod tests {
         .await;
         assert!(res.is_err());
         assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn deadline_aborts_retry_without_sleeping() {
+        // max_elapsed=0 means any positive backoff would exceed the budget, so
+        // the very first failure surfaces instead of sleeping/retrying.
+        let calls = Arc::new(AtomicU32::new(0));
+        let c = calls.clone();
+        let policy = RetryPolicy {
+            max_elapsed: Some(Duration::from_millis(0)),
+            ..RetryPolicy::for_tests()
+        };
+        let res: RcResult<u32> = retry(&policy, || {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Err(RcError::Network("down".into()))
+            }
+        })
+        .await;
+        assert!(res.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn deadline_still_allows_a_quick_success() {
+        // A generous budget must not interfere with a successful call.
+        let calls = Arc::new(AtomicU32::new(0));
+        let c = calls.clone();
+        let policy = RetryPolicy {
+            max_elapsed: Some(Duration::from_secs(60)),
+            ..RetryPolicy::for_tests()
+        };
+        let res: RcResult<u32> = retry(&policy, || {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Ok(99u32)
+            }
+        })
+        .await;
+        assert_eq!(res.unwrap(), 99);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn rate_limited_honours_retry_after() {
+        // A RateLimited error carries an explicit `retry_after`; the retry layer
+        // must honour it (here 50ms) and still retry once before giving up.
+        let calls = Arc::new(AtomicU32::new(0));
+        let c = calls.clone();
+        let policy = RetryPolicy {
+            base: Duration::from_millis(1),
+            max_delay: Duration::from_millis(2),
+            max_attempts: 2,
+            jitter: 0.0,
+            max_elapsed: None,
+        };
+        let res: RcResult<u32> = retry(&policy, || {
+            let c = c.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Err(RcError::RateLimited {
+                    retry_after: Some(Duration::from_millis(50)),
+                })
+            }
+        })
+        .await;
+        assert!(res.is_err());
+        // First attempt + one retry honouring the 50ms backoff.
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

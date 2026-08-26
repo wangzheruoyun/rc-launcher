@@ -397,7 +397,12 @@ mod tests {
         let cache = DnsCache::new();
         let out = tokio::runtime::Runtime::new()
             .unwrap()
-            .block_on(resolve_host(&cfg, "launcher.mojang.com", &client, Some(&cache)))
+            .block_on(resolve_host(
+                &cfg,
+                "launcher.mojang.com",
+                &client,
+                Some(&cache),
+            ))
             .unwrap();
         assert_eq!(out, vec![ip]);
         // The static result is cached for next time.

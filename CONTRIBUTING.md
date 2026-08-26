@@ -92,6 +92,26 @@ Contributions are accepted under the project licence (`GPL-3.0-or-later`, see
 `Cargo.toml` / `LICENSE`). By submitting a PR you agree your contribution is
 licensed likewise.
 
+## 8. Build & deliverable contract
+
+The CI produces a **single `arm64-v8a` `.apk`** as the only release artifact —
+no AAB, no `.zip` wrapper. This is enforced automatically:
+
+* `build.yml` builds with `./gradlew assembleRelease` (no `bundleRelease`) and
+  runs a **Verify APK deliverable** step that fails the build unless exactly one
+  `.apk` is produced, no `.aab`/`.zip` exists, and the APK's native libs live
+  under `lib/arm64-v8a` only.
+* `stylecheck.yml` has a **contract** job that rejects any re-introduction of
+  `bundleRelease` or of a non-`arm64-v8a` ABI in `abiFilters`.
+
+**Performance & memory** (low-end devices must stay smooth): downloads and
+`.tar.xz` extraction stream through disk/temp buffers (the uncompressed tar is
+never held fully in RAM), and hot paths reuse buffers via `BufPool` /
+`ObjectPool`. Do **not** load entire files into memory. Run
+`cargo test --workspace` — the perf/memory tests (e.g.
+`extract_tar_xz_large_archive_streams_and_cleans_temp`,
+`buf_pool_stays_bounded_under_churn`) guard these properties.
+
 ---
 
 See also: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),

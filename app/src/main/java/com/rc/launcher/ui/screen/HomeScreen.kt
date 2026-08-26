@@ -39,7 +39,7 @@ import com.rc.launcher.ui.component.InstanceCard
 import com.rc.launcher.ui.component.ResourceSummary
 import com.rc.launcher.ui.model.recentlyPlayed
 import com.rc.launcher.ui.model.dashboardOrder
-import com.rc.launcher.ui.navigation.RcRoutes
+import com.rc.launcher.ui.navigation.InstanceDetailRoute
 import com.rc.launcher.ui.resource.rememberFps
 import com.rc.launcher.ui.resource.rememberResourceUsage
 import com.rc.launcher.ui.viewmodel.DashboardViewModel
@@ -77,7 +77,7 @@ fun HomeScreen(
     }
 
     val openInstance: (id: String) -> Unit = { id ->
-        navController?.navigate(RcRoutes.instanceDetail(id))
+        navController?.navigate(InstanceDetailRoute(id))
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

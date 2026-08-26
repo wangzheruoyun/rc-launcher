@@ -19,10 +19,16 @@
 //!   committed manifest still matches the binaries.
 //! * [`source`] — [`source::JreSource`] yields archive bytes, either from a
 //!   local `java/` directory ([`source::LocalDirSource`]) or over HTTP(S) via
-//!   the network-optimised client ([`source::RemoteJreSource`], task 3).
+//!   the resumable, mirror-aware [`crate::download::DownloadManager`]
+//!   ([`source::RemoteJreSource`], tasks 2/3) so JRE downloads get HTTP `Range`
+//!   resume + parallel shards + SHA-1 verification and degrade to a mirror
+//!   when the primary host fails — 断点续传 + 镜像源 for task 6.
 //! * [`extract`] — pure-Rust `.tar.xz` extraction with a path-traversal guard.
 //! * [`manager`] — [`manager::RuntimeManager`] installs, verifies and tracks
-//!   JRE homes with multi-version coexistence and on-demand release.
+//!   JRE homes with multi-version coexistence and on-demand release. Installs
+//!   are crash-safe (hidden `.part` staging dir + atomic rename) and
+//!   concurrency-safe (advisory file lock), so an interrupted or parallel
+//!   install never leaves a half-built JRE behind.
 //!
 //! Every subsystem is a self-contained, unit-tested unit so the core stays
 //! robust and testable independently of the Android UI. The end-to-end tests

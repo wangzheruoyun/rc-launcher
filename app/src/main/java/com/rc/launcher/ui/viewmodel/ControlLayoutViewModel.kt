@@ -8,7 +8,10 @@ import com.rc.launcher.ui.model.ControlLayoutMeta
 import com.rc.launcher.ui.model.ControlLayoutRepositories
 import com.rc.launcher.ui.model.ControlLayoutRepository
 import com.rc.launcher.ui.model.ControlLayout.Companion.DEFAULT_ID
+import com.rc.launcher.ui.model.GamepadAxis
 import com.rc.launcher.ui.model.JoystickKind
+import com.rc.launcher.ui.model.LayoutIssue
+import com.rc.launcher.ui.model.LayoutSummary
 import com.rc.launcher.ui.model.MappedKey
 import com.rc.launcher.ui.model.SettingsRepositories
 import com.rc.launcher.ui.model.SettingsRepository
@@ -50,6 +53,10 @@ class ControlLayoutViewModel(
     private val _dirty = MutableStateFlow(false)
     val dirty: StateFlow<Boolean> = _dirty.asStateFlow()
 
+    /** Validation problems for the layout currently being edited. */
+    private val _issues = MutableStateFlow(emptyList<LayoutIssue>())
+    val issues: StateFlow<List<LayoutIssue>> = _issues.asStateFlow()
+
     /** Built-in layouts shipped with the app (not persisted, not deletable). */
     val builtInLayouts: List<ControlLayoutMeta> = ControlLayoutCatalog.allMetas()
 
@@ -74,6 +81,7 @@ class ControlLayoutViewModel(
         _layout.value = next.sanitized()
         _selectedElementId.value = null
         _dirty.value = false
+        _issues.value = _layout.value.validate()
         applyActiveLayoutId(next.id)
     }
 
@@ -109,6 +117,7 @@ class ControlLayoutViewModel(
         _layout.value = _layout.value.withElement(btn)
         _selectedElementId.value = btn.id
         _dirty.value = true
+        _issues.value = _layout.value.validate()
     }
 
     /** Add a new touch joystick at a normalized position and select it. */
@@ -122,6 +131,7 @@ class ControlLayoutViewModel(
         _layout.value = _layout.value.withElement(js)
         _selectedElementId.value = js.id
         _dirty.value = true
+        _issues.value = _layout.value.validate()
     }
 
     fun updateButton(id: String, label: String, keys: List<MappedKey>, size: Float) {
@@ -138,12 +148,32 @@ class ControlLayoutViewModel(
         }
     }
 
+    /**
+     * Update a joystick's radius and drive axis, preserving its current
+     * gamepad-axis bindings (convenience overload used when only the geometry or
+     * the drive axis changes).
+     */
     fun updateJoystick(id: String, radius: Float, kind: JoystickKind) {
+        val cur = _layout.value.elements.filterIsInstance<VirtualJoystick>()
+            .firstOrNull { it.id == id }
+        updateJoystick(id, radius, kind, cur?.axisX, cur?.axisY)
+    }
+
+    /** Update a joystick, explicitly setting its gamepad-axis bindings. */
+    fun updateJoystick(
+        id: String,
+        radius: Float,
+        kind: JoystickKind,
+        axisX: GamepadAxis?,
+        axisY: GamepadAxis?,
+    ) {
         updateElementById(id) { el ->
             if (el is VirtualJoystick) {
                 el.copy(
                     radius = radius.coerceIn(VirtualJoystick.MIN_RADIUS, VirtualJoystick.MAX_RADIUS),
                     kind = kind,
+                    axisX = axisX,
+                    axisY = axisY,
                 ).normalized()
             } else {
                 el
@@ -155,6 +185,7 @@ class ControlLayoutViewModel(
         _layout.value = _layout.value.withoutElement(id)
         if (_selectedElementId.value == id) _selectedElementId.value = null
         _dirty.value = true
+        _issues.value = _layout.value.validate()
     }
 
     // ---- Persistence --------------------------------------------------------
@@ -179,6 +210,7 @@ class ControlLayoutViewModel(
         _savedLayouts.value = repository.list()
         _layout.value = toSave
         _dirty.value = false
+        _issues.value = _layout.value.validate()
         applyActiveLayoutId(targetId)
     }
 
@@ -201,6 +233,12 @@ class ControlLayoutViewModel(
     /** Discard unsaved edits, reloading the layout from its source. */
     fun resetCurrent() = loadLayout(_layout.value.id)
 
+    /** Clone the current layout as a new custom (editable) layout ("save as"). */
+    fun duplicateCurrent(name: String? = null) = saveCurrent(name, asCopy = true)
+
+    /** A structural summary of the layout currently being edited. */
+    fun summary(): LayoutSummary = _layout.value.summary()
+
     // ---- Internals ----------------------------------------------------------
 
     private fun updateElementById(id: String, block: (ControlElement) -> ControlElement) {
@@ -208,6 +246,7 @@ class ControlLayoutViewModel(
         val next = cur.copy(elements = cur.elements.map { if (it.id == id) block(it) else it })
         _layout.value = next.sanitized()
         _dirty.value = true
+        _issues.value = _layout.value.validate()
     }
 
     private fun uniqueElementId(prefix: String): String {

@@ -443,4 +443,24 @@ mod tests {
         assert_eq!(o.len(), 2);
         assert!(o.contains('i'));
     }
+
+    #[test]
+    fn buf_pool_stays_bounded_under_churn() {
+        // Hot-path churn: acquire/drop many buffers of varying sizes. The pool
+        // must stay bounded (task 25: fixed working set, no unbounded growth)
+        // instead of reallocating every call.
+        let pool = BufPool::with_config(256, 64 * 1024 * 1024, 4);
+        for i in 0..512 {
+            let need = 1 + (i % 7) * 4096; // sizes bounce across buckets
+            let b = pool.acquire(need);
+            assert!(b.capacity() >= need);
+            drop(b); // returns to the pool (max 4 idle per bucket)
+        }
+        // The idle set stays bounded by max_idle_per_bucket * bucket_count.
+        assert!(
+            pool.idle_count() <= 4 * pool.bucket_count(),
+            "idle count {} exceeded bounded pool size",
+            pool.idle_count()
+        );
+    }
 }

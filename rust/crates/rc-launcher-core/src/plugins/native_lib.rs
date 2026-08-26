@@ -109,6 +109,25 @@ impl NativeLib {
         }
     }
 
+    /// A lib from the prebuilt LWJGL natives directory (`.../natives/<abi>/`),
+    /// for every ABI. Used by renderers that wrap a LWJGL-bundled native such as
+    /// the SDL backend (`liblwjgl_sdl.so`), which ships inside
+    /// `assets/app_runtime/lwjgl/3.4.1/natives/arm64-v8a/` (see
+    /// `FCL_APK_RUNTIME_ASSETS_CATALOG.md`) rather than the FCL APK
+    /// `lib/arm64-v8a/`.
+    pub fn in_lwjgl_natives(file_name: impl Into<String>) -> Self {
+        Self {
+            file_name: file_name.into(),
+            abi: None,
+            source: NativeLibSource::LwjglNatives,
+            load_order: 100,
+            optional: false,
+            expected_size: None,
+            expected_sha256: None,
+            expected_sha1: None,
+        }
+    }
+
     /// Builder: mark this lib optional (missing => warning, not an error).
     pub fn optional(mut self, v: bool) -> Self {
         self.optional = v;
@@ -236,6 +255,9 @@ mod tests {
         let b = NativeLib::plugin_owned("libxx.so", Abi::Arm64V8a);
         assert_eq!(b.source, NativeLibSource::PluginOwned);
         assert_eq!(b.abi, Some(Abi::Arm64V8a));
+        let c = NativeLib::in_lwjgl_natives("liblwjgl_sdl.so");
+        assert_eq!(c.source, NativeLibSource::LwjglNatives);
+        assert_eq!(c.abi, None);
     }
 
     #[test]

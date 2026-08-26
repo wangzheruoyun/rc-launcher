@@ -192,4 +192,51 @@ mod tests {
         assert_eq!(std::fs::read(dest.join("a.txt")).unwrap(), b"hello world");
         let _ = std::fs::remove_dir_all(&dest);
     }
+
+    #[test]
+    fn extract_tar_xz_large_archive_streams_and_cleans_temp() {
+        // Build a multi-MiB tar.xz so the test exercises the streaming /
+        // memory-bounded path (task 25): the uncompressed tar must never live
+        // fully in RAM, and the intermediate `.rc-xz-*.tar` temp file must be
+        // removed after extraction.
+        let payload = vec![0xABu8; 4 * 1024 * 1024]; // 4 MiB entry
+        let mut tar_buf = Vec::new();
+        {
+            let mut builder = tar::Builder::new(&mut tar_buf);
+            let mut header = tar::Header::new_gnu();
+            header.set_size(payload.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(&mut header, "big.bin", payload.as_slice())
+                .unwrap();
+            builder.finish().unwrap();
+        }
+        let mut xz = Vec::new();
+        {
+            let mut w = BufWriter::new(&mut xz);
+            lzma_rs::xz_compress(&mut tar_buf.as_slice(), &mut w).unwrap();
+            w.flush().unwrap();
+        }
+
+        let src = std::env::temp_dir().join(format!("rc_big_{}.tar.xz", std::process::id()));
+        std::fs::write(&src, &xz).unwrap();
+        let dest = std::env::temp_dir().join(format!("rc_big_out_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dest);
+
+        let total = extract_tar_xz_file(&src, &dest).unwrap();
+        assert_eq!(total, payload.len() as u64);
+        assert_eq!(std::fs::read(dest.join("big.bin")).unwrap(), payload);
+
+        // Streaming contract: the intermediate `.rc-xz-<pid>.tar` temp file
+        // (created under `dest`) must be cleaned up after extraction.
+        let tmp = dest.join(format!(".rc-xz-{}.tar", std::process::id()));
+        assert!(
+            !tmp.exists(),
+            "intermediate streaming temp file leaked: {tmp:?}"
+        );
+
+        let _ = std::fs::remove_file(&src);
+        let _ = std::fs::remove_dir_all(&dest);
+    }
 }

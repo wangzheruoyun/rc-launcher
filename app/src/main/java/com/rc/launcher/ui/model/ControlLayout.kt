@@ -62,6 +62,48 @@ enum class MappedKey(val code: String, val label: String) {
     DPAD_UP("button.dpad.up", "↑"),
     DPAD_DOWN("button.dpad.down", "↓"),
     DPAD_LEFT("button.dpad.left", "←"),
+    // --- Extended keyboard vocabulary (more Minecraft bindings) ---
+    KEY_0("key.keyboard.0", "0"),
+    KEY_4("key.keyboard.4", "4"),
+    KEY_5("key.keyboard.5", "5"),
+    KEY_6("key.keyboard.6", "6"),
+    KEY_7("key.keyboard.7", "7"),
+    KEY_8("key.keyboard.8", "8"),
+    KEY_9("key.keyboard.9", "9"),
+    KEY_G("key.keyboard.g", "G"),
+    KEY_H("key.keyboard.h", "H"),
+    KEY_Z("key.keyboard.z", "Z"),
+    KEY_X("key.keyboard.x", "X"),
+    KEY_C("key.keyboard.c", "C"),
+    KEY_V("key.keyboard.v", "V"),
+    KEY_B("key.keyboard.b", "B"),
+    KEY_N("key.keyboard.n", "N"),
+    KEY_M("key.keyboard.m", "M"),
+    KEY_CAPS("key.keyboard.caps.lock", "Caps"),
+    KEY_BACKSPACE("key.keyboard.backspace", "⌫"),
+    KEY_DELETE("key.keyboard.delete", "Del"),
+    KEY_HOME("key.keyboard.home", "Home"),
+    KEY_END("key.keyboard.end", "End"),
+    KEY_PAGEUP("key.keyboard.page.up", "PgUp"),
+    KEY_PAGEDOWN("key.keyboard.page.down", "PgDn"),
+    KEY_MINUS("key.keyboard.minus", "-"),
+    KEY_EQUALS("key.keyboard.equal", "="),
+    KEY_LBRACKET("key.keyboard.bracket.left", "["),
+    KEY_RBRACKET("key.keyboard.bracket.right", "]"),
+    KEY_SEMICOLON("key.keyboard.semicolon", ";"),
+    KEY_APOSTROPHE("key.keyboard.apostrophe", "'"),
+    KEY_COMMA("key.keyboard.comma", ","),
+    KEY_PERIOD("key.keyboard.period", "."),
+    KEY_UP("key.keyboard.up", "↑"),
+    KEY_DOWN("key.keyboard.down", "↓"),
+    KEY_LEFT("key.keyboard.left", "←"),
+    KEY_RIGHT("key.keyboard.right", "→"),
+    KEY_F1("key.keyboard.f1", "F1"),
+    KEY_F2("key.keyboard.f2", "F2"),
+    KEY_F3("key.keyboard.f3", "F3"),
+    KEY_F4("key.keyboard.f4", "F4"),
+    KEY_F5("key.keyboard.f5", "F5"),
+    KEY_WIN("key.keyboard.left.win", "Win"),
     DPAD_RIGHT("button.dpad.right", "→");
 
     companion object {
@@ -81,6 +123,50 @@ enum class JoystickKind(val code: String, val label: String) {
     companion object {
         fun fromName(name: String?): JoystickKind =
             entries.firstOrNull { it.name == name } ?: MOVE
+    }
+}
+
+/**
+ * Severity of a [LayoutIssue] reported by [ControlLayout.validate].
+ */
+enum class IssueSeverity { ERROR, WARNING }
+
+/**
+ * A problem found while validating a [ControlLayout]; surfaced in the editor so
+ * the user can fix a mapping (overlapping / key-less / duplicate controls)
+ * before launching.
+ */
+data class LayoutIssue(
+    val severity: IssueSeverity,
+    val message: String,
+    val elementId: String? = null,
+)
+
+/** Structural summary of a [ControlLayout], handy for diagnostics / pickers. */
+data class LayoutSummary(
+    val buttonCount: Int,
+    val joystickCount: Int,
+    val moveStickCount: Int,
+    val lookStickCount: Int,
+    val keysCovered: Set<MappedKey>,
+)
+
+/**
+ * Analog axes of an external gamepad (FCL/Zalith vocabulary). A [VirtualJoystick]
+ * may bind its X/Y to a physical stick or trigger pair so the on-screen control
+ * can mirror a connected controller ("外接手柄" pass-through).
+ */
+enum class GamepadAxis(val code: String, val label: String) {
+    LEFT_X("axis.left.x", "左摇杆 X"),
+    LEFT_Y("axis.left.y", "左摇杆 Y"),
+    RIGHT_X("axis.right.x", "右摇杆 X"),
+    RIGHT_Y("axis.right.y", "右摇杆 Y"),
+    TRIGGER_LEFT("axis.left.trigger", "LT"),
+    TRIGGER_RIGHT("axis.right.trigger", "RT");
+
+    companion object {
+        /** Resolve a [GamepadAxis] from its enum [name], or null if unknown. */
+        fun fromName(name: String?): GamepadAxis? = entries.firstOrNull { it.name == name }
     }
 }
 
@@ -133,6 +219,10 @@ data class VirtualJoystick(
     /** Normalised radius as a fraction of the surface's min dimension. */
     val radius: Float = DEFAULT_RADIUS,
     val kind: JoystickKind = JoystickKind.MOVE,
+    /** Optional external-gamepad axis this stick mirrors on X (null = none). */
+    val axisX: GamepadAxis? = null,
+    /** Optional external-gamepad axis this stick mirrors on Y (null = none). */
+    val axisY: GamepadAxis? = null,
 ) : ControlElement {
     fun normalized(): VirtualJoystick = copy(
         x = x.coerceIn(0f, 1f),
@@ -196,6 +286,107 @@ data class ControlLayout(
         const val WASD_ID = "wasd"
         const val GAMEPAD_ID = "gamepad"
     }
+
+    // ============================================================================
+    // Validation, cloning, hit-testing and diagnostics
+    // ============================================================================
+
+    /**
+     * Validate this layout, returning the problems found (empty when clean).
+     *
+     * Mirrors the FCL/Zalith editors, which warn about overlapping, key-less or
+     * duplicate controls so the user can fix a mapping before launching — part
+     * of task 19's "fail safe, surface problems early" goal.
+     */
+    fun validate(): List<LayoutIssue> {
+        val issues = mutableListOf<LayoutIssue>()
+        if (elements.isEmpty()) {
+            issues += LayoutIssue(IssueSeverity.WARNING, "布局没有任何控件，游戏将无法操作")
+        }
+        val seen = mutableSetOf<String>()
+        for (el in elements) {
+            if (!seen.add(el.id)) {
+                issues += LayoutIssue(IssueSeverity.ERROR, "存在重复的控件 id：${el.id}", el.id)
+            }
+            if (el is VirtualButton && el.keys.isEmpty()) {
+                issues += LayoutIssue(
+                    IssueSeverity.WARNING,
+                    "按钮未绑定任何按键：${el.displayLabel}",
+                    el.id,
+                )
+            }
+        }
+        // Overlapping buttons: a tap could trigger the wrong control.
+        val btns = buttons()
+        for (i in btns.indices) {
+            for (j in i + 1 until btns.size) {
+                val a = btns[i]
+                val b = btns[j]
+                val dx = a.x - b.x
+                val dy = a.y - b.y
+                val dist = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
+                val reach = (a.size + b.size) / 2f
+                if (dist < reach) {
+                    issues += LayoutIssue(
+                        IssueSeverity.WARNING,
+                        "按钮「${a.displayLabel}」与「${b.displayLabel}」重叠，可能误触",
+                        a.id,
+                    )
+                }
+            }
+        }
+        return issues
+    }
+
+    /** All on-screen buttons. */
+    fun buttons(): List<VirtualButton> = elements.filterIsInstance<VirtualButton>()
+
+    /** All on-screen joysticks. */
+    fun joysticks(): List<VirtualJoystick> = elements.filterIsInstance<VirtualJoystick>()
+
+    /**
+     * Return the topmost control whose hit area contains the normalized [nx],
+     * [ny] point (both in 0..1). Buttons hit as circles of diameter
+     * [VirtualButton.size]; joysticks hit as circles of radius
+     * [VirtualJoystick.radius]. Used by the touch-input runtime to decide which
+     * control owns a finger (so a single layout drives both rendering and input).
+     */
+    fun elementAt(nx: Float, ny: Float): ControlElement? {
+        var hit: ControlElement? = null
+        for (el in elements) {
+            val r = when (el) {
+                is VirtualButton -> el.size / 2f
+                is VirtualJoystick -> el.radius
+                else -> continue
+            }
+            val dx = el.x - nx
+            val dy = el.y - ny
+            if (dx * dx + dy * dy <= r * r) hit = el
+        }
+        return hit
+    }
+
+    /** A structural summary of this layout, handy for diagnostics / pickers. */
+    fun summary(): LayoutSummary {
+        val btns = buttons()
+        val sticks = joysticks()
+        return LayoutSummary(
+            buttonCount = btns.size,
+            joystickCount = sticks.size,
+            moveStickCount = sticks.count { it.kind == JoystickKind.MOVE },
+            lookStickCount = sticks.count { it.kind == JoystickKind.LOOK },
+            keysCovered = btns.flatMap { it.keys }.toSet(),
+        )
+    }
+
+    /** Clone this layout under a new id (and optional name) as an editable copy. */
+    fun duplicate(newId: String, newName: String? = null): ControlLayout =
+        copy(
+            id = newId,
+            name = newName?.takeIf { it.isNotBlank() } ?: name,
+            editable = true,
+            createdAt = 0L,
+        ).sanitized()
 }
 
 /** Lightweight summary of a layout, safe to enumerate without loading it. */
@@ -295,6 +486,12 @@ object ControlLayoutCatalog {
 // JSON (de)serialization via MiniJson
 // ============================================================================
 
+private const val LAYOUT_JSON_VERSION = 1
+
+/** Forward-compatibility hook: remap older layouts to the current schema. */
+@Suppress("UNUSED_PARAMETER")
+private fun ControlLayout.migrateFrom(version: Int): ControlLayout = this
+
 private fun num(v: Float): JsonValue = JsonValue.Num(v.toDouble())
 private fun num(v: Long): JsonValue = JsonValue.Num(v.toDouble())
 
@@ -322,6 +519,8 @@ fun ControlLayout.toJsonValue(): JsonValue {
                     "y" to num(el.y),
                     "r" to num(el.radius),
                     "k" to JsonValue.Str(el.kind.name),
+                    "ax" to (el.axisX?.let { JsonValue.Str(it.name) } ?: JsonValue.Null),
+                    "ay" to (el.axisY?.let { JsonValue.Str(it.name) } ?: JsonValue.Null),
                 ),
             )
             else -> JsonValue.Null
@@ -334,6 +533,7 @@ fun ControlLayout.toJsonValue(): JsonValue {
             "e" to JsonValue.Arr(elementValues),
             "ed" to JsonValue.Bool(editable),
             "ct" to num(createdAt),
+            "v" to num(LAYOUT_JSON_VERSION.toLong()),
         ),
     )
 }
@@ -369,6 +569,8 @@ private fun JsonValue.toElement(): ControlElement? {
             y = y,
             radius = (dbl("r") ?: VirtualJoystick.DEFAULT_RADIUS.toDouble()).toFloat(),
             kind = JoystickKind.fromName(str("k")),
+            axisX = GamepadAxis.fromName(str("ax")),
+            axisY = GamepadAxis.fromName(str("ay")),
         )
         else -> null
     }
@@ -381,6 +583,7 @@ fun parseControlLayout(text: String): ControlLayout? {
     val id = root.str("id") ?: return null
     val name = root.str("name") ?: return null
     if (id.isBlank() || name.isBlank()) return null
+    val version = root.dbl("v")?.toInt() ?: 0
     val elements = (root.arr("e") ?: emptyList()).mapNotNull { it.toElement() }
     return ControlLayout(
         id = id,
@@ -388,7 +591,7 @@ fun parseControlLayout(text: String): ControlLayout? {
         elements = elements,
         editable = root.bool("ed") ?: true,
         createdAt = root.dbl("ct")?.toLong() ?: 0L,
-    ).sanitized()
+    ).sanitized().migrateFrom(version)
 }
 
 /** Serialize this layout to a compact JSON string. */

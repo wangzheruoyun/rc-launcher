@@ -167,4 +167,20 @@ data class AwtViewport(
 
     /** `true` when the surface position is inside the drawn desktop. */
     fun contains(surfaceX: Float, surfaceY: Float): Boolean = mapPointer(surfaceX, surfaceY) != null
+
+    /**
+     * Map a *desktop* pixel back to a surface position — the inverse of
+     * [mapPointer], bit-for-bit identical to `Viewport::map_to_surface` in the
+     * core.
+     *
+     * Needed by everything that has to be drawn *at* a desktop coordinate: the
+     * pointer overlay, and the IME / soft keyboard anchor that follows the Swing
+     * caret reported by the control plane.
+     */
+    fun mapToSurface(x: Int, y: Int): Pair<Float, Float> {
+        val p = placement()
+        if (screenWidth <= 0 || screenHeight <= 0) return p.x.toFloat() to p.y.toFloat()
+        return (p.x + x.toFloat() * p.width / screenWidth) to
+            (p.y + y.toFloat() * p.height / screenHeight)
+    }
 }

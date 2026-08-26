@@ -41,11 +41,12 @@ pub use renderer::{
     WindowingBackend,
 };
 pub use validation::{
-    validate, HashTrustStoreVerifier, IssueSeverity, SignatureVerifier, TrustStore,
-    ValidationContext, ValidationIssue, ValidationReport,
+    validate, validate_with_verifier, HashTrustStoreVerifier, HmacSha1Verifier, IssueSeverity,
+    SignatureVerifier, TrustStore, ValidationContext, ValidationIssue, ValidationReport,
 };
 
-/// All built-in renderers, in the order they appear in the settings UI.
+/// All built-in renderers (the 5 FCL stacks plus the LWJGL SDL backend), in the
+/// order they appear in the settings UI.
 ///
 /// Kept as a free function (rather than a `const`) so callers that want to
 /// extend it ([`RendererRegistry::with_plugin`]) get an owned, mutable copy.
@@ -70,7 +71,8 @@ mod tests {
     #[test]
     fn builtin_registry_is_populated() {
         let reg = builtin_registry();
-        assert_eq!(reg.all().len(), 5);
+        assert_eq!(reg.all().len(), 6);
         assert!(reg.get("opengles2").is_some());
+        assert!(reg.get("sdl2").is_some());
     }
 }

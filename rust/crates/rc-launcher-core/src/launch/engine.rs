@@ -42,7 +42,7 @@ use crate::launch::command::{CommandBuilder, LaunchCommand};
 use crate::launch::env::jre_lib_dirs;
 use crate::launch::options::LaunchOptions;
 use crate::launch::process::{GameExit, GameProcess, LogLine, SpawnSpec};
-use crate::launch::render::LwjglNativeBundle;
+use crate::launch::render::{LwjglNativeBundle, RenderIntegration};
 use crate::launch::runtime_assets::AppRuntime;
 use crate::runtime::JavaVersion;
 
@@ -258,7 +258,25 @@ impl LaunchEngine {
                     // task 17: the LWJGL natives themselves must be present, not
                     // just the directory — a missing `liblwjgl_opengl.so` would
                     // otherwise crash the JVM with an opaque UnsatisfiedLinkError.
-                    LwjglNativeBundle::discover(&rt, self.options.lwjgl_version, self.options.abi)?;
+                    let lwjgl_bundle = LwjglNativeBundle::discover(
+                        &rt,
+                        self.options.lwjgl_version,
+                        self.options.abi,
+                    )?;
+                    // task 17 (continued): the renderer's own OpenGL→OpenGL ES
+                    // backing libs (GL4ES / ANGLE / Mesa / Zink) are just as
+                    // load-bearing as the LWJGL natives. A missing
+                    // `libGLESv2_angle.so` / `libzink_dri.so` would otherwise only
+                    // surface at EGL init, after the JVM is already up. Preflight
+                    // them up front; an existing `nativeLibraryDir` that is missing
+                    // a required lib fails, while a `None` / absent dir is accepted
+                    // because the libs may still resolve from the APK's own lib/ dir.
+                    let render_integration = RenderIntegration::new(
+                        lwjgl_bundle,
+                        self.options.renderer,
+                        self.options.native_lib_dir.clone(),
+                    );
+                    render_integration.preflight_renderer()?;
                     // task 18: the AWT/Swing bridge must be complete as well. A
                     // half-extracted caciocavallo bundle only surfaces much
                     // later, as an `AWTError` / `ClassNotFoundException` the

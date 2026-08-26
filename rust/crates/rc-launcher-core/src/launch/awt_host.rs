@@ -50,7 +50,9 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use crate::error::{RcError, RcResult};
-use crate::launch::awt::{AwtTransport, MouseButton, PointerPhase, Rect, ScaleMode};
+use crate::launch::awt::{
+    AwtControl, AwtTransport, CursorKind, MouseButton, PointerPhase, Rect, ScaleMode,
+};
 use crate::launch::fakefx::{
     AwtEventWriter, AwtFrameStream, AwtSession, AwtSessionConfig, FrameRead,
 };
@@ -94,6 +96,8 @@ impl LinkState {
 struct LinkCounters {
     frames_accepted: AtomicU64,
     frames_rejected: AtomicU64,
+    controls_accepted: AtomicU64,
+    controls_rejected: AtomicU64,
     events_written: AtomicU64,
     events_lost: AtomicU64,
     frame_pump_alive: AtomicBool,
@@ -141,6 +145,10 @@ pub struct LinkStats {
     pub frames_accepted: u64,
     /// Frames the JVM sent that failed validation (kept the stream aligned).
     pub frames_rejected: u64,
+    /// Control messages (cursor / title / clipboard / IME) accepted.
+    pub controls_accepted: u64,
+    /// Control messages the session refused (unknown kind, impossible screen).
+    pub controls_rejected: u64,
     /// AWT records handed to the JVM.
     pub events_written: u64,
     /// AWT records drained but never written (the channel died mid-write).
@@ -156,6 +164,8 @@ impl LinkStats {
             "state": self.state.id(),
             "frames_accepted": self.frames_accepted,
             "frames_rejected": self.frames_rejected,
+            "controls_accepted": self.controls_accepted,
+            "controls_rejected": self.controls_rejected,
             "events_written": self.events_written,
             "events_lost": self.events_lost,
             "reason": self.reason,
@@ -242,6 +252,8 @@ impl AwtHost {
             state: self.counters.state(),
             frames_accepted: self.counters.frames_accepted.load(Ordering::Relaxed),
             frames_rejected: self.counters.frames_rejected.load(Ordering::Relaxed),
+            controls_accepted: self.counters.controls_accepted.load(Ordering::Relaxed),
+            controls_rejected: self.counters.controls_rejected.load(Ordering::Relaxed),
             events_written: self.counters.events_written.load(Ordering::Relaxed),
             events_lost: self.counters.events_lost.load(Ordering::Relaxed),
             reason: self.counters.reason(),
@@ -420,6 +432,42 @@ impl AwtHost {
     }
 
     /// The Compose surface changed size.
+    /// Take the control messages the JVM sent (cursor / title / clipboard / IME).
+    ///
+    /// One call per UI frame; the side effects (push to the Android clipboard,
+    /// buzz, pop the keyboard) belong to the caller.
+    pub fn drain_control(&self) -> Vec<AwtControl> {
+        self.session().drain_control()
+    }
+
+    /// Feed one encoded (`RCAC`) control message in — used by a Kotlin-owned
+    /// transport and by the self-test path, exactly like
+    /// [`AwtHost::submit_frame_bytes`].
+    pub fn submit_control_bytes(&self, bytes: &[u8]) -> RcResult<()> {
+        self.session().submit_control_bytes(bytes)
+    }
+
+    /// Answer every outstanding `Clipboard.getContents()` with `text` (`None` =
+    /// the Android clipboard holds no text).
+    pub fn answer_clipboard(&self, text: Option<&str>) -> usize {
+        self.session().answer_clipboard(text)
+    }
+
+    /// Pointer shape the JVM last asked for.
+    pub fn cursor(&self) -> CursorKind {
+        self.session().cursor()
+    }
+
+    /// Title of the active AWT window, if the bridge reported one.
+    pub fn window_title(&self) -> Option<String> {
+        self.session().window_title().map(str::to_string)
+    }
+
+    /// Text the JVM copied, consumed so it is pushed to Android exactly once.
+    pub fn take_clipboard_out(&self) -> Option<String> {
+        self.session().take_clipboard_out()
+    }
+
     pub fn set_surface_size(&self, width: u32, height: u32) -> RcResult<()> {
         self.session().set_surface_size(width, height)
     }
@@ -481,6 +529,17 @@ fn pump_frames<R: Read + PollFd>(
                     &counters.frames_accepted
                 } else {
                     &counters.frames_rejected
+                };
+                counter.fetch_add(1, Ordering::Relaxed);
+            }
+            // A control message rides the same channel as the pixels so the two
+            // stay ordered; the session folds it into its projection.
+            Ok(FrameRead::Control(control)) => {
+                let accepted = lock_session(&session).submit_control(&control).is_ok();
+                let counter = if accepted {
+                    &counters.controls_accepted
+                } else {
+                    &counters.controls_rejected
                 };
                 counter.fetch_add(1, Ordering::Relaxed);
             }
@@ -736,7 +795,10 @@ fn clear_nonblocking(fd: i32) -> RcResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::launch::awt::{AwtEventRecord, AwtFrame, EVENT_RECORD_LEN, FRAME_HEADER_LEN};
+    use crate::launch::awt::{
+        decode_control_reply, AwtEventRecord, AwtFrame, AwtReplyKind, EVENT_RECORD_LEN,
+        FRAME_HEADER_LEN,
+    };
     use crate::launch::options::WindowSize;
     use std::io::Cursor;
     use std::os::unix::net::UnixStream;
@@ -813,6 +875,139 @@ mod tests {
         assert_eq!(json["link"]["state"], "detached");
         assert!(json["transport"].is_null());
         assert!(h.describe().contains("link detached"), "{}", h.describe());
+    }
+
+    // ---- Control plane ----------------------------------------------------
+
+    #[test]
+    fn control_messages_written_by_the_jvm_reach_the_session() {
+        let (mut jvm, launcher) = UnixStream::pair().unwrap();
+        let mut h = host();
+        h.attach_frames(launcher);
+        assert!(wait_until(|| h.is_attached()));
+
+        jvm.write_all(&AwtControl::cursor(CursorKind::Hand).encode())
+            .unwrap();
+        jvm.write_all(&AwtControl::title("Forge 安装程序").encode())
+            .unwrap();
+        jvm.write_all(&AwtControl::ime_show(8, 9, 12).encode())
+            .unwrap();
+        jvm.flush().unwrap();
+        assert!(wait_until(|| h.link_stats().controls_accepted == 3));
+
+        assert_eq!(h.cursor(), CursorKind::Hand);
+        assert_eq!(h.window_title().as_deref(), Some("Forge 安装程序"));
+        assert!(h.session().control().wants_keyboard());
+        // The messages are also queued for the UI (one drain per frame).
+        let drained = h.drain_control();
+        assert_eq!(drained.len(), 3);
+        assert!(h.drain_control().is_empty());
+        h.stop_and_join();
+    }
+
+    #[test]
+    fn pixels_and_control_messages_share_one_channel_without_desyncing() {
+        let (mut jvm, launcher) = UnixStream::pair().unwrap();
+        let mut h = host();
+        h.attach_frames(launcher);
+        assert!(wait_until(|| h.is_attached()));
+
+        jvm.write_all(&frame(1, 0xFF00_00FF)).unwrap();
+        jvm.write_all(&AwtControl::cursor(CursorKind::Text).encode())
+            .unwrap();
+        jvm.write_all(&frame(2, 0xFF00_FF00)).unwrap();
+        jvm.flush().unwrap();
+        assert!(wait_until(|| {
+            let s = h.link_stats();
+            s.frames_accepted == 2 && s.controls_accepted == 1
+        }));
+        assert_eq!(h.link_stats().frames_rejected, 0);
+        assert_eq!(h.cursor(), CursorKind::Text);
+
+        let mut rgba = vec![0u8; h.session().rgba_len()];
+        h.poll_frame_into(&mut rgba).unwrap().unwrap();
+        assert_eq!(&rgba[0..4], &[0x00, 0xFF, 0x00, 0xFF]);
+        h.stop_and_join();
+    }
+
+    #[test]
+    fn a_clipboard_request_is_answered_back_through_the_event_pump() {
+        let (mut jvm_frames, launcher_frames) = UnixStream::pair().unwrap();
+        let (mut jvm_events, launcher_events) = UnixStream::pair().unwrap();
+        let mut h = host();
+        h.attach_frames(launcher_frames);
+        h.attach_events(launcher_events);
+        assert!(wait_until(|| h.is_attached()));
+
+        jvm_frames
+            .write_all(&AwtControl::clipboard_request(77).encode())
+            .unwrap();
+        jvm_frames.flush().unwrap();
+        assert!(wait_until(|| h.session().pending_clipboard_requests() == 1));
+
+        // The UI read the Android clipboard and hands it back.
+        let text = "copied on Android 中文";
+        let queued = h.answer_clipboard(Some(text));
+        assert!(queued >= 2, "a multi-chunk reply");
+
+        let mut buf = vec![0u8; queued * EVENT_RECORD_LEN];
+        assert!(read_exact_within(&mut jvm_events, &mut buf));
+        let records = AwtEventRecord::decode_batch(&buf).unwrap();
+        let (kind, seq, back) = decode_control_reply(&records).unwrap();
+        assert_eq!(kind, AwtReplyKind::Clipboard);
+        assert_eq!(seq, 77);
+        assert_eq!(back, text);
+        assert_eq!(h.session().pending_clipboard_requests(), 0);
+        h.stop_and_join();
+    }
+
+    #[test]
+    fn a_corrupt_control_message_is_counted_and_the_pump_keeps_going() {
+        let (mut jvm, launcher) = UnixStream::pair().unwrap();
+        let mut h = host();
+        h.attach_frames(launcher);
+        assert!(wait_until(|| h.is_attached()));
+
+        // Unknown kind: framed correctly, so the channel stays aligned.
+        let mut broken = AwtControl::beep().encode();
+        broken[6] = 250;
+        jvm.write_all(&broken).unwrap();
+        // An impossible managed screen: decodes, but the session refuses it.
+        jvm.write_all(&AwtControl::screen_size(0, 0).encode())
+            .unwrap();
+        jvm.write_all(&frame(5, 0xFFAB_CDEF)).unwrap();
+        jvm.flush().unwrap();
+
+        assert!(wait_until(|| h.link_stats().frames_accepted == 1));
+        let stats = h.link_stats();
+        assert_eq!(stats.controls_rejected, 1, "the session refused one");
+        assert_eq!(stats.frames_rejected, 1, "the undecodable one");
+        assert_eq!(h.session().screen_size(), (64, 48), "geometry untouched");
+        assert_eq!(h.link_state(), LinkState::Attached, "the link survived");
+        h.stop_and_join();
+    }
+
+    #[test]
+    fn the_link_snapshot_reports_control_counters() {
+        let h = host();
+        let json = h.to_json();
+        assert_eq!(json["link"]["controls_accepted"], 0);
+        assert_eq!(json["link"]["controls_rejected"], 0);
+        assert_eq!(json["control"]["cursor"], "default");
+        assert_eq!(json["control"]["wants_keyboard"], false);
+    }
+
+    #[test]
+    fn a_kotlin_owned_transport_can_inject_control_messages() {
+        // No pipes at all: the Kotlin side owns the channels and forwards bytes,
+        // exactly as it may already do for frames.
+        let h = host();
+        h.submit_control_bytes(&AwtControl::clipboard_set("copied").encode())
+            .unwrap();
+        assert_eq!(h.take_clipboard_out().as_deref(), Some("copied"));
+        assert_eq!(h.take_clipboard_out(), None);
+        assert!(h.submit_control_bytes(&[0u8; 8]).is_err());
+        assert_eq!(h.link_state(), LinkState::Detached);
     }
 
     // ---- Frame pump -------------------------------------------------------

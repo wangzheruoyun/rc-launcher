@@ -39,11 +39,12 @@ ARGB 图像，而不是真实窗口。本项目把这条链路完整地做成了
 
 | 层 | 位置 | 职责 |
 |---|---|---|
-| 兼容层要件 | `rust/crates/rc-launcher-core/src/launch/awt.rs` | 后端选择、cacio jar/原生库校验、JVM 参数、帧/事件 wire 格式、`AwtCanvas`、`Viewport`、输入翻译 |
+| 兼容层要件 | `rust/crates/rc-launcher-core/src/launch/awt.rs` | 后端选择、cacio jar/原生库校验、JVM 参数、帧/事件/**控制** wire 格式、`AwtCanvas`、`Viewport`、输入翻译、`CursorKind`/`AwtControl`/控制应答分片 |
 | 会话运行时 | `.../launch/fakefx.rs` | `AwtSession`：把上面的零件组合成一个可被 FFI/UI 驱动的对象；帧流读取与事件写出 |
 | 会话宿主 | `.../launch/awt_host.rs` | `AwtHost`：命名管道通道的创建与两个 pump 线程、链路计数与状态 |
 | FFI | `.../ffi.rs`（task 18 段） | `awtOpen/awtClose/awtInfo/awtConfigure/awtAttachTransport/awtInput/awtSubmitFrame/awtPollFrame/awtDrainEvents` |
-| Kotlin 领域层 | `app/src/main/java/com/rc/launcher/ui/awt/` | 视口几何、wire 编解码、输入事件、快照解析、桥接接口（Rust / Fake 两实现） |
+| Kotlin 领域层 | `app/src/main/java/com/rc/launcher/ui/awt/` | 视口几何、wire 编解码、输入事件、快照解析、**控制面**（`AwtControl.kt`：光标/标题/剪贴板/IME + `RCAC` 编解码 + 应答重组）、桥接接口（Rust / Fake 两实现） |
+| 跨语言门禁 | `scripts/check_awt_wire.py` | 静态比对 Rust 与 Kotlin 的 magic/版本/kind 码/光标号/事件 id/JSON 键——**无需 Rust 工具链与 JVM** |
 | Compose | `ui/component/AwtCanvasSurface.kt`、`ui/screen/AwtScreen.kt`、`ui/viewmodel/AwtSurfaceViewModel.kt` | 画布、诊断面板、状态容器 |
 
 > **关于「fakefx」的命名**：FCL 的 `fakefx` 包其实是两件事——(1) 重新实现 JavaFX
@@ -78,9 +79,15 @@ ARGB 图像，而不是真实窗口。本项目把这条链路完整地做成了
 ## 3. 传输：两条命名管道
 
 ```text
-frames : JVM  --[AwtFrame]-------->  启动器   （AwtSession::submit_frame）
-events : JVM  <--[AwtEventRecord]--  启动器   （AwtSession::drain_events）
+frames : JVM  --[AwtFrame  ]------->  启动器   （AwtSession::submit_frame）
+frames : JVM  --[AwtControl]------->  启动器   （AwtSession::submit_control）
+events : JVM  <--[AwtEventRecord]--   启动器   （AwtSession::drain_events）
+events : JVM  <--[控制应答记录  ]--   启动器   （AwtSession::answer_clipboard）
 ```
+
+**一条通道两种记录**：像素与控制消息复用 frames 通道（见 §5），因为二者必须保持
+彼此有序——「光标变成 I 形」和「显示新 hover 状态的那次重绘」是同一件事；反向的
+控制应答复用 events 通道，因为 JVM 侧读端可以保持成一个 `readFully(32)` 循环。
 
 * 路径由 `AwtTransport::in_dir(dir)` 约定：`awt-frames.rcaf` / `awt-events.rcae`。
 * `awt_host::create_channels` 用 `mkfifo(0600)` 创建；**旧文件先删除**——上次崩溃留下的
@@ -124,7 +131,88 @@ events : JVM  <--[AwtEventRecord]--  启动器   （AwtSession::drain_events）
   **同一套整数算法**（`Viewport` / `AwtViewport`），所以「画在哪」和「核心以为点到哪」
   不会漂移，也不可能有 `NaN` 混进 blit。
 
-## 5. 输入
+## 5. 控制面：不是像素的那一半
+
+只有像素的 AWT 桌面是不可用的：caciocavallo 的 peer 还实现了 `CTCClipboard`、
+`CTCRobotPeer`、光标管理、窗口标题与输入法（见 `cacio-shared` / `cacio-tta`），
+这些**都**需要真正持有屏幕的宿主配合。
+
+| JVM 做了什么 | 启动器必须做什么 |
+|---|---|
+| `setCursor(TEXT_CURSOR)` | 画 I 形指针而不是箭头（这是「手指下面是文本框」的唯一线索） |
+| `JFrame.setTitle("Forge 安装程序")` | 给画布标题 |
+| `Clipboard.setContents("seed")` | 放进 Android 剪贴板 |
+| `Clipboard.getContents()` | **应答**当前 Android 剪贴板（Swing 线程正阻塞在这里） |
+| 文本组件获得焦点 | 在光标处弹出软键盘 |
+| `Toolkit.beep()` | 一次触感反馈 |
+| cacio 的 managed screen 实为 N×M | 把画布**静默**调成 N×M |
+
+### 控制消息格式（`"RCAC"`，小端，JVM → 启动器）
+
+```text
+0  u32 magic("RCAC")  4  u16 version  6  u16 kind
+8  u32 seq           12  i32 a       16  i32 b      20 i32 c
+24 u32 payload_len                  28  u32 flags
+32 …  payload_len 字节 UTF-8 文本
+```
+
+**头部与帧头同形**（version 在 4、payload_len 在 24）而 magic 不同，这正是
+`AwtFrameStream::read_next` 能用一次读头解复用两种记录的原因：记录先被**整条消费**
+再看 magic，所以哪怕是未知记录类型也无法让通道失步（`a_corrupt_control_message_keeps_the_frame_stream_aligned`）。
+
+| kind | 码 | 载荷 |
+|---|---|---|
+| `cursor` | 1 | `a` = `java.awt.Cursor` 类型（0..13；自定义位图光标退化为箭头） |
+| `title` | 2 | `text`（空串 = 清除标题） |
+| `clipboard_set` | 3 | `text`（JVM 复制了什么） |
+| `clipboard_request` | 4 | `seq`（用同一个 seq 应答，晚到的应答不会被错认） |
+| `beep` | 5 | — |
+| `screen_size` | 6 | `a`×`b`：cacio 真正在用的 managed screen |
+| `ime_show` | 7 | `a`,`b` = 插入符（桌面像素），`c` = 行高 |
+| `ime_hide` | 8 | — |
+| `window_opened` | 9 | `a` = 窗口 id，`text` = 标题 |
+| `window_closed` | 10 | `a` = 窗口 id |
+| `bye` | 11 | `text` = 原因（桥接干净退出） |
+
+### 控制应答（定长 32 字节 × N，启动器 → JVM）
+
+反向通道**保持定长**，JVM 侧读端就还是 `readFully(32)`；文本（剪贴板应答）跨记录
+分片，字段直接复用 `AwtEventRecord`：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | `CONTROL_EVENT_ID = 0x72630001`（远离一切 `java.awt.event` id，绝不会被 `postEvent`） |
+| `x` | 应答类型（`clipboard` / `clipboard_empty` / `pong`） |
+| `y` | 被应答的 `seq` |
+| `button` / `key_code` | 分片序号 / 分片总数 |
+| `key_char` | 本片有效字节数（0..8） |
+| `modifiers`,`wheel` | 本片的 8 个文本字节 |
+
+* 超长文本在**字符边界**截断（`MAX_REPLY_TEXT` = 8 KiB），JVM 永远收到合法 UTF-8。
+* **空文本也发一片**：请求必须有应答，否则阻塞在 `getContents()` 的 Swing 线程会永久挂住。
+* 出队限流（`shed_one`）**最后**才动控制记录：分片应答只有整条才有意义。
+
+### 两种消费方式
+
+`AwtSession` 同时提供「投影」与「消息流」，因为二者用途不同：
+
+* **投影**（`AwtControlState`：光标/标题/IME/窗口/剪贴板）是 last-write-wins 的，
+  UI 每帧直接渲染；
+* **消息流**（`drain_control()`）里的副作用必须**恰好发生一次**——写一次 Android
+  剪贴板、震一次、弹一次键盘。
+
+`awtDrainControl` 一次调用把两者一起返回；控制入队有界，溢出时**先丢**纯记账消息
+（beep、窗口簿记），保住光标与剪贴板交接（`the_control_inbox_is_bounded_and_sheds_bookkeeping_first`）。
+
+### 静默采纳 managed screen
+
+`submit_frame` 本来就能跟随「与画布尺寸不符」的整帧，但它走 `resize_screen`——
+会**回抛一个 `COMPONENT_RESIZED`**。这在 UI 改尺寸时是对的，在这里是错的：JVM 才是
+告诉我们的一方，回抛会让 cacio 在启动过程中反复重排并反复广播。因此
+`screen_size` 走 `adopt_screen_size`：静默、且发生在**第一次重绘之前**，第一帧就落在
+尺寸正确的画布上，不必付一次整画布重分配。
+
+## 6. 输入
 
 Compose 手势 → `AwtInputEvent`（Kotlin，`toBatchJson()`）→ `awtInput` →
 `AwtInputTranslator`（Rust，持有按键/修饰键状态）→ `AwtEventRecord`：
@@ -138,7 +226,7 @@ Compose 手势 → `AwtInputEvent`（Kotlin，`toBatchJson()`）→ `awtInput` �
 * 硬件键盘/软键盘：`awtKeyNameForAndroidKeyCode` 把 Android keycode 翻成核心认识的
   键名（与 task 15 控制布局同一套命名），认不出的键退化成 `KEY_TYPED` 文本（IME 同理）。
 
-## 6. 健壮性（task 19）
+## 7. 健壮性（task 19）
 
 | 风险 | 处理 |
 |---|---|
@@ -150,8 +238,16 @@ Compose 手势 → `AwtInputEvent`（Kotlin，`toBatchJson()`）→ `awtInput` �
 | 会话锁被 poison | `into_inner()` 恢复：像素可能旧一帧，UI 继续跑 |
 | 缺少 `librc_launcher.so` | Kotlin 侧全部 `runCatching`，降级为可见的错误提示，UI 不崩 |
 | 尺寸非法 | `AwtSessionConfig::sanitized()` 把 0 / 999999 夹到 `1..8192`，杜绝「分配数 GB」 |
+| 损坏/未知控制消息 | 整条消费后才解析，`FrameRead::Rejected` 计数并继续；下一条记录仍能解析 |
+| 控制消息参数荒谬 | 如 `screen_size 0x0`：拒绝并计入 `controls_rejected`，投影与画布不受污染 |
+| 非 UTF-8 标题/剪贴板 | 解码即报错（不做 U+FFFD 静默替换）——标题最终要给人看 |
+| UI 停止 poll 控制面 | 入队有界，先丢记账消息；光标与剪贴板交接优先保留 |
+| 出队限流撞上分片应答 | `shed_one` 最后才丢控制记录，绝不给 JVM 半条应答 |
+| Android 剪贴板为空 | 仍回 `clipboard_empty`——**应答**而不是沉默 |
+| 桥接说再见（`bye`） | 清空待应答请求、收起键盘，UI 不再等永远不会来的东西 |
+| 桌面缩小后插入符越界 | 每次改尺寸（UI 改或 JVM 广播）都把 `ImeCaret` 夹回画布，软键盘不会锚到信箱黑边或屏幕外 |
 
-## 7. 接口速查
+## 8. 接口速查
 
 Kotlin ⇄ Rust（`RustBridge`，全部 JSON 出入，除像素/事件的二进制通道）：
 
@@ -167,32 +263,55 @@ Kotlin ⇄ Rust（`RustBridge`，全部 JSON 出入，除像素/事件的二进�
 | `awtPollFrame(directBuffer)` | **热路径**：脏区域直写 direct ByteBuffer（零拷贝） |
 | `awtPollFrameArray(byteArray)` | 无 direct buffer 时的兜底（各多一次拷贝） |
 | `awtDrainEvents()` | 取出待发的 32 字节记录（Kotlin 侧传输时使用） |
+| `awtDrainControl()` | **控制面**：取出控制消息 + 当前投影（光标/标题/IME/剪贴板/窗口） |
+| `awtControl(json)` | 启动器的应答：`clipboard` / `clipboard_empty` / `clipboard_seq` / `pong` / `reset` |
+| `awtSubmitControl(bytes)` | 手工投一条 `RCAC`（自检 / Kotlin 侧传输） |
 
 启动侧串联：`LaunchOptions.awt_transport_dir = <dir>` 时，`CommandBuilder` 会把
 `rc.awt.bridge.*` 三个属性交给 JVM；不设置则 cacio 依旧离屏渲染（对话框能用，只是
 不显示）——**永远不会**出现「FIFO 没有读者把游戏第一次重绘卡死」的情况。
 
-## 8. 测试
+## 9. 测试
 
 ```bash
 cd rust && cargo test --workspace     # awt / fakefx / awt_host / ffi::awt_tests
 cargo run --example awt_demo          # 端到端：真实命名管道 + 假 JVM + 假 UI
+python3 scripts/check_awt_wire.py     # 跨语言 wire 契约门禁（无需工具链）
 ```
 
 `examples/awt_demo.rs` 在**没有 Android、没有 JVM**的情况下跑完整条链路：假 JVM 线程
-经真实 FIFO 发一整屏重绘 → 一个损坏帧 → 一个 8×4 脏矩形补丁，UI 线程按帧 poll 到
-framebuffer 并注入一次点击 + 一次 Esc。输出会显示脏区域上屏只花 **128 B / 8192 B（1%）**、
-损坏帧被计数但链路存活，以及 JVM 侧收到 `MOUSE_PRESSED/RELEASED/CLICKED` 与
-`KEY_PRESSED(VK_ESCAPE)`（坐标 (32,16) 正是信箱化后的桌面中心）。
+经真实 FIFO 发一整屏重绘 →「光标/窗口/IME/复制」四条控制消息 → 一个损坏帧 → 一个
+8×4 脏矩形补丁 → 一条损坏的控制消息 → 一次 `Clipboard.getContents()`；UI 线程按帧
+poll 到 framebuffer、每帧排空控制面、把「Android 剪贴板」应答回去，并注入一次点击 +
+一次 Esc。输出会显示：脏区域上屏只花 **128 B / 8192 B（1%）**、损坏的**帧与控制消息**
+都被计数但链路存活、投影里 `cursor=text` / 标题 / `wants keyboard=true` / JVM 复制的文本，
+JVM 侧收到 `MOUSE_PRESSED/RELEASED/CLICKED` 与 `KEY_PRESSED/RELEASED(VK_ESCAPE)`
+（坐标 (32,16) 正是信箱化后的桌面中心），以及**分片重组后原样到达 JVM 的剪贴板应答**。
 
-* `launch::awt`、`launch::fakefx`：wire 格式、canvas/damage、视口映射、输入翻译、限流。
-* `launch::awt_host`（17 项）：真实 `UnixStream` 与**真实 FIFO** 的端到端往返、
+* `launch::awt`（`control_tests`，13 项）：光标类型全量往返与自定义/未知光标退化、
+  控制 kind 码往返、`RCAC` 逐字段往返、控制头与帧头同形而 magic 不同、
+  解码拒绝截断/错 magic/错版本/未知 kind/荒谬长度/非 UTF-8、kind 专属 JSON 键、
+  应答分片与重组（含字符边界截断）、损坏 run 被拒、控制 id 不与任何 AWT id 冲突。
+* `launch::fakefx`：wire 格式、canvas/damage、视口映射、输入翻译、限流，以及控制面
+  投影（光标/标题/IME 夹取与视口映射/窗口栈/beep）、静默采纳 managed screen、
+  剪贴板请求应答（含空剪贴板）、请求与入队双向有界、**应答不被限流拆散**、
+  帧与控制消息解复用、损坏控制消息不致失步、`read_frame` 暂存控制消息。
+* `launch::awt_host`（23 项）：真实 `UnixStream` 与**真实 FIFO** 的端到端往返、
   坏帧不致命、EOF/失步的原因字符串、`stop_and_join` 不等待 JVM、`Drop` 停止 pump、
-  重复 attach 被拒绝（不泄漏线程）、通道路径不可创建时报错而非 panic。
-* `ffi::awt_tests`（13 项）：JSON 控制面（开/关/配置/输入批次/坏事件）、像素往返、
-  短缓冲被拒后 damage 仍在、`transport` 目录真的生成两个 FIFO，以及**跨语言契约测试**
-  `the_snapshot_carries_every_field_the_compose_layer_parses`（快照/poll/input 的每个字段
-  都是 Kotlin `AwtSessionInfo.kt` 会读的键——CI 跑不了 Kotlin 单测，这一项就是护栏）。
+  重复 attach 被拒绝（不泄漏线程）、通道路径不可创建时报错而非 panic，以及控制消息
+  经 pump 抵达会话、像素与控制共享一条通道不失步、剪贴板请求经事件 pump 应答回 JVM。
+* `ffi::awt_tests`（21 项）：JSON 控制面（开/关/配置/输入批次/坏事件）、像素往返、
+  短缓冲被拒后 damage 仍在、`transport` 目录真的生成两个 FIFO、控制面排空/应答/
+  reset/pong/垃圾消息不致命/无会话时报错，以及两个**跨语言契约测试**
+  `the_snapshot_carries_every_field_the_compose_layer_parses` 与
+  `the_control_snapshot_carries_every_field_the_compose_layer_parses`（快照/poll/input/
+  控制批次的每个字段都是 Kotlin 会读的键——CI 跑不了 Kotlin 单测，这两项就是护栏）。
+* `scripts/check_awt_wire.py`：**静态**跨语言门禁。它既不需要 Rust 工具链也不需要 JVM，
+  直接比对两侧源码里的 magic / 版本 / 头长 / kind 码 / 应答码 / 光标号与 id /
+  `java.awt.event` id / `ScaleMode` id / 控制 JSON 键，并检查 `FakeAwtCanvasBridge`
+  处理了每一种 kind。漂移在这里失败，而不是在设备上变成一块永远黑的画布。
 * Kotlin：`app/src/test/java/com/rc/launcher/ui/awt/*`（视口与 Rust 逐位一致、wire 编解码、
-  输入 JSON、快照解析、keycode 映射）与
-  `ui/viewmodel/AwtSurfaceViewModelTest`（用 `FakeAwtCanvasBridge` 走完整 UI 路径）。
+  输入 JSON、快照解析、keycode 映射、`AwtControlTest`：`RCAC` 字节布局/分片应答/
+  光标映射/失败软化的 JSON 解析/Fake 桥接投影）与
+  `ui/viewmodel/AwtSurfaceViewModelTest`（用 `FakeAwtCanvasBridge` 走完整 UI 路径，
+  含控制面投影、剪贴板应答、关闭会话即收起键盘）。

@@ -62,6 +62,11 @@ pub struct DownloadTask {
     pub size: Option<u64>,
     /// Stable identifier used in progress events (defaults to `url`).
     pub id: Option<String>,
+    /// Additional mirror URLs tried in order when `url` fails. This is the
+    /// per-task resilience hook that mirrors FCLCore/download's multi-mirror
+    /// strategy: a flaky primary host degrades to a working mirror instead of
+    /// failing the whole download.
+    pub mirrors: Vec<String>,
 }
 
 impl DownloadTask {
@@ -72,6 +77,7 @@ impl DownloadTask {
             checksum: None,
             size: None,
             id: None,
+            mirrors: Vec::new(),
         }
     }
     pub fn with_sha1(mut self, sha1: impl Into<String>) -> Self {
@@ -89,6 +95,18 @@ impl DownloadTask {
     pub fn with_id(mut self, id: impl Into<String>) -> Self {
         self.id = Some(id.into());
         self
+    }
+    /// Register an additional mirror URL to try if the primary `url` fails.
+    pub fn with_mirror(mut self, mirror: impl Into<String>) -> Self {
+        self.mirrors.push(mirror.into());
+        self
+    }
+    /// All candidate URLs for this task: the primary first, then every mirror
+    /// in registration order.
+    pub fn urls(&self) -> Vec<String> {
+        std::iter::once(self.url.clone())
+            .chain(self.mirrors.iter().cloned())
+            .collect()
     }
 }
 
@@ -311,16 +329,25 @@ impl DownloadManager {
             // probing request avoids downloading the whole file just to learn its size.
             return Ok((Some(size), true));
         }
-        let r = self
-            .source
-            .fetch_range(&task.url, 0, Some(0))
-            .await
-            .map_err(|e| RcError::Download(format!("cannot determine size: {e}")))?;
-        if r.supports_range {
-            Ok((Some(r.total_size), true))
-        } else {
-            Ok((None, false))
+        // Probe every candidate URL (primary + mirrors) until one answers, so a
+        // dead primary host degrades to a mirror instead of failing the task.
+        let mut last_err = None;
+        for url in task.urls() {
+            match self.source.fetch_range(&url, 0, Some(0)).await {
+                Ok(r) => {
+                    return if r.supports_range {
+                        Ok((Some(r.total_size), true))
+                    } else {
+                        Ok((None, false))
+                    };
+                }
+                Err(e) => last_err = Some(e),
+            }
         }
+        Err(RcError::Download(format!(
+            "cannot determine size: {}",
+            last_err.map(|e| e.to_string()).unwrap_or_default()
+        )))
     }
 
     async fn download_chunked(
@@ -341,23 +368,28 @@ impl DownloadManager {
         if state.total_size != total || state.chunk_size != self.options.chunk_size {
             state = DownloadState::new(total, self.options.chunk_size);
         }
-        let resumed = !state.completed.is_empty();
-
-        // Pre-size the temp file so chunks can seek+write independently.
-        match tfs::metadata(&temp).await.map(|m| m.len()).ok() {
-            Some(len) if len == total => {}
-            _ => {
-                let f = tfs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(&temp)
-                    .await
-                    .map_err(RcError::Io)?;
-                f.set_len(total).await.map_err(RcError::Io)?;
-                f.sync_all().await.map_err(RcError::Io)?;
-            }
+        // Pre-size the temp file so chunks can seek+write independently. If the
+        // temp is missing or the wrong length (e.g. left truncated by a previous
+        // crash), the previously persisted `completed` set can no longer be
+        // trusted — those byte ranges would otherwise be left as zeros/garbage
+        // and the final checksum would fail. Drop the stale resume state and
+        // re-fetch every chunk (robustness: never trust a half-written artifact;
+        // mirrors cuberite's defensive re-validation of partial state).
+        let temp_intact =
+            matches!(tfs::metadata(&temp).await.map(|m| m.len()).ok(), Some(len) if len == total);
+        if !temp_intact {
+            let f = tfs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&temp)
+                .await
+                .map_err(RcError::Io)?;
+            f.set_len(total).await.map_err(RcError::Io)?;
+            f.sync_all().await.map_err(RcError::Io)?;
+            state.completed.clear();
         }
+        let resumed = !state.completed.is_empty();
 
         let completed: Arc<Mutex<HashSet<u64>>> =
             Arc::new(Mutex::new(state.completed.iter().copied().collect()));
@@ -388,14 +420,14 @@ impl DownloadManager {
             let downloaded = downloaded.clone();
             let id = id.to_string();
             let opts = self.options.clone();
-            let url = task.url.clone();
+            let urls = task.urls();
             let progress = self.progress.clone();
             let persist_gate = persist_gate.clone();
             set.spawn(async move {
                 let _permit = permit; // hold for the lifetime of the task
                 download_chunk(
                     source,
-                    url,
+                    urls,
                     temp,
                     s_off,
                     e_off,
@@ -431,6 +463,15 @@ impl DownloadManager {
         }
         if let Some(e) = first_err {
             set.abort_all();
+            // A `RangeUnsupported` from any chunk means the server ignored the
+            // Range header and answered every request with the full body, so the
+            // whole chunked strategy is invalid. Fall back to a single sequential
+            // download of the full resource (which does not rely on Range) instead
+            // of failing the task. Temp + meta are left in place so the next run
+            // can still resume.
+            if matches!(e, RcError::RangeUnsupported { .. }) {
+                return self.download_single(task).await;
+            }
             // Leave the temp + meta in place so the next run can resume.
             return Err(e);
         }
@@ -467,7 +508,7 @@ impl DownloadManager {
             .open(&temp)
             .await
             .map_err(RcError::Io)?;
-        let total = self.retry_fetch_into(&task.url, &mut file).await?;
+        let total = self.retry_fetch_into(&task.urls(), &mut file).await?;
         self.finalize(task, &temp, total, false, start.elapsed())
             .await
     }
@@ -476,11 +517,12 @@ impl DownloadManager {
     /// returning the number of bytes written. Used by the single-shot path.
     async fn retry_fetch_into(
         &self,
-        url: &str,
+        urls: &[String],
         writer: &mut (dyn AsyncWrite + Send + Unpin),
     ) -> RcResult<u64> {
         let mut attempt: u32 = 0;
         loop {
+            let url = pick_url(urls, attempt);
             match self.source.fetch_range_into(url, 0, None, writer).await {
                 Ok(n) => return Ok(n),
                 Err(e) => {
@@ -488,12 +530,18 @@ impl DownloadManager {
                     if attempt > self.options.max_retries {
                         return Err(e);
                     }
-                    let backoff = compute_backoff(
-                        attempt,
-                        self.options.retry_base,
-                        self.options.retry_max,
-                        self.options.retry_jitter,
-                    );
+                    // Honour a server-supplied Retry-After (via the unified
+                    // error model) before falling back to exponential backoff.
+                    let backoff = if let Some(b) = e.suggested_backoff() {
+                        b
+                    } else {
+                        compute_backoff(
+                            attempt,
+                            self.options.retry_base,
+                            self.options.retry_max,
+                            self.options.retry_jitter,
+                        )
+                    };
                     tokio::time::sleep(backoff).await;
                 }
             }
@@ -580,9 +628,17 @@ pub fn compute_backoff(attempt: u32, base: Duration, max: Duration, jitter: f64)
 
 /// Download a single byte range into the temp file at its offset, retrying with
 /// exponential backoff, then mark it complete and persist the state.
+/// Choose which candidate URL to use for a given (0-based) retry `attempt`:
+/// the primary first, then each mirror in order, finally the last candidate.
+/// This gives every mirror a chance before we give up (FCLCore/download style).
+fn pick_url(urls: &[String], attempt: u32) -> &str {
+    let i = (attempt as usize).min(urls.len().saturating_sub(1));
+    urls.get(i).map(String::as_str).unwrap_or("")
+}
+
 async fn download_chunk(
     source: Arc<dyn HttpSource>,
-    url: String,
+    urls: Vec<String>,
     temp: PathBuf,
     start: u64,
     end: u64,
@@ -604,6 +660,7 @@ async fn download_chunk(
     // backends write each network buffer to disk as it arrives (task 25 —
     // large-file streaming download / memory optimisation).
     let written = loop {
+        let url = pick_url(&urls, attempt).to_string();
         let mut file = tfs::OpenOptions::new()
             .write(true)
             .open(&temp)
@@ -617,6 +674,15 @@ async fn download_chunk(
             .await
         {
             Ok(n) => {
+                // If the server returned *more* than the requested range, it
+                // ignored the Range header and sent the whole resource. The
+                // entire chunked plan is invalid; surface a `RangeUnsupported`
+                // error and let `download_chunked` fall back to a single
+                // sequential fetch (task 2 -- robustness against non-Range
+                // mirrors, absorbing FCLCore/download's fallback discipline).
+                if n > expected_len {
+                    return Err(RcError::RangeUnsupported { url });
+                }
                 if n != expected_len {
                     attempt += 1;
                     if attempt > opts.max_retries {
@@ -640,6 +706,14 @@ async fn download_chunk(
                 if attempt > opts.max_retries {
                     return Err(e);
                 }
+                // Honour a server-supplied Retry-After (e.g. on HTTP 429)
+                // before falling back to exponential backoff.
+                let backoff = if let Some(b) = e.suggested_backoff() {
+                    b
+                } else {
+                    compute_backoff(attempt, opts.retry_base, opts.retry_max, opts.retry_jitter)
+                };
+                tokio::time::sleep(backoff).await;
                 tokio::time::sleep(compute_backoff(
                     attempt,
                     opts.retry_base,

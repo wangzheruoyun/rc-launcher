@@ -303,6 +303,8 @@ pub enum Renderer {
     Zink,
     /// ANGLE — GLES over Vulkan.
     Angle,
+    /// SDL2 — LWJGL 3.4.1's SDL windowing backend (task 9: "SDL 渲染插件").
+    Sdl,
 }
 
 impl Renderer {
@@ -314,6 +316,7 @@ impl Renderer {
             Renderer::VirGl => "opengles2_vgpu",
             Renderer::Zink => "opengles3_desktopgl_zink_kopper",
             Renderer::Angle => "opengles3_angle",
+            Renderer::Sdl => "sdl2",
         }
     }
 
@@ -325,6 +328,7 @@ impl Renderer {
             Renderer::VirGl => "libvgpu.so",
             Renderer::Zink => "libOSMesa_8.so",
             Renderer::Angle => "libGLESv2_angle.so",
+            Renderer::Sdl => "liblwjgl_sdl.so",
         }
     }
 
@@ -336,6 +340,7 @@ impl Renderer {
             "opengles2_vgpu" | "virgl" | "vgpu" => Some(Renderer::VirGl),
             "opengles3_desktopgl_zink_kopper" | "zink" => Some(Renderer::Zink),
             "opengles3_angle" | "angle" => Some(Renderer::Angle),
+            "sdl2" | "sdl" => Some(Renderer::Sdl),
             _ => None,
         }
     }
@@ -372,6 +377,10 @@ impl Renderer {
                 ("LIBGL_ES", "3".into()),
                 ("MESA_GL_VERSION_OVERRIDE", "4.6".into()),
                 ("MESA_GLSL_VERSION_OVERRIDE", "460".into()),
+            ],
+            Renderer::Sdl => vec![
+                ("SDL_VIDEO_RENDERER", "1".into()),
+                ("SDL_AUDIODRIVER", "android".into()),
             ],
         }
     }
@@ -827,11 +836,17 @@ mod tests {
             Renderer::VirGl,
             Renderer::Zink,
             Renderer::Angle,
+            Renderer::Sdl,
         ] {
             assert_eq!(Renderer::from_id(r.id()), Some(r));
             assert!(r.gl_libname().starts_with("lib"));
             assert!(!r.env().is_empty());
         }
+        assert_eq!(Renderer::from_id("sdl2"), Some(Renderer::Sdl));
+        assert_eq!(Renderer::from_id("sdl"), Some(Renderer::Sdl));
+        assert!(Renderer::Sdl
+            .env()
+            .contains(&("SDL_VIDEO_RENDERER", "1".to_string())));
         assert_eq!(Renderer::from_id("gl4es"), Some(Renderer::Gl4es));
         assert_eq!(Renderer::from_id("nope"), None);
         // GL4ES needs LIBGL_ES=2; Zink drives Mesa through zink.

@@ -38,7 +38,7 @@ android {
             // exports KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD. When those
             // are absent (local builds, fork pull requests without secrets) we
             // fall back to the auto-generated debug key so assembleRelease /
-            // bundleRelease still produce an installable APK / AAB everywhere.
+            // assembleRelease still produces an installable APK everywhere.
             signingConfig = if (System.getenv("KEYSTORE_BASE64")?.isNotBlank() == true) {
                 signingConfigs.create("ciRelease") {
                     val store = rootProject.file("release-keystore.jks")

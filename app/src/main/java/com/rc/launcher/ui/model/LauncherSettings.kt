@@ -193,6 +193,7 @@ data class LauncherSettings(
     val gameFilesRoot: String = "",
     val autoCleanLogs: Boolean = true,
     val keepCrashReports: Boolean = false,
+    val rendererOptions: RendererPluginConfig = RendererPluginConfig(),
 ) {
     companion object {
         const val DEFAULT_HEAP_MB = 1024
@@ -209,6 +210,74 @@ data class LauncherSettings(
             if (deviceTotalMb <= 0) return DEFAULT_HEAP_MB
             return (deviceTotalMb * 0.33).toInt()
                 .coerceIn(MIN_HEAP_MB, MAX_HEAP_MB.coerceAtMost(deviceTotalMb))
+        }
+
+        /**
+         * Parse a [toBackupString] payload back into [LauncherSettings].
+         *
+         * Unknown / malformed lines are ignored, missing keys fall back to the
+         * defaults, and the reconstructed value always runs through
+         * [sanitized] so a tampered backup can never inject an out-of-range
+         * value into the Rust core (task 19 robustness). Returns `null` only
+         * when the whole payload is structurally unusable.
+         */
+        fun fromBackupString(text: String): LauncherSettings? {
+            val map = LinkedHashMap<String, String>()
+            for (raw in text.lineSequence()) {
+                val line = raw.trimEnd('\r')
+                if (line.isBlank() || line.startsWith('#')) continue
+                val eq = line.indexOf('=')
+                if (eq <= 0) continue
+                val key = line.substring(0, eq).trim()
+                val value = line.substring(eq + 1)
+                map[key] = value
+            }
+            val str = { k: String, d: String -> map[k] ?: d }
+            val bool = { k: String, d: Boolean ->
+                when (map[k]) {
+                    "true" -> true
+                    "false" -> false
+                    else -> d
+                }
+            }
+            val int = { k: String, d: Int -> map[k]?.toIntOrNull() ?: d }
+            val intOrNull = { k: String -> map[k]?.toIntOrNull() }
+            val float = { k: String, d: Float -> map[k]?.toFloatOrNull() ?: d }
+            return try {
+                LauncherSettings(
+                    mirrorId = str("mirrorId", MirrorCatalog.BMCLAPI.id),
+                    autoSelectFastestMirror = bool("autoSelectFastestMirror", true),
+                    useDoh = bool("useDoh", true),
+                    dohServerUrl = str("dohServerUrl", DohCatalog.ALIYUN.url),
+                    javaHeapMb = int("javaHeapMb", DEFAULT_HEAP_MB),
+                    javaMinHeapMb = intOrNull("javaMinHeapMb"),
+                    autoAllocateMemory = bool("autoAllocateMemory", true),
+                    javaVersion = intOrNull("javaVersion"),
+                    javaArgs = str("javaArgs", ""),
+                    rendererId = str("rendererId", RendererOption.DEFAULT.id),
+                    resolutionMode = ResolutionMode.fromName(map["resolutionMode"]),
+                    customWidth = int("customWidth", WindowSize.DEFAULT.width),
+                    customHeight = int("customHeight", WindowSize.DEFAULT.height),
+                    resolutionScale = float("resolutionScale", 1f),
+                    framerateLimit = int("framerateLimit", 0),
+                    fullscreen = bool("fullscreen", false),
+                    controllerEnabled = bool("controllerEnabled", false),
+                    controllerLayoutId = str("controllerLayoutId", CONTROLLER_LAYOUT_DEFAULT),
+                    controllerDeadzone = float("controllerDeadzone", 0.15f),
+                    controllerVibration = bool("controllerVibration", true),
+                    gameFilesRoot = str("gameFilesRoot", ""),
+                    autoCleanLogs = bool("autoCleanLogs", true),
+                    keepCrashReports = bool("keepCrashReports", false),
+                    rendererOptions = RendererPluginConfig(
+                        zinkVulkanDriver = str("renderer.zinkVulkanDriver", RendererPluginConfig.DEFAULT_ZINK_DRIVER),
+                        angleBackend = str("renderer.angleBackend", RendererPluginConfig.DEFAULT_ANGLE_BACKEND),
+                        gl4esNoSrgb = bool("renderer.gl4esNoSrgb", false),
+                        virglServer = str("renderer.virglServer", ""),
+                    ),
+                ).sanitized()
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -249,6 +318,7 @@ data class LauncherSettings(
             resolutionScale = resolutionScale.coerceIn(MIN_SCALE, MAX_SCALE),
             framerateLimit = framerateLimit.coerceIn(MIN_FRAMERATE, MAX_FRAMERATE),
             controllerDeadzone = controllerDeadzone.coerceIn(0f, 1f),
+            rendererOptions = rendererOptions.sanitized(),
         )
     }
 
@@ -269,5 +339,97 @@ data class LauncherSettings(
         )
     } else {
         WindowSize.DEFAULT
+    }
+
+    /**
+     * Serialize every preference to a stable, human-readable, line-based format
+     * (`key=value`, one per line, nested renderer options under `renderer.*`).
+     * Round-trips through [fromBackupString] for the Settings Center backup /
+     * restore feature (task 14).
+     */
+    fun toBackupString(): String = buildString {
+        val s = this@LauncherSettings
+        appendLine("mirrorId=" + s.mirrorId)
+        appendLine("autoSelectFastestMirror=" + s.autoSelectFastestMirror)
+        appendLine("useDoh=" + s.useDoh)
+        appendLine("dohServerUrl=" + s.dohServerUrl)
+        appendLine("javaHeapMb=" + s.javaHeapMb)
+        appendLine("javaMinHeapMb=" + (s.javaMinHeapMb ?: ""))
+        appendLine("autoAllocateMemory=" + s.autoAllocateMemory)
+        appendLine("javaVersion=" + (s.javaVersion ?: ""))
+        appendLine("javaArgs=" + s.javaArgs)
+        appendLine("rendererId=" + s.rendererId)
+        appendLine("resolutionMode=" + s.resolutionMode.name)
+        appendLine("customWidth=" + s.customWidth)
+        appendLine("customHeight=" + s.customHeight)
+        appendLine("resolutionScale=" + s.resolutionScale)
+        appendLine("framerateLimit=" + s.framerateLimit)
+        appendLine("fullscreen=" + s.fullscreen)
+        appendLine("controllerEnabled=" + s.controllerEnabled)
+        appendLine("controllerLayoutId=" + s.controllerLayoutId)
+        appendLine("controllerDeadzone=" + s.controllerDeadzone)
+        appendLine("controllerVibration=" + s.controllerVibration)
+        appendLine("gameFilesRoot=" + s.gameFilesRoot)
+        appendLine("autoCleanLogs=" + s.autoCleanLogs)
+        appendLine("keepCrashReports=" + s.keepCrashReports)
+        appendLine("renderer.zinkVulkanDriver=" + s.rendererOptions.zinkVulkanDriver)
+        appendLine("renderer.angleBackend=" + s.rendererOptions.angleBackend)
+        appendLine("renderer.gl4esNoSrgb=" + s.rendererOptions.gl4esNoSrgb)
+        appendLine("renderer.virglServer=" + s.rendererOptions.virglServer)
+    }
+}
+
+/**
+ * Per-renderer plugin tuning (task 14 extension).
+ *
+ * Closes the gap called out in the Settings Center scope ("对应 ... 各
+ * RendererPlugin 配置项"): the screen used to only pick a renderer from a
+ * dropdown, but never exposed the renderer-specific options that FCL's
+ * renderer plugins and the bundled native libraries
+ * ([FCL_NATIVE_LIBRARIES.md]) actually support:
+ *
+ *  - **Zink** (`libzink_dri.so` + `libOSMesa_8.so`): which Vulkan driver to
+ *    bind — Turnip (Adreno) or Freedreno.
+ *  - **ANGLE** (`libGLESv2_angle.so` + `libEGL_angle.so`): rendering backend
+ *    (Vulkan / OpenGL / disabled).
+ *  - **GL4ES** (`libgl4es_114.so` / `libng_gl4es.so`): toggle the sRGB
+ *    emulation that breaks some drivers / mods.
+ *  - **VirGL** (`libvgpu.so`): optional remote `virglrenderer` server.
+ *
+ * String-backed (like [LauncherSettings.mirrorId]) so it serialises cleanly
+ * and the catalogue can be extended without breaking persistence.
+ */
+data class RendererPluginConfig(
+    val zinkVulkanDriver: String = DEFAULT_ZINK_DRIVER,
+    val angleBackend: String = DEFAULT_ANGLE_BACKEND,
+    val gl4esNoSrgb: Boolean = false,
+    val virglServer: String = "",
+) {
+    /** Trim free-form text fields; never throws. */
+    fun sanitized(): RendererPluginConfig = copy(virglServer = virglServer.trim())
+
+    companion object {
+        const val DEFAULT_ZINK_DRIVER = "auto"
+        const val DEFAULT_ANGLE_BACKEND = "vulkan"
+
+        /** Zink Vulkan driver choices (id to human label). */
+        val ZINK_DRIVERS: List<Pair<String, String>> = listOf(
+            "auto" to "自动",
+            "turnip" to "Turnip (Adreno)",
+            "freedreno" to "Freedreno",
+        )
+
+        /** ANGLE rendering backends (id to human label). */
+        val ANGLE_BACKENDS: List<Pair<String, String>> = listOf(
+            "vulkan" to "Vulkan",
+            "gl" to "OpenGL",
+            "null" to "关闭（仅测试）",
+        )
+
+        fun isValidZinkDriver(id: String?): Boolean =
+            id != null && ZINK_DRIVERS.any { it.first == id }
+
+        fun isValidAngleBackend(id: String?): Boolean =
+            id != null && ANGLE_BACKENDS.any { it.first == id }
     }
 }

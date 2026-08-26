@@ -4,6 +4,11 @@ import androidx.lifecycle.ViewModel
 import com.rc.launcher.ui.awt.AwtBridges
 import com.rc.launcher.ui.awt.AwtCanvasBridge
 import com.rc.launcher.ui.awt.AwtConfigureRequest
+import com.rc.launcher.ui.awt.AwtControlBatch
+import com.rc.launcher.ui.awt.AwtControlRequest
+import com.rc.launcher.ui.awt.AwtControlResult
+import com.rc.launcher.ui.awt.AwtControlState
+import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtFocusEvent
 import com.rc.launcher.ui.awt.AwtFrameUpdate
 import com.rc.launcher.ui.awt.AwtInputEvent
@@ -98,6 +103,9 @@ class AwtSurfaceViewModel(
             surfaceHeight = _state.value.surfaceHeight,
             message = null,
         )
+        // A closed session has no cursor, no title and wants no keyboard.
+        // Leaving the old projection up would keep the soft keyboard open over a
+        // canvas that no longer exists.
     }
 
     /** Refresh the snapshot (diagnostics card, link state). */
@@ -276,6 +284,67 @@ class AwtSurfaceViewModel(
         return result
     }
 
+    // ---- Control plane ------------------------------------------------------
+
+    /**
+     * Drain the control plane once per frame (right after [poll]).
+     *
+     * The *projection* (cursor shape, window title, whether a keyboard is wanted)
+     * is folded into [AwtSurfaceUiState.control] for rendering; the returned batch
+     * carries the side effects the composable has to perform with Android APIs
+     * the ViewModel deliberately does not touch — pushing text onto the system
+     * clipboard, answering a paste, showing the soft keyboard, a haptic tick.
+     */
+    fun pumpControl(): AwtControlBatch {
+        if (!_state.value.info.open) return AwtControlBatch.EMPTY
+        val batch = runCatching { bridge.drainControl() }
+            .getOrElse { AwtControlBatch.failed(reason(it)) }
+        val current = _state.value
+        _state.value = current.copy(
+            control = if (batch.error == null) batch.state else current.control,
+            lastControl = batch,
+            controlMessages = current.controlMessages + batch.messages.size,
+            message = batch.error ?: current.message,
+        )
+        return batch
+    }
+
+    /**
+     * Answer a `Clipboard.getContents()` with the Android clipboard.
+     *
+     * `null` answers "there is no text" — which is still an *answer*: a Swing
+     * thread blocked in `getContents()` has to be released either way.
+     */
+    fun answerClipboard(text: String?, seq: Int? = null): AwtControlResult {
+        val request = AwtControlRequest(
+            clipboard = text,
+            clipboardEmpty = text == null,
+            clipboardSeq = seq,
+        )
+        val result = runCatching { bridge.control(request) }
+            .getOrElse { AwtControlResult(error = reason(it)) }
+        val current = _state.value
+        _state.value = current.copy(
+            control = if (result.error == null) result.state else current.control,
+            message = result.error ?: current.message,
+        )
+        return result
+    }
+
+    /** Forget the control projection (arrow cursor, no keyboard). */
+    fun resetControl(): AwtControlResult {
+        val result = runCatching { bridge.control(AwtControlRequest(reset = true)) }
+            .getOrElse { AwtControlResult(error = reason(it)) }
+        _state.value = _state.value.copy(
+            control = if (result.error == null) result.state else AwtControlState.EMPTY,
+        )
+        return result
+    }
+
+    /** Inject one encoded `RCAC` control message (diagnostics self-test). */
+    fun submitControl(message: ByteArray): Boolean =
+        runCatching { bridge.submitControl(message) }.getOrDefault(false)
+
     private fun enqueue(event: AwtInputEvent) {
         if (!_state.value.info.open) return
         pending.add(event)
@@ -339,10 +408,32 @@ data class AwtSurfaceUiState(
     /** Polls that found nothing to upload (the cheap, common case). */
     val skipped: Long = 0,
     val lastInput: AwtInputResult = AwtInputResult.EMPTY,
+    /** Live control projection (cursor / title / IME / clipboard, task 18). */
+    val control: AwtControlState = AwtControlState.EMPTY,
+    /** Result of the most recent [AwtSurfaceViewModel.pumpControl]. */
+    val lastControl: AwtControlBatch = AwtControlBatch.EMPTY,
+    /** Control messages seen so far (diagnostics). */
+    val controlMessages: Long = 0,
     /** Transient error / notice for the diagnostics card. */
     val message: String? = null,
 ) {
     val open: Boolean get() = info.open
+
+    /** Pointer shape the JVM asked for (what the overlay draws). */
+    val cursor: AwtCursorKind get() = control.cursor
+
+    /** Title of the active AWT window / dialog, if the bridge reported one. */
+    val title: String? get() = control.title
+
+    /** Whether a Swing text component is focused and wants the soft keyboard. */
+    val wantsKeyboard: Boolean get() = open && control.wantsKeyboard
+
+    /**
+     * The Swing caret, mapped into *surface* pixels through the same viewport the
+     * pixels use — so the IME anchor cannot drift onto the letterbox bars.
+     */
+    val caretOnSurface: Pair<Float, Float>?
+        get() = control.caret?.let { viewport.mapToSurface(it.x, it.y) }
 
     /** Where the desktop is drawn inside the surface, recomputed locally. */
     val placement

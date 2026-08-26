@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::io::{Seek, Write};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 
@@ -17,6 +18,13 @@ use crate::download::manager::plan_chunks;
 use crate::download::{DownloadManager, DownloadOptions, DownloadTask, Progress, ProgressCallback};
 use crate::error::{RcError, RcResult};
 
+/// Kind of error injected for a URL that matches a configured substring.
+#[derive(Clone, Copy)]
+enum InjectedUrlError {
+    Network,
+    RateLimited,
+}
+
 /// A configurable in-memory resource that implements [`HttpSource`].
 pub struct MockSource {
     data: Vec<u8>,
@@ -25,6 +33,9 @@ pub struct MockSource {
     fail_map: Arc<Mutex<HashMap<u64, usize>>>,
     /// Number of `fetch_range` calls made (used for resume assertions).
     calls: Arc<AtomicU64>,
+    /// Substring -> (remaining failures, error kind) for URL-based injection
+    /// (simulates a dead primary host or an HTTP 429 rate-limit).
+    url_fail: Arc<Mutex<HashMap<String, (usize, InjectedUrlError)>>>,
 }
 
 impl MockSource {
@@ -34,6 +45,7 @@ impl MockSource {
             supports_range: true,
             fail_map: Arc::new(Mutex::new(HashMap::new())),
             calls: Arc::new(AtomicU64::new(0)),
+            url_fail: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -48,6 +60,24 @@ impl MockSource {
         self.fail_map.lock().unwrap().insert(start, times);
     }
 
+    /// Make every request whose URL contains `substr` fail the first `times`
+    /// attempts with a generic network error (simulates a dead primary host).
+    pub fn fail_url_containing(&self, substr: &str, times: usize) {
+        self.url_fail
+            .lock()
+            .unwrap()
+            .insert(substr.to_string(), (times, InjectedUrlError::Network));
+    }
+
+    /// Make every request whose URL contains `substr` fail the first `times`
+    /// attempts with an HTTP 429 rate-limit error carrying a `Retry-After`.
+    pub fn rate_limit_url(&self, substr: &str, times: usize) {
+        self.url_fail
+            .lock()
+            .unwrap()
+            .insert(substr.to_string(), (times, InjectedUrlError::RateLimited));
+    }
+
     pub fn call_count(&self) -> u64 {
         self.calls.load(Ordering::Relaxed)
     }
@@ -57,6 +87,28 @@ impl MockSource {
 impl HttpSource for MockSource {
     async fn fetch_range(&self, _url: &str, start: u64, end: Option<u64>) -> RcResult<FetchResult> {
         self.calls.fetch_add(1, Ordering::Relaxed);
+        // URL-based injected failures (dead primary host / HTTP 429) for the
+        // mirror-fallback and Retry-After tests.
+        {
+            let mut fm = self.url_fail.lock().unwrap();
+            for (sub, entry) in fm.iter_mut() {
+                if _url.contains(sub.as_str()) {
+                    if entry.0 > 0 {
+                        entry.0 -= 1;
+                        let err = match entry.1 {
+                            InjectedUrlError::Network => {
+                                RcError::Network(format!("injected failure for {sub}"))
+                            }
+                            InjectedUrlError::RateLimited => RcError::RateLimited {
+                                retry_after: Some(Duration::from_millis(1)),
+                            },
+                        };
+                        return Err(err);
+                    }
+                    break;
+                }
+            }
+        }
         // inject configured failures
         {
             let mut fm = self.fail_map.lock().unwrap();
@@ -368,4 +420,173 @@ async fn handles_empty_file() {
     let summary = mgr.download(&task).await.unwrap();
     assert_eq!(summary.size, 0);
     assert_eq!(std::fs::read(&dest).unwrap().len(), 0);
+}
+
+/// Robustness: a truncated/garbage temp file must NOT be trusted even when a
+/// stale `.part.meta` claims chunks are already complete. The manager must
+/// discard the stale resume state and re-fetch every chunk (otherwise the
+/// missing ranges would be left as zeros and the final checksum would fail).
+#[tokio::test]
+async fn resets_stale_meta_when_temp_truncated() {
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 199) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let dir = tempdir();
+    let dest = dir.join("game.jar");
+    let temp = dir.join("game.jar.part");
+    let meta = dir.join("game.jar.part.meta");
+    let chunk_size = 64 * 1024u64;
+    let plan = plan_chunks(data.len() as u64, chunk_size);
+    let half = plan.len() / 2;
+
+    // Simulate a crash that left a SHORT temp file while the meta still lists
+    // the first half as completed.
+    {
+        let f = std::fs::File::create(&temp).unwrap();
+        f.set_len((data.len() as u64) / 2).unwrap();
+    }
+    let mut completed: Vec<u64> = Vec::new();
+    for (i, (s, _e)) in plan.iter().enumerate() {
+        if i < half {
+            completed.push(*s / chunk_size);
+        }
+    }
+    let json = serde_json::json!({
+        "total_size": data.len() as u64,
+        "chunk_size": chunk_size,
+        "completed": completed,
+    });
+    std::fs::write(&meta, serde_json::to_vec(&json).unwrap()).unwrap();
+
+    let src = Arc::new(MockSource::new(data.clone()));
+    let opts = DownloadOptions {
+        chunk_size,
+        concurrency: 4,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src.clone(), opts);
+    let task = DownloadTask::new("http://mock/game.jar", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    // Because the temp was truncated, the stale meta must be discarded and every
+    // chunk re-fetched.
+    assert_eq!(
+        src.call_count() as usize,
+        plan.len(),
+        "all chunks must be re-fetched after a truncated temp"
+    );
+    let got = std::fs::read(&dest).unwrap();
+    assert_eq!(got, data);
+}
+
+/// Robustness: when the server ignores `Range` (returns the full body for every
+/// range request) even though a size is known, the chunked strategy is invalid.
+/// The manager must detect this and gracefully fall back to a single sequential
+/// download instead of failing the whole task (absorbing FCLCore/download's
+/// mirror-fallback discipline).
+#[tokio::test]
+async fn falls_back_to_single_shot_when_range_ignored_with_known_size() {
+    let data: Vec<u8> = (0..120_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    // `without_range` makes the source return the full body with no range support,
+    // and `.with_size(...)` exercises the size-known "assume range" code path.
+    let src = Arc::new(MockSource::new(data.clone()).without_range());
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("r.bin");
+    let task = DownloadTask::new("http://mock/r.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    let got = std::fs::read(&dest).unwrap();
+    assert_eq!(got, data);
+}
+
+/// Robustness: a dead primary host must degrade to a working mirror instead of
+/// failing the whole download (FCLCore/download multi-mirror resilience, task 2).
+#[tokio::test]
+async fn mirror_fallback_succeeds_when_primary_fails() {
+    let data: Vec<u8> = (0..120_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    // The primary host is permanently down; the mirror must carry the load.
+    src.fail_url_containing("unavailable", 1_000_000);
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4,
+        max_retries: 3,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("m.bin");
+    let task = DownloadTask::new("http://unavailable.example/m.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64)
+        .with_mirror("http://mirror.example/m.bin");
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Robustness: a dead primary in the single-shot path (no Range support) must
+/// also fall back to a mirror via `download_single` (task 2).
+#[tokio::test]
+async fn mirror_fallback_succeeds_for_single_shot() {
+    let data: Vec<u8> = (0..60_000u32).map(|i| (i % 53) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()).without_range());
+    src.fail_url_containing("unavailable", 1_000_000);
+    let opts = DownloadOptions {
+        chunk_size: 16 * 1024,
+        concurrency: 4,
+        max_retries: 3,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("s.bin");
+    let task = DownloadTask::new("http://unavailable.example/s.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64)
+        .with_mirror("http://mirror.example/s.bin");
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Robustness: an HTTP 429 (RateLimited) must be retried, not treated as fatal,
+/// and the download must ultimately succeed once the server stops limiting
+/// (task 2 -- honour the unified error model's retryability / Retry-After).
+#[tokio::test]
+async fn honors_rate_limited_retry_after() {
+    let data: Vec<u8> = vec![9u8; 4096];
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    // First attempt is rate-limited, then the same URL serves normally.
+    src.rate_limit_url("rlhost", 1);
+    let opts = DownloadOptions {
+        chunk_size: 1024,
+        concurrency: 2,
+        max_retries: 3,
+        retry_base: Duration::from_millis(1),
+        retry_max: Duration::from_millis(5),
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("rl.bin");
+    let task = DownloadTask::new("http://rlhost/rl.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
 }

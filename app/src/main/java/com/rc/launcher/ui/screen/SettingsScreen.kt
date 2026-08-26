@@ -36,6 +36,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,9 +48,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.rc.launcher.ui.navigation.RcRoutes
+import com.rc.launcher.ui.navigation.AwtRoute
+import com.rc.launcher.ui.navigation.ControllerRoute
 import com.rc.launcher.ui.model.LauncherSettings
 import com.rc.launcher.ui.model.ResolutionMode
+import com.rc.launcher.ui.model.RendererOption
+import com.rc.launcher.ui.model.RendererPluginConfig
+import com.rc.launcher.ui.model.MirrorProbeState
 import com.rc.launcher.ui.theme.ThemeData
 import com.rc.launcher.ui.theme.ThemeNightMode
 import com.rc.launcher.ui.theme.ThemeViewModel
@@ -59,6 +64,7 @@ import com.rc.launcher.ui.i18n.AppLanguage
 import com.rc.launcher.ui.i18n.LocalRcStrings
 import com.rc.launcher.ui.i18n.RcStringKeys
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * Settings Center (task 14).
@@ -82,6 +88,7 @@ fun SettingsScreen(
     navController: NavHostController? = null,
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+    val mirrorProbe by settingsViewModel.mirrorProbe.collectAsStateWithLifecycle()
     val themes by themeViewModel.availableThemes.collectAsStateWithLifecycle()
     val currentTheme by themeViewModel.currentTheme.collectAsStateWithLifecycle()
     val nightMode by themeViewModel.nightMode.collectAsStateWithLifecycle()
@@ -98,6 +105,22 @@ fun SettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        // ---- Live validation (task 14 / task 19 robustness) --------------
+        settings.validationError()?.let { err ->
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    err,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+        }
+
         // ---- Appearance (task 11) -----------------------------------------
         SettingsSection(strings[RcStringKeys.SETTINGS_SECTION_APPEARANCE]) {
             Text(
@@ -195,6 +218,43 @@ fun SettingsScreen(
                     onSelect = settingsViewModel::setDohServer,
                 )
             }
+
+            // ---- Mirror speed test (China optimisation, task 3 / task 14) ----
+            val scope = rememberCoroutineScope()
+            Button(
+                onClick = { scope.launch { settingsViewModel.measureAndSelectFastestMirror() } },
+                enabled = mirrorProbe !is MirrorProbeState.Measuring,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    when (mirrorProbe) {
+                        is MirrorProbeState.Measuring -> "测速中 ${mirrorProbe.done}/${mirrorProbe.total}…"
+                        else -> "测速并选择最快镜像"
+                    },
+                )
+            }
+            when (val probe = mirrorProbe) {
+                is MirrorProbeState.Idle -> {}
+                is MirrorProbeState.Measuring -> {}
+                is MirrorProbeState.Done -> Text(
+                    if (probe.bestId != null) {
+                        "已选择最快镜像：${MirrorCatalog.fromId(probe.bestId).name}"
+                    } else {
+                        "所有镜像均不可达，请检查网络"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (probe.bestId != null) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error
+                    },
+                )
+                is MirrorProbeState.Error -> Text(
+                    probe.message ?: "测速失败",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
 
         // ---- Java / memory -------------------------------------------------
@@ -249,6 +309,40 @@ fun SettingsScreen(
                 selectedId = settings.rendererId,
                 onSelect = settingsViewModel::setRenderer,
             )
+
+            // ---- Per-renderer plugin options (task 14) -----------------------
+            // Each branch mirrors the configuration items of the corresponding
+            // renderer plugin / native library (see FCL_NATIVE_LIBRARIES.md).
+            when (settings.renderer()) {
+                RendererOption.ZINK -> DropdownSetting(
+                    title = "Zink Vulkan 驱动",
+                    subtitle = "选择绑定的 Vulkan 驱动（对应 libvulkan_freedreno.so / Turnip）",
+                    options = RendererPluginConfig.ZINK_DRIVERS,
+                    selectedId = settings.rendererOptions.zinkVulkanDriver,
+                    onSelect = settingsViewModel::setZinkVulkanDriver,
+                )
+                RendererOption.ANGLE -> DropdownSetting(
+                    title = "ANGLE 后端",
+                    subtitle = "Vulkan / OpenGL / 关闭（仅测试）",
+                    options = RendererPluginConfig.ANGLE_BACKENDS,
+                    selectedId = settings.rendererOptions.angleBackend,
+                    onSelect = settingsViewModel::setAngleBackend,
+                )
+                RendererOption.GL4ES, RendererOption.NG_GL4ES -> SwitchSetting(
+                    title = "禁用 GL4ES sRGB 模拟",
+                    subtitle = "部分驱动 / 模组下更稳定",
+                    checked = settings.rendererOptions.gl4esNoSrgb,
+                    onCheckedChange = settingsViewModel::setGl4esNoSrgb,
+                )
+                RendererOption.VIRGL -> TextFieldSetting(
+                    title = "VirGL 服务器",
+                    subtitle = "留空使用本地；可填 host:port 连接远程 virglrenderer",
+                    value = settings.rendererOptions.virglServer,
+                    onValueChange = settingsViewModel::setVirglServer,
+                )
+                else -> { /* no extra plugin options for this renderer */ }
+            }
+
             val resModes = listOf(ResolutionMode.AUTO, ResolutionMode.CUSTOM)
             Text("分辨率", style = MaterialTheme.typography.titleMedium)
             SingleChoiceSegmentedButtonRow {
@@ -303,7 +397,7 @@ fun SettingsScreen(
             // Task 18: the AWT/Swing compatibility layer draws Minecraft's
             // *embedded* (non-OpenGL) UI — installers, dialogs, font metrics.
             Button(
-                onClick = { navController?.navigate(RcRoutes.AWT) },
+                onClick = { navController?.navigate(AwtRoute) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("AWT / Swing 兼容层（内嵌界面）")
@@ -346,7 +440,7 @@ fun SettingsScreen(
                 enabled = settings.controllerEnabled,
             )
             Button(
-                onClick = { navController?.navigate(RcRoutes.CONTROLLER) },
+                onClick = { navController?.navigate(ControllerRoute) },
                 enabled = settings.controllerEnabled,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -374,6 +468,42 @@ fun SettingsScreen(
                 checked = settings.keepCrashReports,
                 onCheckedChange = settingsViewModel::setKeepCrashReports,
             )
+        }
+
+        // ---- Data & backup (task 14) --------------------------------------
+        HorizontalDivider()
+        SettingsSection("数据与备份") {
+            var backupText by remember {
+                mutableStateOf(settingsViewModel.exportSettings())
+            }
+            TextFieldSetting(
+                title = "设置备份（导出）",
+                subtitle = "复制下方文本以备份当前全部设置",
+                value = backupText,
+                onValueChange = { backupText = it },
+                singleLine = false,
+            )
+            Button(
+                onClick = { backupText = settingsViewModel.exportSettings() },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("刷新导出文本") }
+            var importText by remember { mutableStateOf("") }
+            TextFieldSetting(
+                title = "从备份恢复",
+                subtitle = "粘贴此前导出的文本后点击恢复",
+                value = importText,
+                onValueChange = { importText = it },
+                singleLine = false,
+            )
+            Button(
+                onClick = {
+                    if (settingsViewModel.importSettings(importText)) {
+                        backupText = settingsViewModel.exportSettings()
+                        importText = ""
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("恢复设置") }
         }
 
         // ---- About + reset ------------------------------------------------

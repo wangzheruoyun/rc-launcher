@@ -72,6 +72,19 @@ char *rc_run_async(const char *spec_json);
 int rc_cancel_async(const char *scope);
 
 /**
+ * Spawn a real download job (task 2 ⇄ task 10 integration): a batch of
+ * download tasks from `spec_json` is driven by the resumable download
+ * manager and reports progress / lifecycle / error events through the
+ * subscribed callback. Returns a NUL-terminated JSON string
+ * `{ "ok": bool, "scope": string }`; free it with `rc_string_free`.
+ *
+ * # Safety
+ * `spec_json` must be a NUL-terminated UTF-8 string.
+ */
+char *rc_download_async(const char *spec_json);
+
+
+/**
  * Free a string returned by [`rc_run_async`]. Passing a null pointer is a
  * no-op.
  *

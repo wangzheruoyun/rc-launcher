@@ -45,7 +45,7 @@ class InstallViewModelTest {
         assertEquals(InstallStep.REVIEW, vm.step.value)
         assertTrue(vm.canProceed())
 
-        val created = vm.create()
+        val created = vm.create()!!
         assertEquals("我的世界", created.name)
         assertEquals(ModLoader.VANILLA, created.modLoader)
         assertEquals("1.20.1", created.version)
@@ -69,7 +69,7 @@ class InstallViewModelTest {
         vm.next() // -> REVIEW
         assertTrue(vm.canProceed())
 
-        val created = vm.create()
+        val created = vm.create()!!
         assertEquals(ModLoader.FABRIC, created.modLoader)
         assertNotNull(created.loaderVersion)
     }
@@ -94,7 +94,7 @@ class InstallViewModelTest {
         vm.next()
         vm.setName("新 Fabric")
         vm.next()
-        val created = vm.create()
+        val created = vm.create()!!
 
         assertEquals("fabric-1.20.1-0.16.0-1", created.id)
         assertTrue(InstanceRepository.instances.value.any { it.id == "fabric-1.20.1-0.16.0" })
@@ -122,5 +122,14 @@ class InstallViewModelTest {
         vm.reset()
         assertEquals(InstallStep.LOADER, vm.step.value)
         assertEquals(InstallRequest(), vm.request.value)
+    }
+
+    @Test
+    fun create_returnsNullWhenRequestIsInvalid() {
+        // No game version selected -> request is invalid -> nothing persisted.
+        val vm = InstallViewModel()
+        vm.next() // -> GAME_VERSION
+        assertNull(vm.create())
+        assertTrue(InstanceRepository.instances.value.isEmpty())
     }
 }

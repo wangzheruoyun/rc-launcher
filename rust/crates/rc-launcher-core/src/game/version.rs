@@ -126,6 +126,58 @@ pub struct ResolvedVersion {
     pub logging: Option<serde_json::Value>,
 }
 
+impl ResolvedVersion {
+    /// The asset index this version needs, preferring the modern `assetIndex`
+    /// block and falling back to the legacy `assets` string id (which maps to
+    /// `https://launchermeta.mojang.com/mc/assets/<id>/<id>.json`).
+    ///
+    /// Returning a synthesised [`AssetIndexRef`] for legacy versions keeps the
+    /// resolver pipeline uniform: the caller can always fetch *something* and
+    /// build the asset-object plan, instead of special-casing old releases.
+    pub fn asset_index_ref(&self) -> Option<AssetIndexRef> {
+        if let Some(ai) = &self.asset_index {
+            return Some(ai.clone());
+        }
+        self.assets.as_ref().map(|id| AssetIndexRef {
+            id: id.clone(),
+            sha1: None,
+            size: None,
+            total_size: None,
+            url: format!(
+                "https://launchermeta.mojang.com/mc/assets/{}/{}.json",
+                id, id
+            ),
+        })
+    }
+
+    /// The minimum Java major version required to run this version, inferred
+    /// from the `java_version` block so the JRE provider (task 6) can pick a
+    /// compatible runtime. Modern releases declare `major_version` directly
+    /// (e.g. 17 for 1.18+); older ones reference a component name
+    /// (`java-runtime-alpha` -> 17, `jre-legacy` -> 8). Unknown versions
+    /// conservatively assume Java 8 (the historical default).
+    pub fn required_java_major(&self) -> u32 {
+        if let Some(jv) = &self.java_version {
+            if let Some(m) = jv.major_version {
+                if m > 0 {
+                    return m;
+                }
+            }
+            if let Some(name) = &jv.name {
+                return match name.as_str() {
+                    "jre-legacy" | "jre-8" | "java-8" => 8,
+                    "java-16" | "java-runtime-delta" | "java-runtime-beta" => 16,
+                    "java-17" | "java-runtime-alpha" => 17,
+                    "java-21" => 21,
+                    "java-25" | "java-runtime-gamma" => 25,
+                    _ => 8,
+                };
+            }
+        }
+        8
+    }
+}
+
 impl VersionJson {
     /// Parse a `version.json` from a JSON string.
     pub fn parse(json: &str) -> RcResult<Self> {
@@ -240,6 +292,15 @@ pub fn resolve_version_chain(
 
 /// Fetch a `version.json` (or any JSON document) from `url`, transparently
 /// retrying against the China-mainland mirrors in priority order.
+///
+/// Robustness: a mirror may answer with HTTP 200 but a *non-JSON* body — a captive
+/// portal, a CDN error page, a half-cached HTML stub — especially on the
+/// flaky domestic networks this launcher targets. A naïve implementation would
+/// parse-fail and abort; instead we treat a successful-but-unparseable response
+/// the same as a transport failure and **fall through to the next candidate**
+/// (the next mirror, or the origin). We only give up after every candidate has
+/// been tried, reporting the last error seen. This is the single most important
+/// resilience property for mirror-based downloads.
 pub async fn fetch_json_with_mirrors<T: for<'de> Deserialize<'de>>(
     client: &reqwest::Client,
     mirror: &MirrorProvider,
@@ -251,19 +312,31 @@ pub async fn fetch_json_with_mirrors<T: for<'de> Deserialize<'de>>(
     }
     let mut last_err: Option<String> = None;
     for c in &candidates {
-        match client.get(c).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                let text = resp
-                    .text()
-                    .await
-                    .map_err(|e| RcError::Network(e.to_string()))?;
-                return serde_json::from_str(&text).map_err(RcError::Json);
-            }
-            Ok(resp) => {
-                last_err = Some(format!("HTTP {}", resp.status()));
-            }
+        let resp = match client.get(c).send().await {
+            Ok(r) => r,
             Err(e) => {
-                last_err = Some(e.to_string());
+                last_err = Some(format!("request to {c} failed: {e}"));
+                continue;
+            }
+        };
+        if !resp.status().is_success() {
+            last_err = Some(format!("HTTP {} from {c}", resp.status()));
+            continue;
+        }
+        let text = match resp.text().await {
+            Ok(t) => t,
+            Err(e) => {
+                last_err = Some(format!("body read from {c} failed: {e}"));
+                continue;
+            }
+        };
+        match serde_json::from_str(&text) {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                // 200 OK but invalid JSON: a polluted mirror, not a real result.
+                // Try the next candidate instead of surfacing a parse error.
+                last_err = Some(format!("parse from {c} failed ({} bytes): {e}", text.len()));
+                continue;
             }
         }
     }
@@ -276,6 +349,47 @@ pub async fn fetch_json_with_mirrors<T: for<'de> Deserialize<'de>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::Arc;
+
+    use crate::net::MirrorProvider;
+
+    /// Minimal blocking HTTP/1.0 test server (no extra deps). `handler` returns
+    /// `(status_code, body)` for a request, given its path.
+    fn start_json_server(
+        handler: impl Fn(&str) -> (u16, String) + Send + Sync + 'static,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let handler = Arc::new(handler);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut buf = [0u8; 16384];
+                let n = match stream.read(&mut buf) {
+                    Ok(n) if n > 0 => n,
+                    _ => continue,
+                };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = req
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or("/")
+                    .to_string();
+                let (status, body) = handler(&path);
+                let resp = format!(
+                    "HTTP/1.0 {status} OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+                let _ = stream.write_all(body.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        (format!("http://{addr}"), handle)
+    }
 
     fn v1() -> VersionJson {
         serde_json::from_str(
@@ -364,5 +478,112 @@ mod tests {
                 .ok_or_else(|| RcError::Other("x".into()))
         });
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn required_java_major_inferred() {
+        // No java_version block -> conservative Java 8 default.
+        let mut rv = ResolvedVersion::default();
+        assert_eq!(rv.required_java_major(), 8);
+
+        // Explicit major_version wins.
+        rv.java_version = Some(JavaVersion {
+            major_version: Some(21),
+            name: None,
+        });
+        assert_eq!(rv.required_java_major(), 21);
+
+        // Component name mapping.
+        rv.java_version = Some(JavaVersion {
+            major_version: None,
+            name: Some("java-runtime-alpha".into()),
+        });
+        assert_eq!(rv.required_java_major(), 17);
+
+        rv.java_version = Some(JavaVersion {
+            major_version: None,
+            name: Some("jre-legacy".into()),
+        });
+        assert_eq!(rv.required_java_major(), 8);
+
+        rv.java_version = Some(JavaVersion {
+            major_version: Some(0),
+            name: Some("java-21".into()),
+        });
+        // major_version == 0 is treated as "unknown", fall back to name.
+        assert_eq!(rv.required_java_major(), 21);
+    }
+
+    #[test]
+    fn asset_index_ref_legacy_fallback() {
+        // Modern block is preferred.
+        let mut rv = ResolvedVersion::default();
+        rv.asset_index = Some(AssetIndexRef {
+            id: "1.20".into(),
+            sha1: Some("abc".into()),
+            size: Some(1),
+            total_size: None,
+            url: "https://launchermeta.mojang.com/mc/assets/1.20.json".into(),
+        });
+        let ai = rv.asset_index_ref().unwrap();
+        assert_eq!(ai.id, "1.20");
+        assert_eq!(
+            ai.url,
+            "https://launchermeta.mojang.com/mc/assets/1.20.json"
+        );
+
+        // Legacy `assets` string synthesises the standard index URL.
+        let mut rv2 = ResolvedVersion::default();
+        rv2.assets = Some("1.12".into());
+        let ai2 = rv2.asset_index_ref().unwrap();
+        assert_eq!(ai2.id, "1.12");
+        assert_eq!(
+            ai2.url,
+            "https://launchermeta.mojang.com/mc/assets/1.12/1.12.json"
+        );
+
+        // Neither -> none.
+        assert!(ResolvedVersion::default().asset_index_ref().is_none());
+    }
+
+    #[tokio::test]
+    async fn fetch_json_falls_through_polluted_mirror() {
+        // One mirror (best) returns an HTML error page; the other returns valid
+        // JSON. The resolver must fall through the polluted mirror to the good
+        // one instead of surfacing a parse error.
+        let (base, _h) = start_json_server(|path| {
+            if path.contains("/polluted/") {
+                (200, "<html>502 Bad Gateway</html>".to_string())
+            } else {
+                (200, "{\"hello\":\"world\"}".to_string())
+            }
+        });
+        let provider = MirrorProvider::new(vec![
+            crate::net::MirrorSource::new("polluted", "Polluted", &base)
+                .with_path_prefix("polluted"),
+            crate::net::MirrorSource::new("good", "Good", &base).with_path_prefix("good"),
+        ]);
+        provider.set_best("polluted");
+
+        let client = reqwest::Client::new();
+        let url = "https://launchermeta.mojang.com/mc/game/test.json";
+        let val: serde_json::Value = fetch_json_with_mirrors(&client, &provider, url)
+            .await
+            .unwrap();
+        assert_eq!(val["hello"], "world");
+    }
+
+    #[tokio::test]
+    async fn fetch_json_errors_when_all_polluted() {
+        // Both candidates return HTML -> ultimate failure (not a silent ok).
+        let (base, _h) = start_json_server(|_path| (200, "<html>error</html>".to_string()));
+        let provider = MirrorProvider::new(vec![crate::net::MirrorSource::new(
+            "polluted", "Polluted", &base,
+        )]);
+        let client = reqwest::Client::new();
+        let url = "https://launchermeta.mojang.com/mc/game/test.json";
+        let res: RcResult<serde_json::Value> =
+            fetch_json_with_mirrors(&client, &provider, url).await;
+        assert!(res.is_err());
     }
 }

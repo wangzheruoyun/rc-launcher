@@ -2185,6 +2185,17 @@ impl AwtEventRecord {
         })
     }
 
+    /// Whether this record is a *control* record ([`CONTROL_EVENT_ID`]) rather
+    /// than an AWT input event.
+    ///
+    /// The JVM-side reader dispatches on this: a control record must never be
+    /// handed to `EventQueue.postEvent`, and load shedding
+    /// (`AwtSession::shed_one`) must never drop one, because a chunked reply is
+    /// only meaningful as a whole run.
+    pub fn is_control(&self) -> bool {
+        self.id == CONTROL_EVENT_ID
+    }
+
     /// Serialise a batch (one `write()` per UI frame instead of per event).
     pub fn encode_batch(records: &[AwtEventRecord]) -> Vec<u8> {
         let mut out = Vec::with_capacity(records.len() * EVENT_RECORD_LEN);
@@ -2472,4 +2483,980 @@ pub enum PointerPhase {
     Move,
     /// Released.
     Up,
+}
+
+// ===========================================================================
+// Control plane: everything that crosses the bridge but is not a pixel
+// ===========================================================================
+//
+// Pixels alone do not make an AWT desktop usable. caciocavallo's peers also
+// implement `CTCClipboard`, `CTCRobotPeer`, cursor management, window titles and
+// the input-method plumbing (see the `cacio-shared` / `cacio-tta` trees), and
+// *all* of those need to reach the host that owns the real screen:
+//
+// | the JVM does | the launcher must |
+// |---|---|
+// | `setCursor(HAND_CURSOR)` over a link | draw a hand pointer, not an arrow |
+// | `JFrame.setTitle("Forge 安装程序")` | label the canvas |
+// | `Clipboard.setContents("seed")` | put it on the Android clipboard |
+// | `Clipboard.getContents()` | *answer* with the Android clipboard |
+// | a text field gains focus | pop the soft keyboard at the caret |
+// | `Toolkit.beep()` | a haptic tick |
+// | cacio's managed screen is NxM | make the canvas exactly NxM |
+//
+// So the bridge carries a second record type in each direction:
+//
+// * JVM → launcher: [`AwtControl`], variable length, magic `"RCAC"`. It shares
+//   the 32-byte header shape of [`AwtFrame`] (version at 4, payload length at
+//   24) so one stream reader handles both and a control message can never
+//   desynchronise the frame stream.
+// * launcher → JVM: a *control record* — an ordinary 32-byte [`AwtEventRecord`]
+//   with the reserved id [`CONTROL_EVENT_ID`]. Keeping the reverse channel
+//   strictly fixed-length means the JVM-side reader stays a `readFully(32)`
+//   loop; text (a clipboard answer) is chunked across records
+//   ([`encode_control_reply`]).
+
+/// `java.awt.Cursor` type constants, so a control message can carry exactly what
+/// `Component.getCursor().getType()` returned.
+pub mod cursor_type {
+    /// `Cursor.DEFAULT_CURSOR`
+    pub const DEFAULT: i32 = 0;
+    /// `Cursor.CROSSHAIR_CURSOR`
+    pub const CROSSHAIR: i32 = 1;
+    /// `Cursor.TEXT_CURSOR`
+    pub const TEXT: i32 = 2;
+    /// `Cursor.WAIT_CURSOR`
+    pub const WAIT: i32 = 3;
+    /// `Cursor.SW_RESIZE_CURSOR`
+    pub const SW_RESIZE: i32 = 4;
+    /// `Cursor.SE_RESIZE_CURSOR`
+    pub const SE_RESIZE: i32 = 5;
+    /// `Cursor.NW_RESIZE_CURSOR`
+    pub const NW_RESIZE: i32 = 6;
+    /// `Cursor.NE_RESIZE_CURSOR`
+    pub const NE_RESIZE: i32 = 7;
+    /// `Cursor.N_RESIZE_CURSOR`
+    pub const N_RESIZE: i32 = 8;
+    /// `Cursor.S_RESIZE_CURSOR`
+    pub const S_RESIZE: i32 = 9;
+    /// `Cursor.W_RESIZE_CURSOR`
+    pub const W_RESIZE: i32 = 10;
+    /// `Cursor.E_RESIZE_CURSOR`
+    pub const E_RESIZE: i32 = 11;
+    /// `Cursor.HAND_CURSOR`
+    pub const HAND: i32 = 12;
+    /// `Cursor.MOVE_CURSOR`
+    pub const MOVE: i32 = 13;
+    /// `Cursor.CUSTOM_CURSOR` (a bitmap cursor: we fall back to the arrow).
+    pub const CUSTOM: i32 = -1;
+}
+
+/// The pointer shape the JVM asked for, in a form the UI can act on.
+///
+/// Android has no cursor to hand over to the window manager, so the launcher
+/// draws its own — but *which* one matters: an I-beam is the only cue that a
+/// Swing text field is under the finger, and a hand is the only cue that a
+/// `JLabel` is a link. Unknown / custom cursors degrade to [`CursorKind::Default`]
+/// instead of being an error (a bitmap cursor must not break the link).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorKind {
+    /// The arrow.
+    #[default]
+    Default,
+    /// Crosshair (`Canvas`-style components).
+    Crosshair,
+    /// I-beam: a text field / text area is under the pointer.
+    Text,
+    /// The busy cursor: the JVM is working (installer unpacking, …).
+    Wait,
+    /// A resize grip; the direction is kept for a future 8-way grip overlay.
+    Resize {
+        /// `-1`/`0`/`1` horizontal component of the grip direction.
+        dx: i8,
+        /// `-1`/`0`/`1` vertical component of the grip direction.
+        dy: i8,
+    },
+    /// Hand: a clickable link / draggable item.
+    Hand,
+    /// Move: the whole window / component can be dragged.
+    Move,
+}
+
+impl CursorKind {
+    /// Map a `java.awt.Cursor` type. Unknown values become [`CursorKind::Default`].
+    pub fn from_awt_type(kind: i32) -> CursorKind {
+        match kind {
+            cursor_type::CROSSHAIR => CursorKind::Crosshair,
+            cursor_type::TEXT => CursorKind::Text,
+            cursor_type::WAIT => CursorKind::Wait,
+            cursor_type::SW_RESIZE => CursorKind::Resize { dx: -1, dy: 1 },
+            cursor_type::SE_RESIZE => CursorKind::Resize { dx: 1, dy: 1 },
+            cursor_type::NW_RESIZE => CursorKind::Resize { dx: -1, dy: -1 },
+            cursor_type::NE_RESIZE => CursorKind::Resize { dx: 1, dy: -1 },
+            cursor_type::N_RESIZE => CursorKind::Resize { dx: 0, dy: -1 },
+            cursor_type::S_RESIZE => CursorKind::Resize { dx: 0, dy: 1 },
+            cursor_type::W_RESIZE => CursorKind::Resize { dx: -1, dy: 0 },
+            cursor_type::E_RESIZE => CursorKind::Resize { dx: 1, dy: 0 },
+            cursor_type::HAND => CursorKind::Hand,
+            cursor_type::MOVE => CursorKind::Move,
+            _ => CursorKind::Default,
+        }
+    }
+
+    /// Back to the `java.awt.Cursor` type (round-trips [`CursorKind::from_awt_type`]).
+    pub fn awt_type(self) -> i32 {
+        match self {
+            CursorKind::Default => cursor_type::DEFAULT,
+            CursorKind::Crosshair => cursor_type::CROSSHAIR,
+            CursorKind::Text => cursor_type::TEXT,
+            CursorKind::Wait => cursor_type::WAIT,
+            CursorKind::Hand => cursor_type::HAND,
+            CursorKind::Move => cursor_type::MOVE,
+            CursorKind::Resize { dx, dy } => match (dx, dy) {
+                (-1, 1) => cursor_type::SW_RESIZE,
+                (1, 1) => cursor_type::SE_RESIZE,
+                (-1, -1) => cursor_type::NW_RESIZE,
+                (1, -1) => cursor_type::NE_RESIZE,
+                (0, -1) => cursor_type::N_RESIZE,
+                (0, 1) => cursor_type::S_RESIZE,
+                (-1, 0) => cursor_type::W_RESIZE,
+                (1, 0) => cursor_type::E_RESIZE,
+                _ => cursor_type::DEFAULT,
+            },
+        }
+    }
+
+    /// Stable id for JSON / the Kotlin `AwtCursorKind` enum.
+    pub fn id(self) -> &'static str {
+        match self {
+            CursorKind::Default => "default",
+            CursorKind::Crosshair => "crosshair",
+            CursorKind::Text => "text",
+            CursorKind::Wait => "wait",
+            CursorKind::Hand => "hand",
+            CursorKind::Move => "move",
+            CursorKind::Resize { dx, dy } => match (dx, dy) {
+                (-1, 1) => "sw_resize",
+                (1, 1) => "se_resize",
+                (-1, -1) => "nw_resize",
+                (1, -1) => "ne_resize",
+                (0, -1) => "n_resize",
+                (0, 1) => "s_resize",
+                (-1, 0) => "w_resize",
+                (1, 0) => "e_resize",
+                _ => "default",
+            },
+        }
+    }
+
+    /// Whether this shape means "there is an editable text field here" — the cue
+    /// the UI uses to offer the soft keyboard even without an explicit
+    /// [`AwtControlKind::ImeShow`].
+    pub fn is_text(self) -> bool {
+        matches!(self, CursorKind::Text)
+    }
+}
+
+/// What a [`AwtControl`] message says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AwtControlKind {
+    /// The pointer shape changed (`a` = `java.awt.Cursor` type).
+    Cursor,
+    /// The active window's title changed (`text`).
+    Title,
+    /// The JVM copied `text`: push it onto the Android clipboard.
+    ClipboardSet,
+    /// The JVM wants the clipboard; answer with [`AwtReplyKind::Clipboard`]
+    /// carrying the same `seq`.
+    ClipboardRequest,
+    /// `Toolkit.beep()`.
+    Beep,
+    /// cacio's managed screen really is `a`×`b`: make the canvas match.
+    ScreenSize,
+    /// A text component wants input at desktop pixel (`a`,`b`), line height `c`.
+    ImeShow,
+    /// No text component is focused any more: the soft keyboard can go.
+    ImeHide,
+    /// A window / dialog became visible (`a` = window id, `text` = title).
+    WindowOpened,
+    /// A window / dialog was disposed (`a` = window id).
+    WindowClosed,
+    /// The JVM-side bridge is shutting down cleanly (`text` = reason).
+    Bye,
+}
+
+impl AwtControlKind {
+    /// The on-the-wire code.
+    pub fn code(self) -> u16 {
+        match self {
+            AwtControlKind::Cursor => 1,
+            AwtControlKind::Title => 2,
+            AwtControlKind::ClipboardSet => 3,
+            AwtControlKind::ClipboardRequest => 4,
+            AwtControlKind::Beep => 5,
+            AwtControlKind::ScreenSize => 6,
+            AwtControlKind::ImeShow => 7,
+            AwtControlKind::ImeHide => 8,
+            AwtControlKind::WindowOpened => 9,
+            AwtControlKind::WindowClosed => 10,
+            AwtControlKind::Bye => 11,
+        }
+    }
+
+    /// Parse a wire code. An unknown kind is **not** accepted: a newer JVM-side
+    /// bridge talking to an older core must be diagnosed, not silently ignored.
+    pub fn from_code(code: u16) -> Option<AwtControlKind> {
+        Some(match code {
+            1 => AwtControlKind::Cursor,
+            2 => AwtControlKind::Title,
+            3 => AwtControlKind::ClipboardSet,
+            4 => AwtControlKind::ClipboardRequest,
+            5 => AwtControlKind::Beep,
+            6 => AwtControlKind::ScreenSize,
+            7 => AwtControlKind::ImeShow,
+            8 => AwtControlKind::ImeHide,
+            9 => AwtControlKind::WindowOpened,
+            10 => AwtControlKind::WindowClosed,
+            11 => AwtControlKind::Bye,
+            _ => return None,
+        })
+    }
+
+    /// Stable id for JSON / the Kotlin parser.
+    pub fn id(self) -> &'static str {
+        match self {
+            AwtControlKind::Cursor => "cursor",
+            AwtControlKind::Title => "title",
+            AwtControlKind::ClipboardSet => "clipboard_set",
+            AwtControlKind::ClipboardRequest => "clipboard_request",
+            AwtControlKind::Beep => "beep",
+            AwtControlKind::ScreenSize => "screen_size",
+            AwtControlKind::ImeShow => "ime_show",
+            AwtControlKind::ImeHide => "ime_hide",
+            AwtControlKind::WindowOpened => "window_opened",
+            AwtControlKind::WindowClosed => "window_closed",
+            AwtControlKind::Bye => "bye",
+        }
+    }
+
+    /// Whether the UI must react *now* (as opposed to purely informational
+    /// bookkeeping the diagnostics panel can pick up later).
+    pub fn needs_ui(self) -> bool {
+        matches!(
+            self,
+            AwtControlKind::Cursor
+                | AwtControlKind::ClipboardSet
+                | AwtControlKind::ClipboardRequest
+                | AwtControlKind::Beep
+                | AwtControlKind::ImeShow
+                | AwtControlKind::ImeHide
+        )
+    }
+}
+
+/// Magic of a control message: `"RCAC"` (RC AWT Control), little-endian.
+pub const CONTROL_MAGIC: u32 = 0x5243_4143;
+/// Control wire version.
+pub const CONTROL_VERSION: u16 = 1;
+/// Fixed header length; identical shape to [`FRAME_HEADER_LEN`] so a single
+/// stream reader can demultiplex frames and control messages.
+pub const CONTROL_HEADER_LEN: usize = 32;
+/// Largest text payload a single control message may carry (a clipboard paste of
+/// a modpack log is still far below this; anything larger is a bug or an attack).
+pub const MAX_CONTROL_TEXT: usize = 64 * 1024;
+
+/// One non-pixel message from the game JVM.
+///
+/// Wire layout (little-endian, 32-byte header + UTF-8 payload):
+///
+/// ```text
+/// 0  u32 magic("RCAC")   4  u16 version   6  u16 kind
+/// 8  u32 seq            12  i32 a        16  i32 b       20 i32 c
+/// 24 u32 payload_len    28  u32 flags
+/// 32 …  payload_len bytes of UTF-8 text
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AwtControl {
+    /// What this message is.
+    pub kind: AwtControlKind,
+    /// Correlation id: a [`AwtControlKind::ClipboardRequest`] is answered with
+    /// the same `seq` so a late answer cannot be mistaken for a fresh one.
+    pub seq: u32,
+    /// First integer argument (cursor type / width / caret x / window id).
+    pub a: i32,
+    /// Second integer argument (height / caret y).
+    pub b: i32,
+    /// Third integer argument (caret line height).
+    pub c: i32,
+    /// Reserved bit field (unknown bits are ignored, never fatal).
+    pub flags: u32,
+    /// UTF-8 payload (title, clipboard text, reason); empty when unused.
+    pub text: String,
+}
+
+impl AwtControl {
+    /// A bare message of `kind` (no arguments).
+    pub fn new(kind: AwtControlKind) -> Self {
+        Self {
+            kind,
+            seq: 0,
+            a: 0,
+            b: 0,
+            c: 0,
+            flags: 0,
+            text: String::new(),
+        }
+    }
+
+    /// `setCursor` reached a peer.
+    pub fn cursor(kind: CursorKind) -> Self {
+        Self {
+            a: kind.awt_type(),
+            ..Self::new(AwtControlKind::Cursor)
+        }
+    }
+
+    /// The active window's title.
+    pub fn title(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            ..Self::new(AwtControlKind::Title)
+        }
+    }
+
+    /// The JVM copied something.
+    pub fn clipboard_set(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            ..Self::new(AwtControlKind::ClipboardSet)
+        }
+    }
+
+    /// The JVM wants to paste; `seq` correlates the answer.
+    pub fn clipboard_request(seq: u32) -> Self {
+        Self {
+            seq,
+            ..Self::new(AwtControlKind::ClipboardRequest)
+        }
+    }
+
+    /// `Toolkit.beep()`.
+    pub fn beep() -> Self {
+        Self::new(AwtControlKind::Beep)
+    }
+
+    /// The managed screen size cacio actually uses.
+    pub fn screen_size(width: u32, height: u32) -> Self {
+        Self {
+            a: width.min(i32::MAX as u32) as i32,
+            b: height.min(i32::MAX as u32) as i32,
+            ..Self::new(AwtControlKind::ScreenSize)
+        }
+    }
+
+    /// A text component wants input at a desktop pixel.
+    pub fn ime_show(x: i32, y: i32, line_height: i32) -> Self {
+        Self {
+            a: x,
+            b: y,
+            c: line_height,
+            ..Self::new(AwtControlKind::ImeShow)
+        }
+    }
+
+    /// Nothing wants text input any more.
+    pub fn ime_hide() -> Self {
+        Self::new(AwtControlKind::ImeHide)
+    }
+
+    /// A window / dialog became visible.
+    pub fn window_opened(id: i32, title: impl Into<String>) -> Self {
+        Self {
+            a: id,
+            text: title.into(),
+            ..Self::new(AwtControlKind::WindowOpened)
+        }
+    }
+
+    /// A window / dialog was disposed.
+    pub fn window_closed(id: i32) -> Self {
+        Self {
+            a: id,
+            ..Self::new(AwtControlKind::WindowClosed)
+        }
+    }
+
+    /// The JVM-side bridge is going away for a stated reason.
+    pub fn bye(reason: impl Into<String>) -> Self {
+        Self {
+            text: reason.into(),
+            ..Self::new(AwtControlKind::Bye)
+        }
+    }
+
+    /// Attach a correlation id.
+    pub fn with_seq(mut self, seq: u32) -> Self {
+        self.seq = seq;
+        self
+    }
+
+    /// The cursor shape this message asks for (only for
+    /// [`AwtControlKind::Cursor`]).
+    pub fn cursor_kind(&self) -> Option<CursorKind> {
+        match self.kind {
+            AwtControlKind::Cursor => Some(CursorKind::from_awt_type(self.a)),
+            _ => None,
+        }
+    }
+
+    /// Encode to the wire.
+    pub fn encode(&self) -> Vec<u8> {
+        let payload = self.text.as_bytes();
+        let mut out = Vec::with_capacity(CONTROL_HEADER_LEN + payload.len());
+        out.extend_from_slice(&CONTROL_MAGIC.to_le_bytes());
+        out.extend_from_slice(&CONTROL_VERSION.to_le_bytes());
+        out.extend_from_slice(&self.kind.code().to_le_bytes());
+        out.extend_from_slice(&self.seq.to_le_bytes());
+        out.extend_from_slice(&self.a.to_le_bytes());
+        out.extend_from_slice(&self.b.to_le_bytes());
+        out.extend_from_slice(&self.c.to_le_bytes());
+        out.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+        out.extend_from_slice(&self.flags.to_le_bytes());
+        out.extend_from_slice(payload);
+        out
+    }
+
+    /// Parse a control message, validating **every** field that crosses the
+    /// process boundary. A hostile header can neither make us allocate (the
+    /// declared length is checked first) nor panic (a non-UTF-8 payload is an
+    /// error, not `unwrap`).
+    pub fn decode(bytes: &[u8]) -> RcResult<Self> {
+        if bytes.len() < CONTROL_HEADER_LEN {
+            return Err(RcError::Launch(format!(
+                "AWT control message truncated: {} bytes < {CONTROL_HEADER_LEN}",
+                bytes.len()
+            )));
+        }
+        let u32_at =
+            |o: usize| u32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]);
+        let i32_at =
+            |o: usize| i32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]);
+        let u16_at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]);
+        let magic = u32_at(0);
+        if magic != CONTROL_MAGIC {
+            return Err(RcError::Launch(format!(
+                "AWT control magic mismatch: {magic:#010x} != {CONTROL_MAGIC:#010x}"
+            )));
+        }
+        let version = u16_at(4);
+        if version != CONTROL_VERSION {
+            return Err(RcError::Launch(format!(
+                "unsupported AWT control version {version} (expected {CONTROL_VERSION})"
+            )));
+        }
+        let code = u16_at(6);
+        let kind = AwtControlKind::from_code(code)
+            .ok_or_else(|| RcError::Launch(format!("unknown AWT control kind {code}")))?;
+        let payload_len = u32_at(24) as usize;
+        if payload_len > MAX_CONTROL_TEXT {
+            return Err(RcError::Launch(format!(
+                "AWT control declares {payload_len} text bytes (limit {MAX_CONTROL_TEXT})"
+            )));
+        }
+        if bytes.len() < CONTROL_HEADER_LEN + payload_len {
+            return Err(RcError::Launch(format!(
+                "AWT control payload truncated: {} of {} bytes",
+                bytes.len().saturating_sub(CONTROL_HEADER_LEN),
+                payload_len
+            )));
+        }
+        let text =
+            std::str::from_utf8(&bytes[CONTROL_HEADER_LEN..CONTROL_HEADER_LEN + payload_len])
+                .map_err(|e| RcError::Launch(format!("AWT control text is not valid UTF-8: {e}")))?
+                .to_string();
+        Ok(Self {
+            kind,
+            seq: u32_at(8),
+            a: i32_at(12),
+            b: i32_at(16),
+            c: i32_at(20),
+            flags: u32_at(28),
+            text,
+        })
+    }
+
+    /// JSON for the UI: kind-specific keys so the Kotlin side never has to know
+    /// what `a` / `b` / `c` mean for a given kind.
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "kind": self.kind.id(),
+            "seq": self.seq,
+        });
+        let obj = value.as_object_mut().expect("json! built an object");
+        match self.kind {
+            AwtControlKind::Cursor => {
+                obj.insert(
+                    "cursor".to_string(),
+                    serde_json::json!(CursorKind::from_awt_type(self.a).id()),
+                );
+                obj.insert("awt_type".to_string(), serde_json::json!(self.a));
+            }
+            AwtControlKind::Title | AwtControlKind::ClipboardSet | AwtControlKind::Bye => {
+                obj.insert("text".to_string(), serde_json::json!(self.text));
+            }
+            AwtControlKind::ScreenSize => {
+                obj.insert("width".to_string(), serde_json::json!(self.a));
+                obj.insert("height".to_string(), serde_json::json!(self.b));
+            }
+            AwtControlKind::ImeShow => {
+                obj.insert("x".to_string(), serde_json::json!(self.a));
+                obj.insert("y".to_string(), serde_json::json!(self.b));
+                obj.insert("line_height".to_string(), serde_json::json!(self.c));
+            }
+            AwtControlKind::WindowOpened => {
+                obj.insert("window".to_string(), serde_json::json!(self.a));
+                obj.insert("text".to_string(), serde_json::json!(self.text));
+            }
+            AwtControlKind::WindowClosed => {
+                obj.insert("window".to_string(), serde_json::json!(self.a));
+            }
+            AwtControlKind::ClipboardRequest | AwtControlKind::Beep | AwtControlKind::ImeHide => {}
+        }
+        value
+    }
+}
+
+// ---------------------------------------------------------------------------
+// launcher -> JVM control records (fixed length, chunked text)
+// ---------------------------------------------------------------------------
+
+/// Reserved [`AwtEventRecord::id`] that marks a *control* record.
+///
+/// It is far outside every `java.awt.event.*Event` id range (AWT ids are small
+/// positive integers below 3000), so a JVM-side reader can dispatch on it with a
+/// single comparison and older readers simply ignore it — a control record can
+/// never be mistaken for an input event and injected into the event queue.
+pub const CONTROL_EVENT_ID: i32 = 0x7263_0001;
+
+/// Text bytes one control record carries (the two trailing `i32` fields).
+pub const CONTROL_CHUNK_BYTES: usize = 8;
+
+/// Upper bound for a clipboard answer, in UTF-8 bytes. 8 KiB is far more than a
+/// seed / URL / command, and bounds the reverse channel at 32 KiB of records
+/// even if the Android clipboard holds a whole document.
+pub const MAX_REPLY_TEXT: usize = 8 * 1024;
+
+/// What a control record answers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AwtReplyKind {
+    /// Clipboard contents for a [`AwtControlKind::ClipboardRequest`].
+    Clipboard,
+    /// The clipboard is empty / holds no text (`Clipboard.getContents` → null).
+    ClipboardEmpty,
+    /// Liveness answer: the launcher is still here (keeps a blocking JVM-side
+    /// reader from mistaking an idle user for a dead launcher).
+    Pong,
+}
+
+impl AwtReplyKind {
+    /// The on-the-wire code.
+    pub fn code(self) -> i32 {
+        match self {
+            AwtReplyKind::Clipboard => 1,
+            AwtReplyKind::ClipboardEmpty => 2,
+            AwtReplyKind::Pong => 3,
+        }
+    }
+
+    /// Parse a wire code.
+    pub fn from_code(code: i32) -> Option<AwtReplyKind> {
+        Some(match code {
+            1 => AwtReplyKind::Clipboard,
+            2 => AwtReplyKind::ClipboardEmpty,
+            3 => AwtReplyKind::Pong,
+            _ => return None,
+        })
+    }
+
+    /// Stable id for JSON / logs.
+    pub fn id(self) -> &'static str {
+        match self {
+            AwtReplyKind::Clipboard => "clipboard",
+            AwtReplyKind::ClipboardEmpty => "clipboard_empty",
+            AwtReplyKind::Pong => "pong",
+        }
+    }
+}
+
+/// Encode a reply as a run of fixed-length control records.
+///
+/// Field mapping (so the JVM side needs no extra parser):
+///
+/// | field | meaning |
+/// |---|---|
+/// | `id` | [`CONTROL_EVENT_ID`] |
+/// | `x` | [`AwtReplyKind::code`] |
+/// | `y` | `seq` of the request being answered |
+/// | `button` | chunk index (0-based) |
+/// | `key_code` | chunk count |
+/// | `key_char` | valid text bytes in this chunk (0…[`CONTROL_CHUNK_BYTES`]) |
+/// | `modifiers`,`wheel` | the 8 text bytes, little-endian |
+///
+/// `text` longer than [`MAX_REPLY_TEXT`] is truncated **on a character
+/// boundary**, so the JVM always receives valid UTF-8. An empty text still
+/// yields one record: a request must always be answered, or a JVM thread that
+/// blocks on `getContents()` would hang for ever.
+pub fn encode_control_reply(kind: AwtReplyKind, seq: u32, text: &str) -> Vec<AwtEventRecord> {
+    let mut bytes = text.as_bytes();
+    if bytes.len() > MAX_REPLY_TEXT {
+        let mut cut = MAX_REPLY_TEXT;
+        while cut > 0 && !text.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        bytes = &text.as_bytes()[..cut];
+    }
+    let total = bytes.len().div_ceil(CONTROL_CHUNK_BYTES).max(1);
+    let mut out = Vec::with_capacity(total);
+    for (index, chunk) in bytes
+        .chunks(CONTROL_CHUNK_BYTES)
+        .chain(std::iter::repeat_n(&[][..], usize::from(bytes.is_empty())))
+        .enumerate()
+    {
+        let mut buf = [0u8; CONTROL_CHUNK_BYTES];
+        buf[..chunk.len()].copy_from_slice(chunk);
+        out.push(AwtEventRecord {
+            id: CONTROL_EVENT_ID,
+            x: kind.code(),
+            y: seq as i32,
+            button: index as i32,
+            key_code: total as i32,
+            key_char: chunk.len() as u32,
+            modifiers: i32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]),
+            wheel: i32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]),
+        });
+    }
+    out
+}
+
+/// Re-assemble a reply from its records (the JVM-side algorithm, kept here so
+/// the contract is unit-tested on both ends of the pipe).
+///
+/// Returns an error when the run is inconsistent — a wrong chunk order, a
+/// missing chunk, a bogus length or non-UTF-8 bytes — rather than handing a torn
+/// string to the caller.
+pub fn decode_control_reply(records: &[AwtEventRecord]) -> RcResult<(AwtReplyKind, u32, String)> {
+    let first = records
+        .first()
+        .ok_or_else(|| RcError::Launch("empty AWT control reply".to_string()))?;
+    if first.id != CONTROL_EVENT_ID {
+        return Err(RcError::Launch(format!(
+            "record id {} is not an AWT control record",
+            first.id
+        )));
+    }
+    let kind = AwtReplyKind::from_code(first.x)
+        .ok_or_else(|| RcError::Launch(format!("unknown AWT reply kind {}", first.x)))?;
+    let total = first.key_code;
+    if total <= 0 || total as usize != records.len() {
+        return Err(RcError::Launch(format!(
+            "AWT control reply declares {total} chunks but {} arrived",
+            records.len()
+        )));
+    }
+    let mut bytes = Vec::with_capacity(records.len() * CONTROL_CHUNK_BYTES);
+    for (index, record) in records.iter().enumerate() {
+        if record.id != CONTROL_EVENT_ID || record.x != first.x || record.y != first.y {
+            return Err(RcError::Launch(
+                "AWT control reply mixes records of different replies".to_string(),
+            ));
+        }
+        if record.button != index as i32 || record.key_code != total {
+            return Err(RcError::Launch(format!(
+                "AWT control reply chunk {} is out of order (index {})",
+                index, record.button
+            )));
+        }
+        let len = record.key_char as usize;
+        if len > CONTROL_CHUNK_BYTES {
+            return Err(RcError::Launch(format!(
+                "AWT control reply chunk declares {len} bytes (limit {CONTROL_CHUNK_BYTES})"
+            )));
+        }
+        let mut buf = [0u8; CONTROL_CHUNK_BYTES];
+        buf[0..4].copy_from_slice(&record.modifiers.to_le_bytes());
+        buf[4..8].copy_from_slice(&record.wheel.to_le_bytes());
+        bytes.extend_from_slice(&buf[..len]);
+    }
+    let text = String::from_utf8(bytes)
+        .map_err(|e| RcError::Launch(format!("AWT control reply is not valid UTF-8: {e}")))?;
+    Ok((kind, first.y as u32, text))
+}
+
+// ===========================================================================
+// Tests (control plane; the frame / canvas / viewport / input types are
+// exercised from `launch::fakefx`, which owns the session that drives them)
+// ===========================================================================
+
+#[cfg(test)]
+mod control_tests {
+    use super::*;
+
+    #[test]
+    fn every_awt_cursor_type_round_trips() {
+        for kind in cursor_type::DEFAULT..=cursor_type::MOVE {
+            let mapped = CursorKind::from_awt_type(kind);
+            assert_eq!(
+                mapped.awt_type(),
+                kind,
+                "cursor type {kind} did not round-trip ({mapped:?})"
+            );
+            assert!(!mapped.id().is_empty());
+        }
+    }
+
+    #[test]
+    fn unknown_and_custom_cursors_degrade_to_the_arrow() {
+        // A bitmap cursor (`CUSTOM_CURSOR`) or a future JDK type must not break
+        // the link: the UI just keeps drawing an arrow.
+        for kind in [cursor_type::CUSTOM, 99, i32::MIN, i32::MAX] {
+            assert_eq!(CursorKind::from_awt_type(kind), CursorKind::Default);
+        }
+        assert!(CursorKind::Text.is_text());
+        assert!(!CursorKind::Hand.is_text());
+    }
+
+    #[test]
+    fn resize_cursors_keep_their_direction() {
+        assert_eq!(
+            CursorKind::from_awt_type(cursor_type::SE_RESIZE),
+            CursorKind::Resize { dx: 1, dy: 1 }
+        );
+        assert_eq!(
+            CursorKind::from_awt_type(cursor_type::N_RESIZE).id(),
+            "n_resize"
+        );
+        // A direction we never emit still has a sane fallback.
+        assert_eq!(
+            CursorKind::Resize { dx: 7, dy: 7 }.awt_type(),
+            cursor_type::DEFAULT
+        );
+        assert_eq!(CursorKind::Resize { dx: 7, dy: 7 }.id(), "default");
+    }
+
+    #[test]
+    fn every_control_kind_round_trips_through_its_code() {
+        let kinds = [
+            AwtControlKind::Cursor,
+            AwtControlKind::Title,
+            AwtControlKind::ClipboardSet,
+            AwtControlKind::ClipboardRequest,
+            AwtControlKind::Beep,
+            AwtControlKind::ScreenSize,
+            AwtControlKind::ImeShow,
+            AwtControlKind::ImeHide,
+            AwtControlKind::WindowOpened,
+            AwtControlKind::WindowClosed,
+            AwtControlKind::Bye,
+        ];
+        for kind in kinds {
+            assert_eq!(AwtControlKind::from_code(kind.code()), Some(kind));
+            assert!(!kind.id().is_empty());
+        }
+        assert_eq!(AwtControlKind::from_code(0), None);
+        assert_eq!(AwtControlKind::from_code(4242), None);
+    }
+
+    #[test]
+    fn control_messages_round_trip_through_the_wire() {
+        let cases = vec![
+            AwtControl::cursor(CursorKind::Text),
+            AwtControl::title("Forge 安装程序"),
+            AwtControl::clipboard_set("seed: -4172144997902289642"),
+            AwtControl::clipboard_request(9),
+            AwtControl::beep(),
+            AwtControl::screen_size(1024, 768),
+            AwtControl::ime_show(120, 240, 18),
+            AwtControl::ime_hide(),
+            AwtControl::window_opened(3, "JOptionPane"),
+            AwtControl::window_closed(3),
+            AwtControl::bye("JVM exited"),
+        ];
+        for control in cases {
+            let wire = control.encode();
+            assert_eq!(wire.len(), CONTROL_HEADER_LEN + control.text.len());
+            let back = AwtControl::decode(&wire).expect("valid control");
+            assert_eq!(back, control);
+        }
+    }
+
+    #[test]
+    fn control_header_shares_the_frame_header_shape() {
+        // Same version offset (4) and payload-length offset (24) as `AwtFrame`,
+        // which is what lets one stream reader demultiplex both record types.
+        let wire = AwtControl::title("abc").encode();
+        assert_eq!(CONTROL_HEADER_LEN, FRAME_HEADER_LEN);
+        assert_eq!(u16::from_le_bytes([wire[4], wire[5]]), CONTROL_VERSION);
+        assert_eq!(
+            u32::from_le_bytes([wire[24], wire[25], wire[26], wire[27]]),
+            3
+        );
+        // …and a *different* magic, so neither can be parsed as the other.
+        assert_ne!(CONTROL_MAGIC, FRAME_MAGIC);
+        assert!(AwtFrame::decode(&wire).is_err());
+    }
+
+    #[test]
+    fn control_decode_rejects_every_kind_of_garbage() {
+        // Truncated header.
+        assert!(AwtControl::decode(&[]).is_err());
+        assert!(AwtControl::decode(&[0u8; CONTROL_HEADER_LEN - 1]).is_err());
+        // Wrong magic.
+        let mut wire = AwtControl::beep().encode();
+        wire[0] ^= 0xFF;
+        assert!(AwtControl::decode(&wire).is_err());
+        // Unsupported version.
+        let mut wire = AwtControl::beep().encode();
+        wire[4] = 9;
+        assert!(AwtControl::decode(&wire).is_err());
+        // Unknown kind.
+        let mut wire = AwtControl::beep().encode();
+        wire[6] = 250;
+        let err = AwtControl::decode(&wire).unwrap_err().to_string();
+        assert!(err.contains("unknown AWT control kind"), "{err}");
+        // Absurd payload length: refused *before* allocating.
+        let mut wire = AwtControl::beep().encode();
+        wire[24..28].copy_from_slice(&u32::MAX.to_le_bytes());
+        let err = AwtControl::decode(&wire).unwrap_err().to_string();
+        assert!(err.contains("limit"), "{err}");
+        // Declared longer than delivered.
+        let mut wire = AwtControl::title("abc").encode();
+        wire[24..28].copy_from_slice(&64u32.to_le_bytes());
+        assert!(AwtControl::decode(&wire).is_err());
+        // Invalid UTF-8 payload.
+        let mut wire = AwtControl::title("").encode();
+        wire[24..28].copy_from_slice(&2u32.to_le_bytes());
+        wire.extend_from_slice(&[0xFF, 0xFE]);
+        let err = AwtControl::decode(&wire).unwrap_err().to_string();
+        assert!(err.contains("UTF-8"), "{err}");
+    }
+
+    #[test]
+    fn control_json_uses_kind_specific_keys() {
+        let cursor = AwtControl::cursor(CursorKind::Hand).to_json();
+        assert_eq!(cursor["kind"], "cursor");
+        assert_eq!(cursor["cursor"], "hand");
+        assert_eq!(cursor["awt_type"], 12);
+
+        let ime = AwtControl::ime_show(10, 20, 16).to_json();
+        assert_eq!(ime["kind"], "ime_show");
+        assert_eq!(ime["x"], 10);
+        assert_eq!(ime["y"], 20);
+        assert_eq!(ime["line_height"], 16);
+
+        let screen = AwtControl::screen_size(800, 600).to_json();
+        assert_eq!(screen["width"], 800);
+        assert_eq!(screen["height"], 600);
+
+        let win = AwtControl::window_opened(4, "标题").to_json();
+        assert_eq!(win["window"], 4);
+        assert_eq!(win["text"], "标题");
+
+        let req = AwtControl::clipboard_request(11).to_json();
+        assert_eq!(req["seq"], 11);
+        assert!(req.get("text").is_none());
+    }
+
+    #[test]
+    fn cursor_kind_is_reported_only_for_cursor_messages() {
+        assert_eq!(
+            AwtControl::cursor(CursorKind::Wait).cursor_kind(),
+            Some(CursorKind::Wait)
+        );
+        assert_eq!(AwtControl::beep().cursor_kind(), None);
+    }
+
+    #[test]
+    fn control_replies_chunk_and_reassemble() {
+        for text in [
+            "",
+            "a",
+            "12345678",
+            "123456789",
+            "seed: -4172144997902289642",
+            "中文剪贴板内容，混合 ASCII 与 emoji 🙂",
+        ] {
+            let records = encode_control_reply(AwtReplyKind::Clipboard, 7, text);
+            assert!(!records.is_empty(), "an answer is always sent");
+            assert!(records.iter().all(|r| r.is_control()));
+            let (kind, seq, back) = decode_control_reply(&records).expect("reassembles");
+            assert_eq!(kind, AwtReplyKind::Clipboard);
+            assert_eq!(seq, 7);
+            assert_eq!(back, text);
+        }
+    }
+
+    #[test]
+    fn oversized_replies_are_truncated_on_a_char_boundary() {
+        // 3 bytes per char, so the cut cannot land on a boundary by luck.
+        let text = "中".repeat(MAX_REPLY_TEXT);
+        let records = encode_control_reply(AwtReplyKind::Clipboard, 1, &text);
+        let (_, _, back) = decode_control_reply(&records).expect("still valid UTF-8");
+        assert!(back.len() <= MAX_REPLY_TEXT);
+        assert!(text.starts_with(&back));
+        assert!(back.chars().all(|c| c == '中'), "no torn character");
+    }
+
+    #[test]
+    fn reply_reassembly_rejects_a_damaged_run() {
+        let mut records = encode_control_reply(AwtReplyKind::Clipboard, 3, "hello world!");
+        assert!(records.len() >= 2);
+        // Missing chunk.
+        let short = &records[..records.len() - 1];
+        assert!(decode_control_reply(short).is_err());
+        // Reordered.
+        let mut swapped = records.clone();
+        swapped.swap(0, 1);
+        assert!(decode_control_reply(&swapped).is_err());
+        // A foreign record spliced in.
+        records[1].y = 99;
+        assert!(decode_control_reply(&records).is_err());
+        // Not a control run at all.
+        assert!(decode_control_reply(&[]).is_err());
+        assert!(decode_control_reply(&[AwtEventRecord::default()]).is_err());
+        // A bogus per-chunk length.
+        let mut bad = encode_control_reply(AwtReplyKind::Pong, 0, "xy");
+        bad[0].key_char = 99;
+        assert!(decode_control_reply(&bad).is_err());
+    }
+
+    #[test]
+    fn reply_kinds_round_trip_and_control_ids_cannot_collide_with_awt() {
+        for kind in [
+            AwtReplyKind::Clipboard,
+            AwtReplyKind::ClipboardEmpty,
+            AwtReplyKind::Pong,
+        ] {
+            assert_eq!(AwtReplyKind::from_code(kind.code()), Some(kind));
+            assert!(!kind.id().is_empty());
+        }
+        assert_eq!(AwtReplyKind::from_code(0), None);
+        // Every AWT event id we can emit stays far below the reserved id, so a
+        // control record is never postable as an input event.
+        for id in [
+            event_id::KEY_TYPED,
+            event_id::KEY_PRESSED,
+            event_id::KEY_RELEASED,
+            event_id::MOUSE_CLICKED,
+            event_id::MOUSE_WHEEL,
+            event_id::COMPONENT_RESIZED,
+            event_id::FOCUS_GAINED,
+            event_id::FOCUS_LOST,
+        ] {
+            assert!(id < 3000 && id != CONTROL_EVENT_ID);
+        }
+        assert!(!AwtEventRecord::default().is_control());
+    }
 }

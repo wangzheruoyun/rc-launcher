@@ -9,6 +9,7 @@ import com.rc.launcher.ui.model.AccountRepositories
 import com.rc.launcher.ui.model.AccountRepository
 import com.rc.launcher.ui.model.DeviceCodeChallenge
 import com.rc.launcher.ui.model.MicrosoftAccount
+import com.rc.launcher.ui.model.TokenStatus
 
 /**
  * State container for the account-management screen (task 16).
@@ -45,11 +46,28 @@ class AccountViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    /** Reload the account list and reconcile the active selection. */
+    /**
+     * Reload the account list and reconcile the active selection. Any Microsoft
+     * account whose token is EXPIRING/EXPIRED is proactively healed via
+     * [AccountRepository.ensureFresh] so the displayed token status stays
+     * truthful and the active identity never silently lapses (task 16).
+     */
     suspend fun loadAccounts() {
-        val list = runCatching { repository.list() }.getOrDefault(emptyList())
-        _accounts.value = list
-        reconcileActive(list)
+        val result = runCatching { repository.list() }
+        if (result.isFailure) {
+            _error.value = result.exceptionOrNull()?.message ?: "加载账户失败"
+            return
+        }
+        val list = result.getOrDefault(emptyList())
+        val healed = list.map { acc ->
+            if (acc is MicrosoftAccount && acc.tokenStatus != TokenStatus.VALID) {
+                runCatching { repository.ensureFresh(acc.uuid) }.getOrNull() ?: acc
+            } else {
+                acc
+            }
+        }
+        _accounts.value = healed
+        reconcileActive(healed)
     }
 
     private fun reconcileActive(list: List<Account>) {
@@ -139,6 +157,18 @@ class AccountViewModel(
         } catch (e: Throwable) {
             _error.value = e.message ?: "更新令牌失败"
         }
+    }
+
+    /** Refresh every Microsoft account's token at once (toolbar action). */
+    suspend fun refreshAllMicrosoft() {
+        val microsoft = _accounts.value.filterIsInstance<MicrosoftAccount>()
+        if (microsoft.isEmpty()) return
+        var failure: String? = null
+        for (acc in microsoft) {
+            runCatching { repository.refresh(acc.uuid) }.onFailure { failure = it.message ?: "刷新令牌失败" }
+        }
+        loadAccounts()
+        failure?.let { _error.value = it }
     }
 
     /** Clear the last [error] message. */

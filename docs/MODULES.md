@@ -75,7 +75,9 @@ all native access is funnelled through `RustBridge`. Blocking JNI calls in
 * `i18n/` — `LocaleEngine` (mirrors `ThemeEngine`); `rcString()` resolves
   core catalogue strings with an Android `strings.xml` fallback.
 * `awt/` — the AWT/fakefx surface that draws the Rust-hosted desktop into a
-  Compose `Bitmap` (`AwtCanvasBridge`, `AwtWire`, `AwtInput`, …).
+  Compose `Bitmap` (`AwtCanvasBridge`, `AwtWire`, `AwtInput`, `AwtControl`, …).
+  `AwtControl` covers the control plane: the cursor shape, window titles, the
+  clipboard in both directions, the IME caret and `Toolkit.beep()`.
 * `navigation/` — `RcNavigation` routes.
 
 Contract: screens observe `ViewModel`s; `ViewModel`s call `RustBridge`; nothing

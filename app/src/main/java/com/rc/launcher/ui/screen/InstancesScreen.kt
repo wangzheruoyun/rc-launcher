@@ -22,7 +22,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.rc.launcher.ui.component.InstanceCard
 import com.rc.launcher.ui.model.dashboardOrder
-import com.rc.launcher.ui.navigation.RcRoutes
+import com.rc.launcher.ui.navigation.InstallRoute
+import com.rc.launcher.ui.navigation.InstanceDetailRoute
 import com.rc.launcher.ui.viewmodel.DashboardViewModel
 import com.rc.launcher.ui.viewmodel.LaunchState
 
@@ -56,7 +57,7 @@ fun InstancesScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         FilledTonalButton(
-            onClick = { navController?.navigate(RcRoutes.INSTALL) },
+            onClick = { navController?.navigate(InstallRoute) },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Icon(Icons.Filled.Add, contentDescription = null)
@@ -72,7 +73,7 @@ fun InstancesScreen(
                     instance = inst,
                     launching = inst.id == launchingId,
                     onLaunch = { dashboard.launch(inst.id) },
-                    onOpen = { navController?.navigate(RcRoutes.instanceDetail(inst.id)) },
+                    onOpen = { navController?.navigate(InstanceDetailRoute(inst.id)) },
                 )
             }
         }

@@ -78,6 +78,12 @@ class SharedPreferencesSettingsRepository(
             gameFilesRoot = str(KEY_DIR_ROOT, s.gameFilesRoot),
             autoCleanLogs = bool(KEY_AUTO_CLEAN, s.autoCleanLogs),
             keepCrashReports = bool(KEY_KEEP_CRASH, s.keepCrashReports),
+            rendererOptions = RendererPluginConfig(
+                zinkVulkanDriver = str(KEY_RENDERER_ZINK_DRIVER, s.rendererOptions.zinkVulkanDriver),
+                angleBackend = str(KEY_RENDERER_ANGLE_BACKEND, s.rendererOptions.angleBackend),
+                gl4esNoSrgb = bool(KEY_RENDERER_GL4ES_NOSRGB, s.rendererOptions.gl4esNoSrgb),
+                virglServer = str(KEY_RENDERER_VIRGL_SERVER, s.rendererOptions.virglServer),
+            ),
         ).sanitized()
     }
 
@@ -114,6 +120,14 @@ class SharedPreferencesSettingsRepository(
             putString(KEY_DIR_ROOT, settings.gameFilesRoot)
             putBoolean(KEY_AUTO_CLEAN, settings.autoCleanLogs)
             putBoolean(KEY_KEEP_CRASH, settings.keepCrashReports)
+            putString(KEY_RENDERER_ZINK_DRIVER, settings.rendererOptions.zinkVulkanDriver)
+            putString(KEY_RENDERER_ANGLE_BACKEND, settings.rendererOptions.angleBackend)
+            putBoolean(KEY_RENDERER_GL4ES_NOSRGB, settings.rendererOptions.gl4esNoSrgb)
+            if (settings.rendererOptions.virglServer.isBlank()) {
+                remove(KEY_RENDERER_VIRGL_SERVER)
+            } else {
+                putString(KEY_RENDERER_VIRGL_SERVER, settings.rendererOptions.virglServer)
+            }
         }.apply()
     }
 
@@ -142,6 +156,10 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_DIR_ROOT = "game_files_root"
         private const val KEY_AUTO_CLEAN = "auto_clean_logs"
         private const val KEY_KEEP_CRASH = "keep_crash_reports"
+        private const val KEY_RENDERER_ZINK_DRIVER = "renderer_zink_vulkan_driver"
+        private const val KEY_RENDERER_ANGLE_BACKEND = "renderer_angle_backend"
+        private const val KEY_RENDERER_GL4ES_NOSRGB = "renderer_gl4es_nosrgb"
+        private const val KEY_RENDERER_VIRGL_SERVER = "renderer_virgl_server"
     }
 }
 

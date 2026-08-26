@@ -62,6 +62,16 @@ import com.rc.launcher.ui.viewmodel.LoginState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.OpenInBrowser
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import android.content.Intent
+import android.net.Uri
+import kotlinx.coroutines.delay
+import com.rc.launcher.ui.model.formatDuration
+import com.rc.launcher.ui.model.remainingSecs
 
 /**
  * Account-management screen (task 16).
@@ -91,6 +101,8 @@ fun AccountsScreen(
 
     val scope = rememberCoroutineScope()
     var showAddOffline by remember { mutableStateOf(false) }
+    var previewAccount by remember { mutableStateOf<Account?>(null) }
+    var pendingRemove by remember { mutableStateOf<Account?>(null) }
 
     // Load the account list as soon as the screen appears (the ViewModel keeps
     // the list in a StateFlow; this just seeds it from the repository).
@@ -102,17 +114,22 @@ fun AccountsScreen(
         contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 24.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("账户管理", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    "管理正版 (Microsoft) 与离线账号，查看令牌状态并切换当前登录身份。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("账户管理", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "管理正版 (Microsoft) 与离线账户，查看令牌状态并切换当前登录身份。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = { scope.launch(Dispatchers.IO) { viewModel.refreshAllMicrosoft() } }) {
+                    Icon(Icons.Filled.Refresh, contentDescription = "刷新所有令牌")
+                }
             }
         }
 
-        item { activeAccount?.let { ActiveAccountCard(it) } }
+        item { activeAccount?.let { ActiveAccountCard(account = it, onAvatarClick = { previewAccount = it }) } }
 
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -166,8 +183,9 @@ fun AccountsScreen(
                     account = account,
                     isActive = account.uuid == activeId,
                     onSelect = { viewModel.selectAccount(account.uuid) },
-                    onRemove = { scope.launch(Dispatchers.IO) { viewModel.removeAccount(account.uuid) } },
+                    onRemove = { pendingRemove = account },
                     onRefresh = { scope.launch(Dispatchers.IO) { viewModel.refreshAccount(account.uuid) } },
+                    onAvatarClick = { previewAccount = account },
                 )
             }
         }
@@ -198,6 +216,21 @@ fun AccountsScreen(
             onDismiss = { showAddOffline = false },
         )
     }
+
+    previewAccount?.let { acct ->
+        SkinPreviewDialog(account = acct, onDismiss = { previewAccount = null })
+    }
+
+    pendingRemove?.let { acc ->
+        ConfirmRemoveDialog(
+            account = acc,
+            onConfirm = {
+                scope.launch(Dispatchers.IO) { viewModel.removeAccount(acc.uuid) }
+                pendingRemove = null
+            },
+            onDismiss = { pendingRemove = null },
+        )
+    }
 }
 
 // ============================================================================
@@ -205,14 +238,17 @@ fun AccountsScreen(
 // ============================================================================
 
 @Composable
-private fun ActiveAccountCard(account: Account) {
+private fun ActiveAccountCard(
+    account: Account,
+    onAvatarClick: () -> Unit,
+) {
     Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SkinAvatar(account.uuid, Modifier.size(56.dp).clip(CircleShape))
+            SkinAvatar(account.uuid, Modifier.size(56.dp).clip(CircleShape), onClick = onAvatarClick)
             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     "当前登录",
@@ -221,6 +257,14 @@ private fun ActiveAccountCard(account: Account) {
                 )
                 Text(account.username.ifBlank { "(无名)" }, style = MaterialTheme.typography.titleLarge)
                 Text(account.kind.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (account is MicrosoftAccount) {
+                    TokenBadge(account.tokenStatus)
+                    Text(
+                        "令牌剩余：${formatDuration(account.remainingSecs)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -233,6 +277,7 @@ private fun AccountRow(
     onSelect: () -> Unit,
     onRemove: () -> Unit,
     onRefresh: () -> Unit,
+    onAvatarClick: () -> Unit,
 ) {
     Surface(
         tonalElevation = if (isActive) 3.dp else 1.dp,
@@ -248,7 +293,7 @@ private fun AccountRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                SkinAvatar(account.uuid, Modifier.size(48.dp).clip(CircleShape))
+                SkinAvatar(account.uuid, Modifier.size(48.dp).clip(CircleShape), onClick = onAvatarClick)
                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(account.username.ifBlank { "(无名)" }, style = MaterialTheme.typography.titleMedium)
@@ -265,7 +310,14 @@ private fun AccountRow(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         KindBadge(account.kind)
-                        if (account is MicrosoftAccount) TokenBadge(account.tokenStatus)
+                        if (account is MicrosoftAccount) {
+                            TokenBadge(account.tokenStatus)
+                            Text(
+                                "剩余 ${formatDuration(account.remainingSecs)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
                 IconButton(onClick = onRemove) {
@@ -353,7 +405,11 @@ private fun EmptyAccounts() {
 // ============================================================================
 
 @Composable
-private fun SkinAvatar(uuid: String, modifier: Modifier = Modifier) {
+private fun SkinAvatar(
+    uuid: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     var bitmap by remember(uuid) { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(uuid) {
         launch(Dispatchers.IO) {
@@ -369,10 +425,11 @@ private fun SkinAvatar(uuid: String, modifier: Modifier = Modifier) {
         }
     }
     val bmp = bitmap
+    val decorated = if (onClick != null) modifier.clickable { onClick() } else modifier
     if (bmp != null) {
-        Image(bitmap = bmp, contentDescription = null, modifier = modifier)
+        Image(bitmap = bmp, contentDescription = null, modifier = decorated)
     } else {
-        Surface(modifier = modifier, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+        Surface(modifier = decorated, shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = if (uuid.isEmpty()) "?" else uuid.first().uppercase(),
@@ -395,6 +452,19 @@ private fun MicrosoftLoginDialog(
     onDismiss: () -> Unit,
 ) {
     val challenge = (state as? LoginState.AwaitingDeviceCode)?.challenge
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    // Live countdown to the device-code expiry so the user can see how much time
+    // is left to authenticate in the browser (task 16).
+    var remaining by remember(challenge?.userCode) { mutableStateOf(challenge?.expiresIn ?: 0L) }
+    LaunchedEffect(challenge?.userCode) {
+        while (remaining > 0) {
+            delay(1000)
+            remaining -= 1
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -432,11 +502,23 @@ private fun MicrosoftLoginDialog(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                Text(
-                                    "验证码",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        "验证码",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    )
+                                    IconButton(onClick = { clipboard.setText(AnnotatedString(challenge.userCode)) }) {
+                                        Icon(
+                                            Icons.Filled.ContentCopy,
+                                            contentDescription = "复制验证码",
+                                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        )
+                                    }
+                                }
                                 Text(
                                     challenge.userCode,
                                     style = MaterialTheme.typography.headlineSmall,
@@ -447,7 +529,19 @@ private fun MicrosoftLoginDialog(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 )
+                                Text(
+                                    "有效期剩余：${formatDuration(remaining)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                )
                             }
+                        }
+                        OutlinedButton(
+                            onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(challenge.verificationUrl))) } },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
+                            Text("在浏览器中打开")
                         }
                         Text(
                             "在浏览器中打开上述网址并输入验证码，然后返回此处点击“我已登录”。",
@@ -462,6 +556,65 @@ private fun MicrosoftLoginDialog(
 }
 
 @Composable
+private fun SkinPreviewDialog(
+    account: Account,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        title = { Text(account.username.ifBlank { "(无名)" }) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                SkinAvatar(account.uuid, Modifier.size(120.dp).clip(CircleShape))
+                KindBadge(account.kind)
+                if (account is MicrosoftAccount) {
+                    TokenBadge(account.tokenStatus)
+                    Text(
+                        "令牌剩余：${formatDuration(account.remainingSecs)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                val skinUrl = "https://mc-heads.net/avatar/${account.uuid}/256?overlay"
+                OutlinedButton(
+                    onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(skinUrl))) } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
+                    Text("在浏览器查看皮肤")
+                }
+            }
+        },
+    )
+}
+
+@Composable
+@Composable
+private fun ConfirmRemoveDialog(
+    account: Account,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = { Button(onClick = onConfirm) { Text("删除") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        title = { Text("删除账户") },
+        text = {
+            Text(
+                "确定要删除账户「${account.username.ifBlank { "(无名)" }}」吗？此操作不可撤销。",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+    )
+}
+
 private fun AddOfflineDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,

@@ -6,6 +6,7 @@ import com.rc.launcher.ui.model.InstanceRepository
 import com.rc.launcher.ui.model.ModLoader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -68,6 +69,30 @@ class InstanceDetailViewModelTest {
         assertEquals("/sdcard/games/x", vm.instance.value?.customGameDir)
         vm.setGameDirectoryType(GameDirectoryType.ISOLATED)
         assertNull(vm.instance.value?.customGameDir)
+    }
+
+    @Test
+    fun duplicate_createsCloneAndKeepsOriginal() {
+        val vm = InstanceDetailViewModel()
+        vm.load("fabric-1.20.1")
+        val newId = vm.duplicate()
+        assertNotNull(newId)
+        // original stays loaded & untouched
+        assertEquals("fabric-1.20.1", vm.instance.value?.id)
+        // clone exists in repository with copied settings
+        val clone = InstanceRepository.getById(newId!!)
+        assertNotNull(clone)
+        assertEquals("Fabric 整合包 副本", clone?.name)
+        assertEquals(ModLoader.FABRIC, clone?.modLoader)
+        assertEquals(0L, clone?.lastPlayed)
+        // both original and clone are present
+        assertEquals(2, InstanceRepository.instances.value.size)
+    }
+
+    @Test
+    fun duplicate_returnsNullWhenNothingLoaded() {
+        val vm = InstanceDetailViewModel()
+        assertNull(vm.duplicate())
     }
 
     @Test

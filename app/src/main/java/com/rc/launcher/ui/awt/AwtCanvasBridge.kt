@@ -49,6 +49,22 @@ interface AwtCanvasBridge {
 
     /** Queued AWT records for a Kotlin-side transport (usually unused). */
     fun drainEvents(): ByteArray
+
+    /**
+     * Take the control messages the JVM sent (cursor shape, window title,
+     * clipboard hand-off / request, IME, beep) plus the current projection.
+     *
+     * One call per UI frame, next to [poll]: the messages carry side effects that
+     * must fire exactly once (push to the Android clipboard, buzz, pop the soft
+     * keyboard), the projection is what the UI renders.
+     */
+    fun drainControl(): AwtControlBatch
+
+    /** Answer the control plane (clipboard contents, liveness, reset). */
+    fun control(request: AwtControlRequest): AwtControlResult
+
+    /** Feed one encoded `RCAC` control message in (self-test / Kotlin transport). */
+    fun submitControl(message: ByteArray): Boolean
 }
 
 /** Everything the UI can decide when opening a session. */
@@ -186,6 +202,20 @@ class RustAwtCanvasBridge : AwtCanvasBridge {
     override fun drainEvents(): ByteArray =
         runCatching { RustBridge.awtDrainEvents() }.getOrDefault(ByteArray(0))
 
+    override fun drainControl(): AwtControlBatch =
+        runCatching { AwtControlBatch.parse(RustBridge.awtDrainControl()) }
+            .getOrElse { AwtControlBatch.failed(nativeError(it)) }
+
+    override fun control(request: AwtControlRequest): AwtControlResult =
+        runCatching { AwtControlResult.parse(RustBridge.awtControl(request.toJson())) }
+            .getOrElse { AwtControlResult(error = nativeError(it)) }
+
+    override fun submitControl(message: ByteArray): Boolean = runCatching {
+        val json = RustBridge.awtSubmitControl(message)
+        (com.rc.launcher.ui.model.json.parseJson(json) as? JsonValue.Obj)
+            ?.bool("accepted") ?: false
+    }.getOrDefault(false)
+
     private fun parseInfo(call: () -> String): AwtSessionInfo =
         runCatching { AwtSessionInfo.parse(call()) }
             .getOrElse { AwtSessionInfo.failed(nativeError(it)) }
@@ -220,6 +250,15 @@ class FakeAwtCanvasBridge(
     /** Every event handed to [input], in order (assert on this in tests). */
     val received = mutableListOf<AwtInputEvent>()
 
+    /** Control messages waiting for [drainControl]. */
+    private val pendingControl = mutableListOf<AwtControlMessage>()
+
+    /** Projection the fake keeps in step with [submitControl]. */
+    private var controlState: AwtControlState = AwtControlState.EMPTY
+
+    /** Every clipboard answer the UI produced (assert on this in tests). */
+    val clipboardAnswers = mutableListOf<String?>()
+
     /** How many times [poll] ran. */
     var polls = 0
         private set
@@ -238,6 +277,9 @@ class FakeAwtCanvasBridge(
         accepted = 0
         rejected = 0
         received.clear()
+        pendingControl.clear()
+        clipboardAnswers.clear()
+        controlState = AwtControlState.EMPTY
         polls = 0
         return info()
     }
@@ -286,6 +328,7 @@ class FakeAwtCanvasBridge(
         }
         request.scaleMode?.let { scaleMode = it }
         request.focus?.let { focused = it }
+        clampCaretToDesktop()
         if (request.clear || request.fillArgb != null) {
             val colour = request.fillArgb ?: AwtWire.OPAQUE_BLACK
             pixels.fill(colour)
@@ -363,6 +406,101 @@ class FakeAwtCanvasBridge(
     }
 
     override fun drainEvents(): ByteArray = ByteArray(0)
+
+    override fun drainControl(): AwtControlBatch {
+        if (session == null) return AwtControlBatch.failed("no AWT session is open")
+        val messages = pendingControl.toList()
+        pendingControl.clear()
+        return AwtControlBatch(
+            messages = messages,
+            state = controlState,
+            clipboardRequests = controlState.clipboardRequests,
+        )
+    }
+
+    override fun control(request: AwtControlRequest): AwtControlResult {
+        if (session == null) return AwtControlResult(error = "no AWT session is open")
+        var queued = 0
+        if (request.clipboard != null || request.clipboardEmpty) {
+            val answered = if (request.clipboardSeq != null) 1 else controlState.clipboardRequests
+            queued += AwtControlWire.encodeReply(
+                if (request.clipboardEmpty) AwtReplyKind.CLIPBOARD_EMPTY else AwtReplyKind.CLIPBOARD,
+                request.clipboardSeq ?: 0,
+                request.clipboard.orEmpty(),
+            ).size * maxOf(1, answered)
+            controlState = controlState.copy(
+                clipboardRequests = (controlState.clipboardRequests - maxOf(1, answered))
+                    .coerceAtLeast(0),
+            )
+            clipboardAnswers.add(request.clipboard)
+        }
+        if (request.pong != null) queued += 1
+        if (request.reset) {
+            controlState = AwtControlState.EMPTY
+            pendingControl.clear()
+        }
+        return AwtControlResult(
+            queued = queued,
+            clipboardRequests = controlState.clipboardRequests,
+            state = controlState,
+        )
+    }
+
+    /**
+     * Keep the reported Swing caret inside the desktop, exactly as the core does.
+     *
+     * A caret is a *desktop* coordinate, so shrinking the desktop can leave it
+     * outside the picture — and the UI maps it straight through the viewport,
+     * which would anchor the IME on the letterbox bars.
+     */
+    private fun clampCaretToDesktop() {
+        val caret = controlState.caret ?: return
+        controlState = controlState.copy(
+            caret = AwtImeCaret(
+                x = caret.x.coerceIn(0, maxOf(0, screenW - 1)),
+                y = caret.y.coerceIn(0, maxOf(0, screenH - 1)),
+                lineHeight = caret.lineHeight.coerceIn(0, screenH),
+            ),
+        )
+    }
+
+    override fun submitControl(message: ByteArray): Boolean {
+        if (session == null) return false
+        val parsed = AwtControlWire.decode(message) ?: return false
+        pendingControl.add(parsed)
+        controlState = when (parsed.kind) {
+            AwtControlKind.CURSOR -> controlState.copy(cursor = parsed.cursor)
+            AwtControlKind.TITLE -> controlState.copy(title = parsed.text.ifEmpty { null })
+            AwtControlKind.CLIPBOARD_SET -> controlState.copy(clipboardOut = parsed.text)
+            AwtControlKind.CLIPBOARD_REQUEST ->
+                controlState.copy(clipboardRequests = controlState.clipboardRequests + 1)
+            AwtControlKind.BEEP -> controlState.copy(beeps = controlState.beeps + 1)
+            AwtControlKind.IME_SHOW ->
+                controlState.copy(caret = parsed.caret, wantsKeyboard = true)
+            AwtControlKind.IME_HIDE -> controlState.copy(caret = null, wantsKeyboard = false)
+            AwtControlKind.SCREEN_SIZE -> {
+                screenW = parsed.width.coerceIn(1, AwtWire.MAX_CANVAS_DIM)
+                screenH = parsed.height.coerceIn(1, AwtWire.MAX_CANVAS_DIM)
+                pixels = IntArray(screenW * screenH) { AwtWire.OPAQUE_BLACK }
+                dirty = AwtRect.whole(screenW, screenH)
+                clampCaretToDesktop()
+                controlState
+            }
+            AwtControlKind.WINDOW_OPENED -> controlState.copy(
+                windows = controlState.windows + AwtWindowInfo(parsed.window, parsed.text),
+                title = parsed.text.ifEmpty { controlState.title },
+            )
+            AwtControlKind.WINDOW_CLOSED -> controlState.copy(
+                windows = controlState.windows.filterNot { it.id == parsed.window },
+            )
+            AwtControlKind.BYE -> controlState.copy(
+                bye = parsed.text.ifEmpty { "the AWT bridge closed" },
+                caret = null,
+                wantsKeyboard = false,
+            )
+        }
+        return true
+    }
 }
 
 /**

@@ -61,12 +61,15 @@ pub use args::{
     Substitutions,
 };
 pub use awt::{
-    modifier_mask_for_vk, now_millis, vk_for_key, AwtBackend, AwtBridge, AwtCanvas, AwtEvent,
-    AwtEventRecord, AwtFrame, AwtInputTranslator, AwtNativeLib, AwtNativeSet, AwtTransport,
-    CacioArtifact, CacioBundle, CacioRole, CanvasStats, Damage, MouseButton, PixelFormat,
-    Placement, PointerPhase, Rect, ScaleMode, Viewport, AWT_EVENTS_CHANNEL, AWT_FRAMES_CHANNEL,
-    AWT_NATIVES, AWT_PROP_EVENTS, AWT_PROP_FRAMES, AWT_PROP_PROTOCOL, AWT_TRANSPORT_PROTOCOL,
-    CACIO17_MODULE_FLAGS, EVENT_RECORD_LEN, FRAME_HEADER_LEN, MAX_CANVAS_DIM,
+    cursor_type, decode_control_reply, encode_control_reply, modifier_mask_for_vk, now_millis,
+    vk_for_key, AwtBackend, AwtBridge, AwtCanvas, AwtControl, AwtControlKind, AwtEvent,
+    AwtEventRecord, AwtFrame, AwtInputTranslator, AwtNativeLib, AwtNativeSet, AwtReplyKind,
+    AwtTransport, CacioArtifact, CacioBundle, CacioRole, CanvasStats, CursorKind, Damage,
+    MouseButton, PixelFormat, Placement, PointerPhase, Rect, ScaleMode, Viewport,
+    AWT_EVENTS_CHANNEL, AWT_FRAMES_CHANNEL, AWT_NATIVES, AWT_PROP_EVENTS, AWT_PROP_FRAMES,
+    AWT_PROP_PROTOCOL, AWT_TRANSPORT_PROTOCOL, CACIO17_MODULE_FLAGS, CONTROL_CHUNK_BYTES,
+    CONTROL_EVENT_ID, CONTROL_HEADER_LEN, CONTROL_MAGIC, CONTROL_VERSION, EVENT_RECORD_LEN,
+    FRAME_HEADER_LEN, MAX_CANVAS_DIM, MAX_CONTROL_TEXT, MAX_REPLY_TEXT,
 };
 pub use awt_host::{
     AwtHost, LinkState, LinkStats, PollFd, CHANNEL_MODE, DEFAULT_FLUSH_INTERVAL,
@@ -74,12 +77,14 @@ pub use awt_host::{
 };
 pub use classpath::{Classpath, ClasspathBuilder, ClasspathPolicy};
 pub use command::{CommandBuilder, LaunchCommand};
-pub use crash::{diagnose, CrashCategory, CrashReport};
+pub use crash::{diagnose, CrashCategory, CrashReport, CrashSeverity};
 pub use engine::{LaunchEngine, PreflightChecks, PreparedLaunch};
 pub use env::{build_env, jre_lib_dirs, library_path, LaunchEnv, PATH_SEP};
 pub use fakefx::{
-    AwtEventWriter, AwtFrameStream, AwtSession, AwtSessionConfig, FrameRead, SessionStats,
-    DEFAULT_CLICK_SLOP, DEFAULT_MAX_PENDING_EVENTS, MAX_FRAME_BYTES,
+    AwtControlState, AwtEventWriter, AwtFrameStream, AwtSession, AwtSessionConfig, AwtWindowInfo,
+    FrameRead, ImeCaret, SessionStats, DEFAULT_CLICK_SLOP, DEFAULT_MAX_PENDING_CONTROLS,
+    DEFAULT_MAX_PENDING_EVENTS, MAX_FRAME_BYTES, MAX_PENDING_CLIPBOARD_REQUESTS,
+    MAX_TRACKED_WINDOWS,
 };
 pub use options::{
     AccountProfile, LaunchOptions, LwjglVersion, MemoryOptions, QuickPlay, Renderer, ServerAddress,
@@ -89,7 +94,8 @@ pub use process::{
     GameExit, GameProcess, LogBuffer, LogLine, LogStream, SpawnSpec, DEFAULT_STOP_GRACE,
 };
 pub use render::{
-    gl_translation_env, LwjglNativeBundle, LwjglNativeLib, PerfProfile, RenderIntegration,
-    LWJGL_3_3_3_NATIVES, LWJGL_3_4_1_NATIVES,
+    gl_translation_env, renderer_native_manifest, LwjglNativeBundle, LwjglNativeLib, PerfProfile,
+    RenderIntegration, RendererNativeBundle, RendererNativeLib, LWJGL_3_3_3_NATIVES,
+    LWJGL_3_4_1_NATIVES,
 };
 pub use runtime_assets::AppRuntime;

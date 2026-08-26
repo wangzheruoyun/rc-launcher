@@ -90,6 +90,13 @@ data class GameInstance(
 
     /** Human readable Java requirement, or "自动". */
     val javaLabel: String get() = javaVersion?.let { "Java $it" } ?: "自动"
+
+    /**
+     * Whether this instance carries a concrete game version and can therefore
+     * be launched. A blank [version] (e.g. a half-created draft) is not
+     * launchable and should be hidden from launch affordances.
+     */
+    val isPlayable: Boolean get() = version.isNotBlank()
 }
 
 /** Instances the user has launched at least once, most-recent first. */
@@ -140,3 +147,16 @@ fun GameInstance.effectiveGameDir(baseDir: String): String = when (gameDirectory
     GameDirectoryType.ISOLATED -> "$baseDir/instances/$id"
     GameDirectoryType.CUSTOM -> (customGameDir?.takeIf { it.isNotBlank() } ?: "$baseDir/instances/$id")
 }
+
+/**
+ * Produce a clone of this instance with a fresh [newId] and an optional
+ * [overrideName]. All version-isolation and launch settings are preserved, but
+ * per-run state ([lastPlayed]) is reset so the copy starts fresh. This backs
+ * the "duplicate instance" action of the detail screen (task 13).
+ */
+fun GameInstance.duplicate(newId: String, overrideName: String? = null): GameInstance =
+    copy(
+        id = newId,
+        name = overrideName?.takeIf { it.isNotBlank() } ?: "$name 副本",
+        lastPlayed = 0L,
+    )

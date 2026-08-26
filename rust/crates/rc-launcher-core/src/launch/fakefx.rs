@@ -44,9 +44,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{RcError, RcResult};
 use crate::launch::awt::{
-    event_id, now_millis, AwtBackend, AwtCanvas, AwtEvent, AwtEventRecord, AwtFrame,
-    AwtInputTranslator, MouseButton, PointerPhase, Rect, ScaleMode, Viewport, EVENT_RECORD_LEN,
-    FRAME_HEADER_LEN, MAX_CANVAS_DIM, OPAQUE_BLACK,
+    encode_control_reply, event_id, now_millis, AwtBackend, AwtCanvas, AwtControl, AwtControlKind,
+    AwtEvent, AwtEventRecord, AwtFrame, AwtInputTranslator, AwtReplyKind, CursorKind, MouseButton,
+    PointerPhase, Rect, ScaleMode, Viewport, CONTROL_MAGIC, EVENT_RECORD_LEN, FRAME_HEADER_LEN,
+    MAX_CANVAS_DIM, MAX_CONTROL_TEXT, OPAQUE_BLACK,
 };
 use crate::launch::options::WindowSize;
 use crate::runtime::JavaVersion;
@@ -67,6 +68,21 @@ pub const MAX_FRAME_BYTES: usize =
 /// Default click tolerance in desktop pixels (a finger always jitters).
 pub const DEFAULT_CLICK_SLOP: u32 = 8;
 
+/// Default bound for the inbound control queue (JVM → UI).
+///
+/// Control messages are rare (a cursor change, a dialog opening) but the UI may
+/// poll them at its own pace, so the queue is bounded like the event outbox: an
+/// idle UI can never make the pump grow unbounded.
+pub const DEFAULT_MAX_PENDING_CONTROLS: usize = 256;
+
+/// Most windows we track for the diagnostics panel. cacio composites everything
+/// into one screen anyway, so this is bookkeeping, not a scene graph.
+pub const MAX_TRACKED_WINDOWS: usize = 32;
+
+/// Most unanswered clipboard requests we remember. A JVM that asks faster than
+/// the UI answers is misbehaving; keeping the newest few is the useful policy.
+pub const MAX_PENDING_CLIPBOARD_REQUESTS: usize = 8;
+
 // ===========================================================================
 // Configuration
 // ===========================================================================
@@ -85,6 +101,8 @@ pub struct AwtSessionConfig {
     pub click_slop: u32,
     /// Upper bound for the outbound event queue.
     pub max_pending_events: usize,
+    /// Upper bound for the inbound control queue.
+    pub max_pending_controls: usize,
     /// Which caciocavallo backend the game JVM runs (reporting only).
     pub backend: AwtBackend,
 }
@@ -97,6 +115,7 @@ impl Default for AwtSessionConfig {
             scale_mode: ScaleMode::default(),
             click_slop: DEFAULT_CLICK_SLOP,
             max_pending_events: DEFAULT_MAX_PENDING_EVENTS,
+            max_pending_controls: DEFAULT_MAX_PENDING_CONTROLS,
             backend: AwtBackend::Headless,
         }
     }
@@ -135,6 +154,7 @@ impl AwtSessionConfig {
             .click_slop
             .min(self.screen.width.max(self.screen.height));
         self.max_pending_events = self.max_pending_events.clamp(64, 1 << 20);
+        self.max_pending_controls = self.max_pending_controls.clamp(8, 1 << 16);
         self
     }
 }
@@ -167,6 +187,115 @@ pub struct SessionStats {
     pub screen_resizes: u64,
     /// How often the Compose surface changed size.
     pub surface_resizes: u64,
+    /// Control messages accepted from the JVM.
+    pub controls_accepted: u64,
+    /// Control messages rejected (unknown / inconsistent arguments).
+    pub controls_rejected: u64,
+    /// Control messages shed because the UI stopped draining them.
+    pub controls_dropped: u64,
+    /// How often the canvas adopted the screen size the JVM announced.
+    pub screens_adopted: u64,
+    /// Clipboard answers handed back to the JVM.
+    pub clipboard_answers: u64,
+}
+
+// ===========================================================================
+// Control-plane state (task 18: cursor / title / clipboard / IME / windows)
+// ===========================================================================
+
+/// Where a focused text component wants its input, in *desktop* pixels.
+///
+/// The Compose layer maps this through the same [`Viewport`] the pixels use, so
+/// the soft keyboard / IME candidate window lands exactly under the Swing caret
+/// even with letterboxing and scaling in the way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImeCaret {
+    /// Desktop x of the caret.
+    pub x: i32,
+    /// Desktop y of the caret (its baseline).
+    pub y: i32,
+    /// Line height in desktop pixels (0 when the JVM did not say).
+    pub line_height: i32,
+}
+
+/// One window / dialog cacio told us about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AwtWindowInfo {
+    /// Opaque id chosen by the JVM-side bridge.
+    pub id: i32,
+    /// Window title (may be empty).
+    pub title: String,
+}
+
+/// Everything the JVM told us that is *not* a pixel.
+///
+/// This is a last-write-wins projection of the control stream: the UI can render
+/// it directly (cursor shape, window title, whether a keyboard is wanted) without
+/// replaying the message history, while [`AwtSession::drain_control`] still hands
+/// out the individual messages for the side effects that need them (put this text
+/// on the Android clipboard, buzz once, …).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AwtControlState {
+    /// Pointer shape the JVM last asked for.
+    pub cursor: CursorKind,
+    /// Title of the active window, if any.
+    pub title: Option<String>,
+    /// Caret of the focused text component (`None` = nothing wants text).
+    pub ime: Option<ImeCaret>,
+    /// Text the JVM copied and the UI has not yet pushed to Android.
+    pub clipboard_out: Option<String>,
+    /// Windows currently open (newest last).
+    pub windows: Vec<AwtWindowInfo>,
+    /// `Toolkit.beep()` count (the UI turns new beeps into a haptic tick).
+    pub beeps: u64,
+    /// Why the JVM-side bridge said goodbye (`None` = still alive).
+    pub bye: Option<String>,
+    /// Unanswered clipboard requests, oldest first.
+    pub clipboard_requests: VecDeque<u32>,
+}
+
+impl AwtControlState {
+    /// Whether the UI should be offering a soft keyboard.
+    pub fn wants_keyboard(&self) -> bool {
+        self.ime.is_some()
+    }
+
+    /// JSON snapshot for the FFI / diagnostics panel.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "cursor": self.cursor.id(),
+            "cursor_awt_type": self.cursor.awt_type(),
+            "title": self.title,
+            "ime": self.ime.map(|c| serde_json::json!({
+                "x": c.x,
+                "y": c.y,
+                "line_height": c.line_height,
+            })),
+            "wants_keyboard": self.wants_keyboard(),
+            "clipboard_out": self.clipboard_out,
+            "clipboard_requests": self.clipboard_requests.len(),
+            "windows": self.windows,
+            "window_count": self.windows.len(),
+            "beeps": self.beeps,
+            "bye": self.bye,
+        })
+    }
+}
+
+/// Truncate `text` to [`MAX_CONTROL_TEXT`] bytes on a character boundary.
+///
+/// The wire decoder already enforces the bound, but a control message can also
+/// be built in-process (FFI self-test, Kotlin-owned transport), and a title is
+/// eventually handed to a `TextView`: clamp once, here.
+fn clamp_control_text(text: &str) -> String {
+    if text.len() <= MAX_CONTROL_TEXT {
+        return text.to_string();
+    }
+    let mut cut = MAX_CONTROL_TEXT;
+    while cut > 0 && !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    text[..cut].to_string()
 }
 
 // ===========================================================================
@@ -187,6 +316,10 @@ pub struct AwtSession {
     stats: SessionStats,
     focused: bool,
     opened_at_ms: u64,
+    /// Last-write-wins projection of the control stream (cursor, title, IME, …).
+    control: AwtControlState,
+    /// Control messages the UI has not drained yet (bounded).
+    control_inbox: VecDeque<AwtControl>,
     /// Recycled RGBA framebuffers for the render hot path (task 25 — object
     /// pool so the Compose blit does not allocate a fresh `Vec<u8>` per frame).
     frame_pool: BufPool,
@@ -248,6 +381,8 @@ impl AwtSession {
             stats: SessionStats::default(),
             focused: true,
             opened_at_ms: now_millis(),
+            control: AwtControlState::default(),
+            control_inbox: VecDeque::new(),
             config,
             frame_pool: BufPool::new(),
         })
@@ -325,6 +460,7 @@ impl AwtSession {
         self.canvas.resize(next.width, next.height)?;
         self.config.screen = next;
         self.stats.screen_resizes += 1;
+        self.clamp_ime_to_canvas();
         // Any in-flight gesture refers to the old geometry: drop it.
         let releases = self.translator.release_all();
         self.enqueue(releases);
@@ -593,6 +729,142 @@ impl AwtSession {
         self.outbox.clear();
     }
 
+    // ---- Control plane (JVM -> UI, and the answers back) -------------------
+
+    /// Accept one control message from the JVM bridge.
+    ///
+    /// The message is applied to [`AwtSession::control`] *and* queued for
+    /// [`AwtSession::drain_control`], because the two serve different needs: the
+    /// UI renders the projection every frame, while side effects (push this text
+    /// to the Android clipboard, buzz once, pop the keyboard) must happen exactly
+    /// once.
+    ///
+    /// An inconsistent message (e.g. a zero-sized managed screen) is rejected and
+    /// counted; it never poisons the projection and never ends the link.
+    pub fn submit_control(&mut self, control: &AwtControl) -> RcResult<()> {
+        if let Err(e) = self.apply_control(control) {
+            self.stats.controls_rejected += 1;
+            return Err(e);
+        }
+        self.stats.controls_accepted += 1;
+        if self.control_inbox.len() >= self.config.max_pending_controls {
+            self.shed_control();
+        }
+        self.control_inbox.push_back(control.clone());
+        Ok(())
+    }
+
+    /// Accept one encoded (`RCAC`) control message.
+    pub fn submit_control_bytes(&mut self, bytes: &[u8]) -> RcResult<()> {
+        match AwtControl::decode(bytes) {
+            Ok(control) => self.submit_control(&control),
+            Err(e) => {
+                self.stats.controls_rejected += 1;
+                Err(e)
+            }
+        }
+    }
+
+    /// Take the queued control messages (one call per UI frame).
+    pub fn drain_control(&mut self) -> Vec<AwtControl> {
+        self.control_inbox.drain(..).collect()
+    }
+
+    /// How many control messages are waiting for the UI.
+    pub fn pending_controls(&self) -> usize {
+        self.control_inbox.len()
+    }
+
+    /// The live control projection.
+    pub fn control(&self) -> &AwtControlState {
+        &self.control
+    }
+
+    /// Pointer shape the JVM last asked for.
+    pub fn cursor(&self) -> CursorKind {
+        self.control.cursor
+    }
+
+    /// Title of the active AWT window, if the bridge reported one.
+    pub fn window_title(&self) -> Option<&str> {
+        self.control.title.as_deref()
+    }
+
+    /// Caret of the focused text component, in desktop pixels.
+    pub fn ime_caret(&self) -> Option<ImeCaret> {
+        self.control.ime
+    }
+
+    /// Caret of the focused text component, mapped into *surface* pixels (what
+    /// Compose needs to place the IME / a magnifier).
+    pub fn ime_caret_on_surface(&self) -> Option<(f32, f32)> {
+        let caret = self.control.ime?;
+        let viewport = self.viewport();
+        Some(viewport.map_to_surface(caret.x.max(0) as u32, caret.y.max(0) as u32))
+    }
+
+    /// Text the JVM copied, if the UI has not consumed it yet.
+    pub fn clipboard_out(&self) -> Option<&str> {
+        self.control.clipboard_out.as_deref()
+    }
+
+    /// Consume the text the JVM copied (so it is pushed to Android exactly once).
+    pub fn take_clipboard_out(&mut self) -> Option<String> {
+        self.control.clipboard_out.take()
+    }
+
+    /// Unanswered `Clipboard.getContents()` requests.
+    pub fn pending_clipboard_requests(&self) -> usize {
+        self.control.clipboard_requests.len()
+    }
+
+    /// Answer **every** outstanding clipboard request with `text`.
+    ///
+    /// `None` means "the Android clipboard holds no text", which is answered with
+    /// [`AwtReplyKind::ClipboardEmpty`] — an *answer*, not silence: a Swing thread
+    /// blocked in `getContents()` must always be released.
+    ///
+    /// Returns how many records were queued.
+    pub fn answer_clipboard(&mut self, text: Option<&str>) -> usize {
+        let seqs: Vec<u32> = self.control.clipboard_requests.drain(..).collect();
+        let mut queued = 0;
+        for seq in seqs {
+            queued += self.answer_clipboard_seq(seq, text);
+        }
+        queued
+    }
+
+    /// Answer one specific request (`seq` comes from the
+    /// [`AwtControlKind::ClipboardRequest`] message).
+    pub fn answer_clipboard_seq(&mut self, seq: u32, text: Option<&str>) -> usize {
+        self.control.clipboard_requests.retain(|s| *s != seq);
+        let records = match text {
+            Some(text) => encode_control_reply(AwtReplyKind::Clipboard, seq, text),
+            None => encode_control_reply(AwtReplyKind::ClipboardEmpty, seq, ""),
+        };
+        self.stats.clipboard_answers += 1;
+        self.enqueue(records)
+    }
+
+    /// Queue a liveness answer (the JVM asking whether the launcher is still
+    /// there rather than blocking for ever on a dead reader).
+    pub fn answer_pong(&mut self, seq: u32) -> usize {
+        let records = encode_control_reply(AwtReplyKind::Pong, seq, "");
+        self.enqueue(records)
+    }
+
+    /// Why the JVM-side bridge said goodbye (`None` while it is alive).
+    pub fn bye_reason(&self) -> Option<&str> {
+        self.control.bye.as_deref()
+    }
+
+    /// Forget the control projection (a new game starts with an arrow cursor and
+    /// no keyboard).
+    pub fn reset_control(&mut self) {
+        self.control = AwtControlState::default();
+        self.control_inbox.clear();
+    }
+
     // ---- Reporting --------------------------------------------------------
 
     /// Milliseconds since the session was opened.
@@ -616,6 +888,8 @@ impl AwtSession {
             "rgba_len": self.rgba_len(),
             "uptime_ms": self.uptime_ms(),
             "canvas": self.canvas.stats_json(),
+            "control": self.control.to_json(),
+            "pending_controls": self.control_inbox.len(),
             "session": {
                 "frames_accepted": self.stats.frames_accepted,
                 "frames_rejected": self.stats.frames_rejected,
@@ -624,6 +898,11 @@ impl AwtSession {
                 "events_dropped": self.stats.events_dropped,
                 "screen_resizes": self.stats.screen_resizes,
                 "surface_resizes": self.stats.surface_resizes,
+                "controls_accepted": self.stats.controls_accepted,
+                "controls_rejected": self.stats.controls_rejected,
+                "controls_dropped": self.stats.controls_dropped,
+                "screens_adopted": self.stats.screens_adopted,
+                "clipboard_answers": self.stats.clipboard_answers,
             },
         })
     }
@@ -663,6 +942,157 @@ impl AwtSession {
         queued
     }
 
+    /// Fold one control message into the projection.
+    fn apply_control(&mut self, control: &AwtControl) -> RcResult<()> {
+        match control.kind {
+            AwtControlKind::Cursor => {
+                self.control.cursor = control.cursor_kind().unwrap_or_default();
+            }
+            AwtControlKind::Title => {
+                self.control.title = if control.text.is_empty() {
+                    None
+                } else {
+                    Some(clamp_control_text(&control.text))
+                };
+            }
+            AwtControlKind::ClipboardSet => {
+                self.control.clipboard_out = Some(clamp_control_text(&control.text));
+            }
+            AwtControlKind::ClipboardRequest => {
+                // Keep the newest requests: one the UI will never answer is
+                // worthless, and an unbounded queue is a leak.
+                while self.control.clipboard_requests.len() >= MAX_PENDING_CLIPBOARD_REQUESTS {
+                    self.control.clipboard_requests.pop_front();
+                }
+                self.control.clipboard_requests.push_back(control.seq);
+            }
+            AwtControlKind::Beep => {
+                self.control.beeps = self.control.beeps.saturating_add(1);
+            }
+            AwtControlKind::ScreenSize => {
+                if control.a <= 0 || control.b <= 0 {
+                    return Err(RcError::Launch(format!(
+                        "AWT bridge announced an impossible managed screen {}x{}",
+                        control.a, control.b
+                    )));
+                }
+                self.adopt_screen_size(control.a as u32, control.b as u32)?;
+            }
+            AwtControlKind::ImeShow => {
+                let (w, h) = self.canvas.size();
+                self.control.ime = Some(ImeCaret {
+                    x: control.a.clamp(0, w.saturating_sub(1) as i32),
+                    y: control.b.clamp(0, h.saturating_sub(1) as i32),
+                    line_height: control.c.clamp(0, h as i32),
+                });
+            }
+            AwtControlKind::ImeHide => {
+                self.control.ime = None;
+            }
+            AwtControlKind::WindowOpened => {
+                let title = clamp_control_text(&control.text);
+                match self.control.windows.iter_mut().find(|w| w.id == control.a) {
+                    // A re-shown window (or a `setTitle`) updates in place: the
+                    // JVM may legitimately re-announce the same id.
+                    Some(existing) => existing.title = title.clone(),
+                    None => {
+                        if self.control.windows.len() >= MAX_TRACKED_WINDOWS {
+                            self.control.windows.remove(0);
+                        }
+                        self.control.windows.push(AwtWindowInfo {
+                            id: control.a,
+                            title: title.clone(),
+                        });
+                    }
+                }
+                if !title.is_empty() {
+                    self.control.title = Some(title);
+                }
+            }
+            AwtControlKind::WindowClosed => {
+                self.control.windows.retain(|w| w.id != control.a);
+                // The title belongs to the window on top; fall back to the newest
+                // one still open (or to nothing at all).
+                self.control.title = self
+                    .control
+                    .windows
+                    .last()
+                    .map(|w| w.title.clone())
+                    .filter(|t| !t.is_empty());
+            }
+            AwtControlKind::Bye => {
+                self.control.bye = Some(if control.text.is_empty() {
+                    "the AWT bridge closed".to_string()
+                } else {
+                    clamp_control_text(&control.text)
+                });
+                // Nothing on the JVM side can answer a paste any more.
+                self.control.clipboard_requests.clear();
+                self.control.ime = None;
+            }
+        }
+        Ok(())
+    }
+
+    /// Resize the canvas to the size the JVM *actually* renders at.
+    ///
+    /// [`AwtSession::submit_frame`] can already follow a frame that declares a
+    /// different desktop, but it does so through [`AwtSession::resize_screen`],
+    /// which **echoes a `COMPONENT_RESIZED`** back — the right thing when the
+    /// *UI* changed the geometry, and the wrong thing here: the JVM is the one
+    /// that told us, so answering makes cacio re-lay-out (and re-announce) in a
+    /// loop, right in the middle of its start-up. Adopting an announced size is
+    /// therefore silent, and it happens *before* the first repaint, so the very
+    /// first frame lands on a correctly sized canvas instead of paying for a full
+    /// reallocation (and a discarded frame) mid-stream.
+    fn adopt_screen_size(&mut self, width: u32, height: u32) -> RcResult<()> {
+        let next = clamp_size(WindowSize { width, height });
+        if (next.width, next.height) == self.canvas.size() {
+            return Ok(());
+        }
+        self.canvas.resize(next.width, next.height)?;
+        self.config.screen = next;
+        self.stats.screen_resizes += 1;
+        self.stats.screens_adopted += 1;
+        self.clamp_ime_to_canvas();
+        // Any in-flight gesture refers to the old geometry: drop it.
+        let releases = self.translator.release_all();
+        self.enqueue(releases);
+        Ok(())
+    }
+
+    /// Keep the reported Swing caret inside the desktop.
+    ///
+    /// A caret is a *desktop* coordinate, so shrinking the desktop (a rotation
+    /// preset, or cacio announcing a smaller managed screen) can leave it outside
+    /// the picture — and the UI maps it straight through the viewport, which would
+    /// anchor the IME on the letterbox bars or off-surface entirely. Clamping is
+    /// the right answer rather than dropping it: the text field is still focused,
+    /// we just no longer know exactly where it moved to.
+    fn clamp_ime_to_canvas(&mut self) {
+        let (w, h) = self.canvas.size();
+        if let Some(caret) = self.control.ime.as_mut() {
+            caret.x = caret.x.clamp(0, w.saturating_sub(1) as i32);
+            caret.y = caret.y.clamp(0, h.saturating_sub(1) as i32);
+            caret.line_height = caret.line_height.clamp(0, h as i32);
+        }
+    }
+
+    /// Drop one control message the UI has not read.
+    ///
+    /// Priority is the mirror image of [`AwtSession::shed_one`]: purely
+    /// informational messages (beep, window bookkeeping) go first, so a cursor
+    /// change or a clipboard hand-off survives a UI that stopped polling.
+    fn shed_control(&mut self) {
+        let victim = self
+            .control_inbox
+            .iter()
+            .position(|c| !c.kind.needs_ui())
+            .unwrap_or(0);
+        self.control_inbox.remove(victim);
+        self.stats.controls_dropped += 1;
+    }
+
     fn shed_one(&mut self) {
         let motion = self.outbox.iter().position(|r| {
             matches!(
@@ -670,14 +1100,14 @@ impl AwtSession {
                 event_id::MOUSE_MOVED | event_id::MOUSE_DRAGGED | event_id::MOUSE_WHEEL
             )
         });
-        match motion {
-            Some(i) => {
-                self.outbox.remove(i);
-            }
-            None => {
-                self.outbox.pop_front();
-            }
-        }
+        // Control records (a chunked clipboard answer) are only meaningful as a
+        // whole run, and a JVM thread may be *blocked* waiting for them: shed
+        // every ordinary record first, and only cannibalise a reply when the
+        // queue holds nothing else.
+        let victim = motion
+            .or_else(|| self.outbox.iter().position(|r| !r.is_control()))
+            .unwrap_or(0);
+        self.outbox.remove(victim);
         self.stats.events_dropped += 1;
     }
 
@@ -719,6 +1149,11 @@ impl AwtSession {
 pub enum FrameRead {
     /// A valid frame, ready to be submitted to a session.
     Frame(AwtFrame),
+    /// A valid *control* message (`RCAC`): a cursor change, a title, a clipboard
+    /// hand-off, … Multiplexed on the same channel as the pixels, because the
+    /// two must stay ordered relative to each other (the cursor changes *with*
+    /// the repaint that shows the new hover state).
+    Control(AwtControl),
     /// A framed-but-invalid payload. The stream is still aligned: keep pumping.
     Rejected(RcError),
     /// Clean end of stream between frames (the JVM exited).
@@ -731,6 +1166,10 @@ pub struct AwtFrameStream<R: Read> {
     header: [u8; FRAME_HEADER_LEN],
     payload: Vec<u8>,
     frames_read: u64,
+    controls_read: u64,
+    /// Control messages [`AwtFrameStream::read_frame`] skipped over, kept so the
+    /// caller can still act on them (nothing that crossed the pipe is lost).
+    controls: VecDeque<AwtControl>,
 }
 
 impl<R: Read> AwtFrameStream<R> {
@@ -741,12 +1180,24 @@ impl<R: Read> AwtFrameStream<R> {
             header: [0u8; FRAME_HEADER_LEN],
             payload: Vec::new(),
             frames_read: 0,
+            controls_read: 0,
+            controls: VecDeque::new(),
         }
     }
 
     /// Frames successfully read so far.
     pub fn frames_read(&self) -> u64 {
         self.frames_read
+    }
+
+    /// Control messages successfully read so far.
+    pub fn controls_read(&self) -> u64 {
+        self.controls_read
+    }
+
+    /// Take the control messages [`AwtFrameStream::read_frame`] stepped over.
+    pub fn take_controls(&mut self) -> Vec<AwtControl> {
+        self.controls.drain(..).collect()
     }
 
     /// Unwrap the underlying reader.
@@ -791,8 +1242,23 @@ impl<R: Read> AwtFrameStream<R> {
         let mut buf = Vec::with_capacity(FRAME_HEADER_LEN + payload_len);
         buf.extend_from_slice(&self.header);
         buf.extend_from_slice(&self.payload);
-        // The frame occupied exactly `FRAME_HEADER_LEN + payload_len` bytes, so
+        // The record occupied exactly `FRAME_HEADER_LEN + payload_len` bytes, so
         // whatever `decode` thinks of its contents the *stream* stays aligned.
+        //
+        // Both record types declare their length at the same offset, which is
+        // what makes this demultiplexing safe: we consume the record *before*
+        // looking at its magic, so even an unknown record type cannot
+        // desynchronise the channel.
+        let magic = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]);
+        if magic == CONTROL_MAGIC {
+            return match AwtControl::decode(&buf) {
+                Ok(control) => {
+                    self.controls_read += 1;
+                    Ok(FrameRead::Control(control))
+                }
+                Err(e) => Ok(FrameRead::Rejected(e)),
+            };
+        }
         match AwtFrame::decode(&buf) {
             Ok(frame) => {
                 self.frames_read += 1;
@@ -809,10 +1275,20 @@ impl<R: Read> AwtFrameStream<R> {
     /// [`AwtFrameStream::read_next`] when a single invalid frame must not end
     /// the session.
     pub fn read_frame(&mut self) -> RcResult<Option<AwtFrame>> {
-        match self.read_next()? {
-            FrameRead::Frame(f) => Ok(Some(f)),
-            FrameRead::Rejected(e) => Err(e),
-            FrameRead::Eof => Ok(None),
+        loop {
+            match self.read_next()? {
+                FrameRead::Frame(f) => return Ok(Some(f)),
+                // Not a frame, but not garbage either: stash it (bounded) and
+                // keep looking for the frame the caller asked for.
+                FrameRead::Control(c) => {
+                    if self.controls.len() >= DEFAULT_MAX_PENDING_CONTROLS {
+                        self.controls.pop_front();
+                    }
+                    self.controls.push_back(c);
+                }
+                FrameRead::Rejected(e) => return Err(e),
+                FrameRead::Eof => return Ok(None),
+            }
         }
     }
 
@@ -825,12 +1301,19 @@ impl<R: Read> AwtFrameStream<R> {
         let mut accepted = 0u64;
         let mut rejected = 0u64;
         loop {
-            match self.read_frame() {
-                Ok(Some(frame)) => match session.submit_frame(&frame) {
+            match self.read_next() {
+                Ok(FrameRead::Frame(frame)) => match session.submit_frame(&frame) {
                     Ok(_) => accepted += 1,
                     Err(_) => rejected += 1,
                 },
-                Ok(None) => return Ok((accepted, rejected)),
+                // A control message the session refuses (an impossible managed
+                // screen) is exactly as survivable as a corrupt frame.
+                Ok(FrameRead::Control(control)) => match session.submit_control(&control) {
+                    Ok(()) => accepted += 1,
+                    Err(_) => rejected += 1,
+                },
+                Ok(FrameRead::Rejected(_)) => rejected += 1,
+                Ok(FrameRead::Eof) => return Ok((accepted, rejected)),
                 Err(e) => {
                     if accepted == 0 && rejected == 0 {
                         return Err(e);
@@ -917,7 +1400,9 @@ impl<W: Write> AwtEventWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::launch::awt::{mask, vk, PixelFormat};
+    use crate::launch::awt::{
+        cursor_type, decode_control_reply, mask, vk, AwtReplyKind, PixelFormat,
+    };
     use std::io::Cursor;
 
     fn size(width: u32, height: u32) -> WindowSize {
@@ -969,6 +1454,7 @@ mod tests {
             scale_mode: ScaleMode::Stretch,
             click_slop: 100_000,
             max_pending_events: 1,
+            max_pending_controls: 1 << 30,
             backend: AwtBackend::Cacio17,
         }
         .sanitized();
@@ -976,6 +1462,11 @@ mod tests {
         assert_eq!(c.surface, size(MAX_CANVAS_DIM, MAX_CANVAS_DIM));
         assert_eq!(c.click_slop, 1, "slop cannot exceed the desktop");
         assert_eq!(c.max_pending_events, 64, "queue bound has a floor");
+        assert_eq!(
+            c.max_pending_controls,
+            1 << 16,
+            "control queue bound has a ceiling"
+        );
         assert_eq!(c.scale_mode, ScaleMode::Stretch, "policy is preserved");
     }
 
@@ -1448,6 +1939,451 @@ mod tests {
         assert_eq!(s.pending_events(), 0);
         assert_eq!(s.stats().events_drained, 3);
         assert!(s.drain_encoded().is_empty());
+    }
+
+    // ---- Control plane -----------------------------------------------------
+
+    /// A frame whose payload paints `argb` over the whole `w`x`h` desktop.
+    fn full_frame_wire(seq: u32, w: u32, h: u32, argb: u32) -> Vec<u8> {
+        AwtFrame::full(seq, w, h, vec![argb; (w * h) as usize])
+            .unwrap()
+            .encode()
+    }
+
+    #[test]
+    fn control_messages_build_the_projection_the_ui_renders() {
+        let mut s = session();
+        assert_eq!(s.cursor(), CursorKind::Default);
+        assert_eq!(s.window_title(), None);
+        assert!(!s.control().wants_keyboard());
+
+        s.submit_control(&AwtControl::cursor(CursorKind::Text))
+            .unwrap();
+        s.submit_control(&AwtControl::title("Forge 安装程序"))
+            .unwrap();
+        s.submit_control(&AwtControl::ime_show(40, 60, 16)).unwrap();
+        s.submit_control(&AwtControl::beep()).unwrap();
+        s.submit_control(&AwtControl::beep()).unwrap();
+
+        assert_eq!(s.cursor(), CursorKind::Text);
+        assert!(
+            s.cursor().is_text(),
+            "an I-beam is the cue for a text field"
+        );
+        assert_eq!(s.window_title(), Some("Forge 安装程序"));
+        assert_eq!(
+            s.ime_caret(),
+            Some(ImeCaret {
+                x: 40,
+                y: 60,
+                line_height: 16
+            })
+        );
+        assert!(s.control().wants_keyboard());
+        assert_eq!(s.control().beeps, 2);
+        assert_eq!(s.stats().controls_accepted, 5);
+
+        // The individual messages are *also* queued, because the side effects
+        // (buzz once, push once) must not be derived from a projection.
+        let drained = s.drain_control();
+        assert_eq!(drained.len(), 5);
+        assert_eq!(drained[0].kind, AwtControlKind::Cursor);
+        assert_eq!(s.pending_controls(), 0);
+
+        // An empty title clears it, and hiding the IME retracts the keyboard.
+        s.submit_control(&AwtControl::title("")).unwrap();
+        s.submit_control(&AwtControl::ime_hide()).unwrap();
+        assert_eq!(s.window_title(), None);
+        assert!(!s.control().wants_keyboard());
+    }
+
+    #[test]
+    fn ime_caret_is_clamped_to_the_desktop_and_maps_to_the_surface() {
+        let mut s = session(); // 320x240 desktop on a 640x480 surface (2x)
+        s.submit_control(&AwtControl::ime_show(-50, 9999, -3))
+            .unwrap();
+        let caret = s.ime_caret().expect("clamped, not dropped");
+        assert_eq!(caret.x, 0);
+        assert_eq!(caret.y, 239);
+        assert_eq!(caret.line_height, 0);
+        // Compose needs surface coordinates to place the IME: same viewport the
+        // pixels use, so the keyboard cannot land on the letterbox bars.
+        let (sx, sy) = s.ime_caret_on_surface().unwrap();
+        assert_eq!((sx, sy), s.viewport().map_to_surface(0, 239));
+        s.submit_control(&AwtControl::ime_hide()).unwrap();
+        assert_eq!(s.ime_caret_on_surface(), None);
+    }
+
+    #[test]
+    fn the_canvas_adopts_the_managed_screen_size_the_jvm_announces() {
+        // What this buys over "follow whatever the first frame says": the size is
+        // known *before* the first repaint (no reallocation mid-stream) and, above
+        // all, it is adopted **silently** — echoing a COMPONENT_RESIZED at a JVM
+        // that just told us its own geometry makes cacio re-lay-out and
+        // re-announce in a loop while it is still starting up.
+        let mut s = session();
+        assert_eq!(s.screen_size(), (320, 240));
+
+        s.submit_control(&AwtControl::screen_size(400, 300))
+            .unwrap();
+        assert_eq!(s.screen_size(), (400, 300));
+        assert_eq!(s.stats().screens_adopted, 1);
+        assert_eq!(s.stats().screen_resizes, 1);
+        let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
+        assert!(
+            !ids.contains(&event_id::COMPONENT_RESIZED),
+            "adopting must not echo a resize: {ids:?}"
+        );
+
+        // The first frame then lands on an already-correct canvas, and still no
+        // resize is echoed.
+        s.submit_frame_bytes(&full_frame_wire(2, 400, 300, 0xFF00_FF00))
+            .expect("the frame matches the canvas");
+        assert_eq!(s.canvas().pixel(10, 10), Some(0xFF00_FF00));
+        assert_eq!(s.stats().screen_resizes, 1, "no second reallocation");
+        let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
+        assert!(!ids.contains(&event_id::COMPONENT_RESIZED), "{ids:?}");
+
+        // …whereas a *UI*-driven resize does tell the JVM, as it must.
+        s.resize_screen(320, 200).unwrap();
+        let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
+        assert!(ids.contains(&event_id::COMPONENT_RESIZED));
+        // And a frame that disagrees with the canvas still triggers the legacy
+        // follow-the-frame path, which *does* echo a resize.
+        s.submit_frame_bytes(&full_frame_wire(3, 640, 480, 0xFF00_0001))
+            .unwrap();
+        let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
+        assert!(ids.contains(&event_id::COMPONENT_RESIZED));
+        assert_eq!(s.stats().screens_adopted, 1, "that path is not an adoption");
+    }
+
+    #[test]
+    fn an_ime_caret_stays_inside_a_shrinking_desktop() {
+        // The caret is a *desktop* coordinate and the UI maps it straight through
+        // the viewport: left unclamped, a shrunken desktop would anchor the soft
+        // keyboard on the letterbox bars (or off the surface entirely).
+        let mut s = session(); // 320x240
+        s.submit_control(&AwtControl::ime_show(300, 230, 40))
+            .unwrap();
+        s.resize_screen(64, 48).unwrap();
+        assert_eq!(
+            s.ime_caret(),
+            Some(ImeCaret {
+                x: 63,
+                y: 47,
+                line_height: 40
+            })
+        );
+        // …and the same on the JVM-announced path.
+        s.submit_control(&AwtControl::screen_size(16, 8)).unwrap();
+        let caret = s.ime_caret().unwrap();
+        assert_eq!((caret.x, caret.y), (15, 7));
+        assert_eq!(
+            caret.line_height, 8,
+            "a line taller than the desktop is clamped"
+        );
+        // The mapped surface position is inside the drawn area.
+        let (sx, sy) = s.ime_caret_on_surface().unwrap();
+        let p = s.viewport().placement();
+        assert!(sx >= p.x as f32 && sx <= (p.x + p.width as i32) as f32);
+        assert!(sy >= p.y as f32 && sy <= (p.y + p.height as i32) as f32);
+    }
+
+    #[test]
+    fn adopting_the_same_size_is_a_no_op() {
+        let mut s = session();
+        s.submit_control(&AwtControl::screen_size(320, 240))
+            .unwrap();
+        assert_eq!(s.stats().screens_adopted, 0);
+        assert_eq!(s.stats().screen_resizes, 0);
+    }
+
+    #[test]
+    fn an_impossible_managed_screen_is_rejected_not_obeyed() {
+        let mut s = session();
+        for bad in [
+            AwtControl::screen_size(0, 0),
+            AwtControl {
+                a: -4,
+                b: 300,
+                ..AwtControl::new(AwtControlKind::ScreenSize)
+            },
+        ] {
+            let err = s.submit_control(&bad).unwrap_err().to_string();
+            assert!(err.contains("impossible managed screen"), "{err}");
+        }
+        assert_eq!(s.screen_size(), (320, 240), "the canvas is untouched");
+        assert_eq!(s.stats().controls_rejected, 2);
+        assert_eq!(s.stats().controls_accepted, 0);
+        assert_eq!(s.pending_controls(), 0, "a rejected message is not queued");
+    }
+
+    #[test]
+    fn a_clipboard_request_is_answered_over_the_event_channel() {
+        let mut s = session();
+        s.submit_control(&AwtControl::clipboard_request(42))
+            .unwrap();
+        assert_eq!(s.pending_clipboard_requests(), 1);
+
+        let queued = s.answer_clipboard(Some("seed: -4172144997902289642"));
+        assert!(queued >= 1);
+        assert_eq!(s.pending_clipboard_requests(), 0);
+        assert_eq!(s.stats().clipboard_answers, 1);
+
+        let records = s.drain_events();
+        assert!(records.iter().all(|r| r.is_control()));
+        let (kind, seq, text) = decode_control_reply(&records).unwrap();
+        assert_eq!(kind, AwtReplyKind::Clipboard);
+        assert_eq!(seq, 42);
+        assert_eq!(text, "seed: -4172144997902289642");
+    }
+
+    #[test]
+    fn an_empty_android_clipboard_still_releases_the_blocked_jvm_thread() {
+        let mut s = session();
+        s.submit_control(&AwtControl::clipboard_request(7)).unwrap();
+        s.answer_clipboard(None);
+        let (kind, seq, text) = decode_control_reply(&s.drain_events()).unwrap();
+        assert_eq!(kind, AwtReplyKind::ClipboardEmpty);
+        assert_eq!(seq, 7);
+        assert!(text.is_empty());
+    }
+
+    #[test]
+    fn clipboard_requests_are_bounded_and_all_get_answered() {
+        let mut s = session();
+        for seq in 0..(MAX_PENDING_CLIPBOARD_REQUESTS as u32 + 5) {
+            s.submit_control(&AwtControl::clipboard_request(seq))
+                .unwrap();
+        }
+        assert_eq!(
+            s.pending_clipboard_requests(),
+            MAX_PENDING_CLIPBOARD_REQUESTS
+        );
+        let answered = s.answer_clipboard(Some("x"));
+        assert!(answered >= MAX_PENDING_CLIPBOARD_REQUESTS);
+        assert_eq!(s.pending_clipboard_requests(), 0);
+    }
+
+    #[test]
+    fn what_the_jvm_copied_is_handed_over_exactly_once() {
+        let mut s = session();
+        s.submit_control(&AwtControl::clipboard_set("copied text"))
+            .unwrap();
+        assert_eq!(s.clipboard_out(), Some("copied text"));
+        assert_eq!(s.take_clipboard_out().as_deref(), Some("copied text"));
+        assert_eq!(s.take_clipboard_out(), None, "no double push to Android");
+    }
+
+    #[test]
+    fn windows_are_tracked_and_the_title_follows_the_top_one() {
+        let mut s = session();
+        s.submit_control(&AwtControl::window_opened(1, "启动器主窗口"))
+            .unwrap();
+        s.submit_control(&AwtControl::window_opened(2, "JOptionPane"))
+            .unwrap();
+        assert_eq!(s.control().windows.len(), 2);
+        assert_eq!(s.window_title(), Some("JOptionPane"));
+
+        // Re-announcing an id updates it in place (a `setTitle`, or a re-show).
+        s.submit_control(&AwtControl::window_opened(2, "错误"))
+            .unwrap();
+        assert_eq!(s.control().windows.len(), 2);
+        assert_eq!(s.window_title(), Some("错误"));
+
+        // Closing the dialog hands the title back to what is still open.
+        s.submit_control(&AwtControl::window_closed(2)).unwrap();
+        assert_eq!(s.control().windows.len(), 1);
+        assert_eq!(s.window_title(), Some("启动器主窗口"));
+        s.submit_control(&AwtControl::window_closed(1)).unwrap();
+        assert_eq!(s.window_title(), None);
+        // Closing something we never saw is not an error.
+        s.submit_control(&AwtControl::window_closed(99)).unwrap();
+    }
+
+    #[test]
+    fn tracked_windows_are_bounded() {
+        let mut s = session();
+        for id in 0..(MAX_TRACKED_WINDOWS as i32 * 2) {
+            s.submit_control(&AwtControl::window_opened(id, format!("w{id}")))
+                .unwrap();
+        }
+        assert_eq!(s.control().windows.len(), MAX_TRACKED_WINDOWS);
+    }
+
+    #[test]
+    fn goodbye_stops_the_ui_waiting_for_things_that_can_no_longer_come() {
+        let mut s = session();
+        s.submit_control(&AwtControl::ime_show(1, 2, 3)).unwrap();
+        s.submit_control(&AwtControl::clipboard_request(1)).unwrap();
+        s.submit_control(&AwtControl::bye("JVM exited")).unwrap();
+        assert_eq!(s.bye_reason(), Some("JVM exited"));
+        assert_eq!(s.pending_clipboard_requests(), 0, "nobody can answer now");
+        assert!(!s.control().wants_keyboard(), "the keyboard retracts");
+        // A reason is always available, even when the bridge sent none.
+        let mut s = session();
+        s.submit_control(&AwtControl::bye("")).unwrap();
+        assert_eq!(s.bye_reason(), Some("the AWT bridge closed"));
+    }
+
+    #[test]
+    fn the_control_inbox_is_bounded_and_sheds_bookkeeping_first() {
+        let mut config = AwtSessionConfig::new(size(64, 64), size(64, 64));
+        config.max_pending_controls = 8;
+        let mut s = AwtSession::open(config).unwrap();
+        assert_eq!(s.config().max_pending_controls, 8);
+
+        // Fill with informational messages, then push the ones the UI must act on.
+        for id in 0..8 {
+            s.submit_control(&AwtControl::window_opened(id, "w"))
+                .unwrap();
+        }
+        s.submit_control(&AwtControl::cursor(CursorKind::Hand))
+            .unwrap();
+        s.submit_control(&AwtControl::clipboard_set("keep me"))
+            .unwrap();
+        assert_eq!(s.pending_controls(), 8);
+        assert_eq!(s.stats().controls_dropped, 2);
+
+        let kinds: Vec<AwtControlKind> = s.drain_control().iter().map(|c| c.kind).collect();
+        assert!(kinds.contains(&AwtControlKind::Cursor), "{kinds:?}");
+        assert!(kinds.contains(&AwtControlKind::ClipboardSet), "{kinds:?}");
+    }
+
+    #[test]
+    fn a_clipboard_answer_survives_event_shedding() {
+        // The JVM may be *blocked* in `getContents()`: a half-shed reply would
+        // hang it for ever, so a reply is the last thing we drop.
+        let mut config = AwtSessionConfig::new(size(320, 240), size(320, 240));
+        config.max_pending_events = 64;
+        let mut s = AwtSession::open(config).unwrap();
+        s.submit_control(&AwtControl::clipboard_request(5)).unwrap();
+        let reply_records = s.answer_clipboard(Some("hello world!"));
+        assert!(reply_records >= 2, "a multi-chunk reply");
+
+        for i in 0..500 {
+            s.pointer(
+                PointerPhase::Move,
+                (i % 300) as f32,
+                10.0,
+                MouseButton::Left,
+            );
+        }
+        assert!(s.stats().events_dropped > 0, "shedding really happened");
+
+        let records = s.drain_events();
+        let controls: Vec<_> = records.iter().copied().filter(|r| r.is_control()).collect();
+        assert_eq!(controls.len(), reply_records, "the whole run survived");
+        let (_, seq, text) = decode_control_reply(&controls).unwrap();
+        assert_eq!(seq, 5);
+        assert_eq!(text, "hello world!");
+    }
+
+    #[test]
+    fn control_bytes_round_trip_and_garbage_is_counted_not_fatal() {
+        let mut s = session();
+        s.submit_control_bytes(&AwtControl::cursor(CursorKind::Wait).encode())
+            .unwrap();
+        assert_eq!(s.cursor(), CursorKind::Wait);
+        assert_eq!(s.cursor().awt_type(), cursor_type::WAIT);
+
+        let err = s.submit_control_bytes(&[0xAB; 40]).unwrap_err().to_string();
+        assert!(err.contains("magic"), "{err}");
+        assert_eq!(s.stats().controls_rejected, 1);
+        assert_eq!(s.cursor(), CursorKind::Wait, "the projection is intact");
+    }
+
+    #[test]
+    fn resetting_control_state_forgets_the_cursor_and_the_keyboard() {
+        let mut s = session();
+        s.submit_control(&AwtControl::cursor(CursorKind::Hand))
+            .unwrap();
+        s.submit_control(&AwtControl::ime_show(1, 1, 1)).unwrap();
+        s.reset_control();
+        assert_eq!(s.cursor(), CursorKind::Default);
+        assert!(!s.control().wants_keyboard());
+        assert_eq!(s.pending_controls(), 0);
+    }
+
+    #[test]
+    fn the_session_snapshot_carries_the_control_projection() {
+        let mut s = session();
+        s.submit_control(&AwtControl::cursor(CursorKind::Hand))
+            .unwrap();
+        s.submit_control(&AwtControl::window_opened(1, "标题"))
+            .unwrap();
+        s.submit_control(&AwtControl::ime_show(5, 6, 7)).unwrap();
+        s.submit_control(&AwtControl::clipboard_set("x")).unwrap();
+        s.submit_control(&AwtControl::clipboard_request(3)).unwrap();
+        s.submit_control(&AwtControl::beep()).unwrap();
+        let json = s.to_json();
+        let control = &json["control"];
+        assert_eq!(control["cursor"], "hand");
+        assert_eq!(control["cursor_awt_type"], cursor_type::HAND);
+        assert_eq!(control["title"], "标题");
+        assert_eq!(control["ime"]["x"], 5);
+        assert_eq!(control["ime"]["line_height"], 7);
+        assert_eq!(control["wants_keyboard"], true);
+        assert_eq!(control["clipboard_out"], "x");
+        assert_eq!(control["clipboard_requests"], 1);
+        assert_eq!(control["window_count"], 1);
+        assert_eq!(control["windows"][0]["id"], 1);
+        assert_eq!(control["beeps"], 1);
+        assert_eq!(json["pending_controls"], 6);
+        assert_eq!(json["session"]["controls_accepted"], 6);
+    }
+
+    #[test]
+    fn the_frame_stream_demultiplexes_pixels_and_control_messages() {
+        let mut wire = full_frame_wire(1, 320, 240, 0xFF00_0000);
+        wire.extend_from_slice(&AwtControl::cursor(CursorKind::Hand).encode());
+        wire.extend_from_slice(&AwtControl::title("对话框").encode());
+        wire.extend_from_slice(&full_frame_wire(2, 320, 240, 0xFF11_2233));
+
+        let mut s = session();
+        let mut stream = AwtFrameStream::new(Cursor::new(wire));
+        let (accepted, rejected) = stream.pump_into(&mut s).unwrap();
+        assert_eq!((accepted, rejected), (4, 0));
+        assert_eq!(stream.frames_read(), 2);
+        assert_eq!(stream.controls_read(), 2);
+        assert_eq!(s.stats().frames_accepted, 2);
+        assert_eq!(s.stats().controls_accepted, 2);
+        assert_eq!(s.cursor(), CursorKind::Hand);
+        assert_eq!(s.window_title(), Some("对话框"));
+        assert_eq!(s.canvas().pixel(0, 0), Some(0xFF11_2233));
+    }
+
+    #[test]
+    fn a_corrupt_control_message_keeps_the_frame_stream_aligned() {
+        // Same guarantee as a corrupt frame: the record is consumed whole, so the
+        // *next* record still parses. A cacio bug must not black out the game.
+        let mut broken = AwtControl::title("x").encode();
+        broken[6] = 250; // unknown kind
+        let mut wire = broken;
+        wire.extend_from_slice(&full_frame_wire(9, 320, 240, 0xFF44_5566));
+
+        let mut stream = AwtFrameStream::new(Cursor::new(wire));
+        assert!(matches!(
+            stream.read_next().unwrap(),
+            FrameRead::Rejected(_)
+        ));
+        assert!(matches!(stream.read_next().unwrap(), FrameRead::Frame(_)));
+        assert!(matches!(stream.read_next().unwrap(), FrameRead::Eof));
+    }
+
+    #[test]
+    fn read_frame_stashes_control_messages_instead_of_losing_them() {
+        let mut wire = AwtControl::beep().encode();
+        wire.extend_from_slice(&AwtControl::cursor(CursorKind::Text).encode());
+        wire.extend_from_slice(&full_frame_wire(3, 320, 240, 0xFF99_0000));
+
+        let mut stream = AwtFrameStream::new(Cursor::new(wire));
+        let frame = stream.read_frame().unwrap().expect("the frame is found");
+        assert_eq!(frame.seq, 3);
+        let stashed = stream.take_controls();
+        assert_eq!(stashed.len(), 2);
+        assert_eq!(stashed[1].cursor_kind(), Some(CursorKind::Text));
+        assert!(stream.take_controls().is_empty());
     }
 
     // ---- Reporting --------------------------------------------------------

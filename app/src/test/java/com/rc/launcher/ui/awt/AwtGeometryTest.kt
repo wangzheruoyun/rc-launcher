@@ -99,6 +99,24 @@ class AwtGeometryTest {
     }
 
     @Test
+    fun mapToSurfaceIsTheInverseOfMapPointer() {
+        // Same integer math as `Viewport::map_to_surface` in the core: the pointer
+        // overlay and the IME anchor must land exactly where the core thinks the
+        // desktop pixel is drawn.
+        val v = viewport(AwtScaleMode.FIT)
+        val p = v.placement()
+        assertEquals(p.x.toFloat() to p.y.toFloat(), v.mapToSurface(0, 0))
+        val (sx, sy) = v.mapToSurface(320, 240)
+        assertEquals(p.x + 320f * p.width / 640, sx, 1e-3f)
+        assertEquals(p.y + 240f * p.height / 480, sy, 1e-3f)
+        // Round-tripping a desktop pixel through both mappings returns it.
+        val back = v.mapPointer(sx, sy)
+        assertEquals(AwtPoint(320, 240), back)
+        // A degenerate viewport answers with the origin instead of dividing by zero.
+        assertEquals(0f to 0f, AwtViewport(0, 0, 0, 0).mapToSurface(5, 5))
+    }
+
+    @Test
     fun rectHelpers() {
         assertTrue(AwtRect(0, 0, 0, 4).isEmpty)
         assertEquals(8L, AwtRect(0, 0, 4, 2).area)

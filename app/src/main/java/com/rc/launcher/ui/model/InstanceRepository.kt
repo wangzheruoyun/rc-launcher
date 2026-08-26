@@ -46,6 +46,26 @@ object InstanceRepository {
     /** Look up a single instance by id, or null. */
     fun getById(id: String): GameInstance? = _instances.value.firstOrNull { it.id == id }
 
+    /**
+     * Duplicate an existing instance under a unique clone id, copying all of
+     * its version-isolation / launch settings. The clone's [GameInstance.lastPlayed]
+     * is reset and its id is made unique via [GameInstance.duplicate]. Returns
+     * the created clone, or null when [sourceId] does not exist (task 13).
+     */
+    fun duplicate(sourceId: String, overrideName: String? = null): GameInstance? {
+        val source = getById(sourceId) ?: return null
+        val existing = _instances.value.map { it.id }.toSet()
+        var id = "${source.id}-copy"
+        var n = 1
+        while (id in existing) {
+            id = "${source.id}-copy-$n"
+            n++
+        }
+        val clone = source.duplicate(id, overrideName)
+        add(clone)
+        return clone
+    }
+
     /** Test-only: replace the whole list (e.g. to reset between test cases). */
     fun replaceAll(list: List<GameInstance>) {
         _instances.value = list

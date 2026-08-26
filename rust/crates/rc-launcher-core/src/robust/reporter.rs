@@ -171,6 +171,62 @@ pub fn report_crash(dir: &Path, report: &CrashLog) -> RcResult<PathBuf> {
     Ok(path)
 }
 
+/// List every persisted crash log under `dir`, newest first.
+///
+/// Best-effort and defensive (task 19): a directory read failure is returned as
+/// an error rather than panicking, and a single corrupt/unparsable report is
+/// skipped so it can never hide the rest. Only files matching the
+/// `crash_<ts>_<id>.json` naming are considered.
+pub fn list_crash_logs(dir: &Path) -> RcResult<Vec<CrashLog>> {
+    let mut reports: Vec<CrashLog> = Vec::new();
+    let rd = std::fs::read_dir(dir).map_err(RcError::Io)?;
+    for entry in rd.flatten() {
+        let path = entry.path();
+        let name = match path.file_name().and_then(|n| n.to_str()) {
+            Some(n) => n.to_string(),
+            None => continue,
+        };
+        if !name.starts_with("crash_") || !name.ends_with(".json") {
+            continue;
+        }
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        match serde_json::from_str::<CrashLog>(&text) {
+            Ok(report) => reports.push(report),
+            Err(_) => continue,
+        }
+    }
+    // Newest first by timestamp.
+    reports.sort_by_key(|a| std::cmp::Reverse(a.timestamp));
+    Ok(reports)
+}
+
+/// Keep at most `keep` of the most recent crash logs under `dir`, deleting the
+/// remainder (oldest first). Returns the number of logs removed.
+///
+/// Best-effort and defensive (task 19): a directory read failure is returned as
+/// an error rather than panicking, and an individual delete failure is ignored
+/// (the report may already be gone).
+pub fn prune_crash_logs(dir: &Path, keep: usize) -> RcResult<u64> {
+    let mut reports = list_crash_logs(dir)?;
+    if reports.len() <= keep {
+        return Ok(0);
+    }
+    // `reports` is newest-first; everything past `keep` is the oldest to drop.
+    let to_remove: Vec<CrashLog> = reports.split_off(keep);
+    let mut removed = 0u64;
+    for report in to_remove {
+        let name = format!("crash_{}_{}.json", report.timestamp, report.id);
+        let path = dir.join(name);
+        if std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}
+
 static REPORTER_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// Install a panic hook that writes a crash log (with captured backtrace +
@@ -301,5 +357,56 @@ mod tests {
         let second = install_crash_reporter(dir.path().to_path_buf());
         assert!(first);
         assert!(!second);
+    }
+
+    #[test]
+    fn list_and_prune_crash_logs() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let mut a = CrashLog::new("panic", "first");
+        a.timestamp = 100;
+        let mut b = CrashLog::new("panic", "second");
+        b.timestamp = 200;
+        let mut c = CrashLog::new("panic", "third");
+        c.timestamp = 300;
+
+        write_crash_log(dir.path(), &a).unwrap();
+        write_crash_log(dir.path(), &b).unwrap();
+        write_crash_log(dir.path(), &c).unwrap();
+
+        let mut list = list_crash_logs(dir.path()).unwrap();
+        assert_eq!(list.len(), 3);
+        // newest first
+        list.sort_by_key(|x| std::cmp::Reverse(x.timestamp));
+        assert_eq!(list[0].timestamp, 300);
+
+        // Keep only the most recent report; the two oldest are pruned.
+        let removed = prune_crash_logs(dir.path(), 1).unwrap();
+        assert_eq!(removed, 2);
+        let after = list_crash_logs(dir.path()).unwrap();
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].timestamp, 300);
+    }
+
+    #[test]
+    fn prune_with_nothing_to_remove_returns_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = CrashLog::new("panic", "only");
+        write_crash_log(dir.path(), &report).unwrap();
+        // keep >= 1 -> nothing removed.
+        assert_eq!(prune_crash_logs(dir.path(), 5).unwrap(), 0);
+        assert_eq!(list_crash_logs(dir.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn list_skips_corrupt_reports() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = CrashLog::new("panic", "good");
+        write_crash_log(dir.path(), &report).unwrap();
+        // Drop a non-JSON file with the right prefix into the directory.
+        std::fs::write(dir.path().join("crash_1_abc.json"), "not json").unwrap();
+        std::fs::write(dir.path().join("unrelated.txt"), "{}").unwrap();
+        let list = list_crash_logs(dir.path()).unwrap();
+        assert_eq!(list.len(), 1);
     }
 }

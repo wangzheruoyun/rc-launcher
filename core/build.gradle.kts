@@ -1,20 +1,20 @@
 plugins {
-    id("com.android.library")
-    id("org.jetbrains.kotlin.android")
-    id("io.gitlab.arturbosch.detekt")
-    id("org.jlleitschuh.gradle.ktlint")
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlint)
 }
 
 android {
     namespace = "com.rc.launcher.core"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -50,7 +50,7 @@ android {
 
 dependencies {
     implementation(project(":runtime"))
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation(libs.androidx.core.ktx)
 }
 
 // --- Task 26: unified Kotlin style checks (mirrors the Rust fmt/clippy gate) ---

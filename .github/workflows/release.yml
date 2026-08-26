@@ -96,7 +96,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # 2) Build the signed APK + AAB, reusing the CI pipeline.
+  # 2) Build the signed APK, reusing the CI pipeline.
   # ---------------------------------------------------------------------------
   build:
     name: Build (reuse CI pipeline)
@@ -119,24 +119,49 @@ jobs:
           name: app-release-apk
           path: dist
 
-      - name: Download AAB
-        uses: actions/download-artifact@v4
-        with:
-          name: app-release-aab
-          path: dist
-        continue-on-error: true
+      - name: Verify release artifact (arm64-v8a only, APK-only)
+        run: |
+          set -euo pipefail
+          APK_DIR=dist
+          # 1) Only .apk may be present (never .aab / .zip).
+          if compgen -G "$APK_DIR/*.aab" >/dev/null; then
+            echo "::error::An AAB is present but only an .apk may be released"
+            exit 1
+          fi
+          if compgen -G "$APK_DIR/*.zip" >/dev/null; then
+            echo "::error::A zip is present but only an .apk may be released"
+            exit 1
+          fi
+          # 2) Exactly one release APK.
+          shopt -s nullglob
+          apks=( "$APK_DIR"/*.apk )
+          shopt -u nullglob
+          if [[ "${#apks[@]}" -ne 1 ]]; then
+            echo "::error::expected exactly 1 release APK, found ${#apks[@]}"
+            exit 1
+          fi
+          APK="${apks[0]}"
+          echo "Release APK: $APK"
+          # 3) Native libs must live under lib/arm64-v8a only.
+          command -v unzip >/dev/null 2>&1 || { echo "::error::unzip not available"; exit 1; }
+          abis=$(unzip -l "$APK" 'lib/*/*.so' | awk -F'lib/' '/\.so$/{print $2}' | cut -d/ -f1 | sort -u)
+          echo "ABIs present in APK: [$abis]"
+          if [[ "$abis" != "arm64-v8a" ]]; then
+            echo "::error::APK contains unexpected ABIs: [$abis] (only arm64-v8a allowed)"
+            exit 1
+          fi
+          echo "ABI contract OK: arm64-v8a only"
 
       - name: Generate SHA-256 checksums
         working-directory: dist
         run: |
           set -euo pipefail
-          # Only checksum the installable packages (never the sums file itself),
-          # and stay safe when the AAB is absent.
+          # Only checksum the installable packages (never the sums file itself).
           shopt -s nullglob
-          files=( *.apk *.aab )
+          files=( *.apk )
           shopt -u nullglob
           if [[ ${#files[@]} -eq 0 ]]; then
-            echo "::error::No release artifacts (APK/AAB) were produced." >&2
+            echo "::error::No release artifacts (APK) were produced." >&2
             exit 1
           fi
           rm -f SHA256SUMS.txt
@@ -150,7 +175,9 @@ jobs:
           tag_name: ${{ needs.version.outputs.tag }}
           name: ${{ needs.version.outputs.tag }}
           files: |
-            dist/*
+            dist/*.apk
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true
           generate_release_notes: true
           prerelease: ${{ needs.version.outputs.is_prerelease }}
           make_latest: ${{ needs.version.outputs.is_prerelease == 'false' }}

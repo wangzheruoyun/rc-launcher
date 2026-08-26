@@ -97,10 +97,15 @@ class InstallViewModel(
     /**
      * Build a [GameInstance] from the current [request], ensure a unique id
      * (never silently overwrite an existing instance) and persist it.
-     * Returns the created instance.
+     *
+     * Returns the created instance, or `null` when the request is not valid
+     * ([InstallRequest.isValid] is false). The UI only reaches the commit step
+     * after [canProceed] passes, but the guard keeps the repository free of
+     * half-formed instances even if [create] is called out of order.
      */
-    fun create(): GameInstance {
+    fun create(): GameInstance? {
         val req = _request.value
+        if (!req.isValid) return null
         val existing = repository.instances.value.map { it.id }.toSet()
         var id = req.defaultId()
         var n = 1

@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::download::sha1_bytes;
+use crate::download::{hex_eq, sha1_bytes, sha1_path};
 use crate::error::{RcError, RcResult};
 use crate::runtime::abi::Abi;
 use crate::runtime::java_version::JavaVersion;
@@ -59,6 +59,32 @@ impl JreArchive {
         }
         let actual = sha1_bytes(data);
         if actual.eq_ignore_ascii_case(&self.sha1) {
+            Ok(())
+        } else {
+            Err(RcError::ChecksumMismatch {
+                path: self.file.clone(),
+                expected: self.sha1.clone(),
+                actual,
+            })
+        }
+    }
+
+    /// Verify a file on disk against the recorded SHA-1 and size without
+    /// loading it fully into memory (the hash is streamed in fixed-size
+    /// blocks). Used by [`crate::runtime::source::LocalDirSource`] before it
+    /// streams the extraction, so a corrupt on-disk asset is rejected rather
+    /// than silently unpacked (task 25 — large-file streaming handling).
+    pub async fn verify_path(&self, path: &Path) -> RcResult<()> {
+        let size = std::fs::metadata(path).map_err(RcError::Io)?.len();
+        if size != self.size {
+            return Err(RcError::ChecksumMismatch {
+                path: self.file.clone(),
+                expected: self.size.to_string(),
+                actual: size.to_string(),
+            });
+        }
+        let actual = sha1_path(path).await?;
+        if hex_eq(&actual, &self.sha1) {
             Ok(())
         } else {
             Err(RcError::ChecksumMismatch {
@@ -249,6 +275,26 @@ mod tests {
         assert!(a.verify(b"hello").is_ok());
         assert!(a.verify(b"hello!").is_err());
         assert!(a.verify(b"world").is_err());
+    }
+
+    #[tokio::test]
+    async fn archive_verify_path_accepts_matching_and_rejects_corrupt() {
+        let dir = std::env::temp_dir().join(format!("rc-verify-path-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("a.tar.xz");
+        std::fs::write(&p, b"hello").unwrap();
+        let a = JreArchive {
+            kind: ArchiveKind::Universal,
+            abi: None,
+            file: "a.tar.xz".into(),
+            sha1: sha1_bytes(b"hello"),
+            size: 5,
+        };
+        assert!(a.verify_path(&p).await.is_ok());
+        // Wrong size / content on disk must be rejected.
+        std::fs::write(&p, b"hello!").unwrap();
+        assert!(a.verify_path(&p).await.is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

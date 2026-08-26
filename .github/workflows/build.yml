@@ -1,11 +1,11 @@
 # com.rc.launcher — CI build (all builds run on GitHub Actions).
 #
 # Pipeline:
-#   1. rust-core  — for each Android ABI, cross-compile the Rust core to
+#   1. rust-core  — for the arm64-v8a ABI, cross-compile the Rust core to
 #                   libcrc_launcher.so via cargo-ndk (needs the Android NDK).
 #   2. rust-test  — run the Rust unit tests on the host (no NDK required).
 #   3. android    — assemble + download the .so artifacts, then build the
-#                   signed APK and AAB with Gradle.
+#                   signed APK with Gradle.
 #
 # Caches for Cargo and Gradle are used to keep the workflow fast.
 
@@ -22,6 +22,11 @@ env:
   CARGO_TERM_COLOR: always
   GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
 # Required repository secrets for signed release builds (consumed by
 # app/build.gradle.kts via the KEYSTORE_BASE64 gate):
 #   KEYSTORE_BASE64    - base64-encoded release .jks keystore
@@ -29,7 +34,7 @@ env:
 #   KEY_ALIAS          - signing key alias
 #   KEY_PASSWORD       - signing key password
 # When these are absent (fork PRs, local dry-runs) the release build falls
-# back to the auto-generated debug key so an installable APK/AAB is always
+# back to the auto-generated debug key so an installable APK is always
 # produced. This mirrors the FCL build.yml / Zalith push_ci signing flow.
 
 jobs:
@@ -189,10 +194,10 @@ jobs:
           echo "prebuilt JRE assets OK"
 
   # ---------------------------------------------------------------------------
-  # 3) Build the Android app (APK + AAB) with Gradle.
+  # 3) Build the Android app (APK) with Gradle.
   # ---------------------------------------------------------------------------
   android:
-    name: Android APK / AAB
+    name: Android APK
     needs: rust-core
     runs-on: ubuntu-latest
     env:
@@ -206,23 +211,25 @@ jobs:
           pattern: rust-core-*
           path: rust-artifacts
 
-      # upload-artifact preserves the full workspace-relative path, so we copy
-      # each .so into the canonical jniLibs/<triple>/ location for :core.
-      # The rust-core-* artifact (rust-core-arm64-v8a) is downloaded
-      # into rust-artifacts/<name>/. Map by ABI so the .so lands in the canonical
-      # jniLibs/<abi>/ location Gradle expects, independent of upload-artifact's
-      # inner-path handling.
+      # The rust-core-* artifact (rust-core-arm64-v8a) is downloaded into
+      # rust-artifacts/<name>/. upload/download-artifact may preserve the full
+      # workspace-relative path OR flatten it, so we locate the built .so with
+      # `find` instead of assuming a fixed layout, then place it in the
+      # canonical jniLibs/<abi>/ directory Gradle packages into the APK. A
+      # missing native lib fails the build fast (a launcher APK without the
+      # Rust core cannot start the game).
       - name: Assemble native libraries
         run: |
           mkdir -p core/src/main/jniLibs
           for abi in arm64-v8a; do
-            src="rust-artifacts/rust-core-$abi/librc_launcher.so"
-            if [ -f "$src" ]; then
+            src=$(find "rust-artifacts/rust-core-$abi" -name 'librc_launcher.so' -type f 2>/dev/null | head -n1)
+            if [ -n "$src" ]; then
               mkdir -p "core/src/main/jniLibs/$abi"
               cp -f "$src" "core/src/main/jniLibs/$abi/"
               echo "placed $abi <- $src"
             else
-              echo "WARNING: missing native lib for $abi ($src)"
+              echo "::error::missing native lib for $abi under rust-artifacts/rust-core-$abi"
+              exit 1
             fi
           done
           echo "Assembled native libraries:"
@@ -268,13 +275,13 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 -d > release-keystore.jks
           ls -l release-keystore.jks
 
-      - name: Build release (APK + AAB)
+      - name: Build release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease bundleRelease
+        run: ./gradlew assembleRelease
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -282,13 +289,6 @@ jobs:
           name: app-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-
-      - name: Upload AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-release-aab
-          path: app/build/outputs/bundle/release/*.aab
-          if-no-files-found: ignore
 
       # Prove the produced APK is actually signed (valid for both the CI
       # release key and the debug-key fallback) so a broken signing config
@@ -299,6 +299,42 @@ jobs:
           test -n "$APK" || { echo "no release APK produced"; exit 1; }
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify "$APK"             && echo "APK signature OK: $APK"             || { echo "APK is NOT signed: $APK"; exit 1; }
 
+      # Enforce the single-ABI, APK-only deliverable contract (task 22):
+      #   * exactly one release .apk is produced (never an .aab or a .zip),
+      #   * the APK carries native libs under lib/arm64-v8a only.
+      - name: Verify APK deliverable (arm64-v8a only, no AAB/zip)
+        run: |
+          set -euo pipefail
+          APK_DIR=app/build/outputs/apk/release
+          BUNDLE_DIR=app/build/outputs/bundle/release
+          # 1) An AAB or a zip deliverable must never be produced.
+          if compgen -G "$BUNDLE_DIR/*.aab" >/dev/null; then
+            echo "::error::An AAB was produced but only an .apk is allowed"
+            exit 1
+          fi
+          if compgen -G "$APK_DIR/*.zip" >/dev/null; then
+            echo "::error::A zip deliverable was produced but only .apk is allowed"
+            exit 1
+          fi
+          # 2) Exactly one release APK.
+          shopt -s nullglob
+          apks=( "$APK_DIR"/*.apk )
+          shopt -u nullglob
+          if [[ "${#apks[@]}" -ne 1 ]]; then
+            echo "::error::expected exactly 1 release APK, found ${#apks[@]}"
+            exit 1
+          fi
+          APK="${apks[0]}"
+          echo "Release APK: $APK"
+          # 3) Native libs must live under lib/arm64-v8a only.
+          command -v unzip >/dev/null 2>&1 || { echo "::error::unzip not available"; exit 1; }
+          abis=$(unzip -l "$APK" 'lib/*/*.so' | awk -F'lib/' '/\.so$/{print $2}' | cut -d/ -f1 | sort -u)
+          echo "ABIs present in APK: [$abis]"
+          if [[ "$abis" != "arm64-v8a" ]]; then
+            echo "::error::APK contains unexpected ABIs: [$abis] (only arm64-v8a allowed)"
+            exit 1
+          fi
+          echo "ABI contract OK: arm64-v8a only"
   # ---------------------------------------------------------------------------
   # 4) Run the Android unit + Compose UI tests on the JVM (Robolectric) and FAIL
   #    the build on any regression. This is the task-21 test gate for the

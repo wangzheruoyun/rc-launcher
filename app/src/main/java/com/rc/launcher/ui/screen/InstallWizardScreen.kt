@@ -51,7 +51,8 @@ import com.rc.launcher.ui.model.LoaderVersion
 import com.rc.launcher.ui.model.ModLoader
 import com.rc.launcher.ui.model.stepNumber
 import com.rc.launcher.ui.model.totalSteps
-import com.rc.launcher.ui.navigation.RcRoutes
+import com.rc.launcher.ui.navigation.InstanceDetailRoute
+import com.rc.launcher.ui.navigation.InstallRoute
 import com.rc.launcher.ui.viewmodel.InstallViewModel
 
 /** Preset cover colours offered in the configure step. */
@@ -121,10 +122,12 @@ fun InstallWizardScreen(
                         Button(
                             onClick = {
                                 if (isReview) {
-                                    val created = vm.create()
+                                    // canProceed is true here, so create() is non-null;
+                                    // the guard is a defensive belt-and-braces check.
+                                    val created = vm.create() ?: return@Button
                                     navController?.navigate(
-                                        RcRoutes.instanceDetail(created.id),
-                                    ) { popUpTo(RcRoutes.INSTALL) { inclusive = true } }
+                                        InstanceDetailRoute(created.id),
+                                    ) { popUpTo(InstallRoute::class) { inclusive = true } }
                                 } else {
                                     vm.next()
                                 }

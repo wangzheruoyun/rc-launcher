@@ -179,6 +179,97 @@ class InstallProfileTest {
     }
 
     @Test
+    fun request_validationRejectsUnsupportedJavaVersion() {
+        // 99 is not in SUPPORTED_JAVA_VERSIONS -> rejected.
+        assertEquals(
+            "Java 版本不受支持",
+            InstallRequest(
+                loader = ModLoader.VANILLA,
+                gameVersion = "1.20.1",
+                name = "x",
+                javaVersion = 99,
+            ).validationError(),
+        )
+        // 7 (too old) is also unsupported now.
+        assertEquals(
+            "Java 版本不受支持",
+            InstallRequest(
+                loader = ModLoader.VANILLA,
+                gameVersion = "1.20.1",
+                name = "x",
+                javaVersion = 7,
+            ).validationError(),
+        )
+        // A supported version is accepted.
+        assertNull(
+            InstallRequest(
+                loader = ModLoader.VANILLA,
+                gameVersion = "1.20.1",
+                name = "x",
+                javaVersion = 17,
+            ).validationError(),
+        )
+    }
+
+    @Test
+    fun request_validationRejectsOverlongName() {
+        val longName = "实例".repeat(40) // 80 chars > MAX_INSTANCE_NAME_LENGTH (64)
+        assertEquals(
+            "实例名称过长（最多 ${MAX_INSTANCE_NAME_LENGTH} 字）",
+            InstallRequest(
+                loader = ModLoader.VANILLA,
+                gameVersion = "1.20.1",
+                name = longName,
+            ).validationError(),
+        )
+        // Exactly at the limit (64 chars) is still valid.
+        val okName = "a".repeat(MAX_INSTANCE_NAME_LENGTH)
+        assertNull(
+            InstallRequest(
+                loader = ModLoader.VANILLA,
+                gameVersion = "1.20.1",
+                name = okName,
+            ).validationError(),
+        )
+    }
+
+    @Test
+    fun gameInstance_duplicateCopiesSettingsAndResetsPlayed() {
+        val src = GameInstance(
+            id = "fabric-1.20.1",
+            name = "Fabric 整合包",
+            version = "1.20.1",
+            modLoader = ModLoader.FABRIC,
+            loaderVersion = "0.16.0",
+            javaVersion = 17,
+            gameDirectoryType = GameDirectoryType.ISOLATED,
+            lastPlayed = 123456L,
+            isFavorite = true,
+        )
+        val clone = src.duplicate("fabric-1.20.1-copy", "Fabric 副本")
+        assertEquals("fabric-1.20.1-copy", clone.id)
+        assertEquals("Fabric 副本", clone.name)
+        // settings preserved
+        assertEquals(src.version, clone.version)
+        assertEquals(src.modLoader, clone.modLoader)
+        assertEquals(src.loaderVersion, clone.loaderVersion)
+        assertEquals(src.javaVersion, clone.javaVersion)
+        assertEquals(src.gameDirectoryType, clone.gameDirectoryType)
+        // per-run state reset
+        assertEquals(0L, clone.lastPlayed)
+        assertEquals(false, clone.isFavorite)
+        // original untouched
+        assertEquals(123456L, src.lastPlayed)
+    }
+
+    @Test
+    fun gameInstance_duplicateFallsBackToDefaultName() {
+        val src = GameInstance("v", "原版", "1.20.1")
+        val clone = src.duplicate("v-copy")
+        assertEquals("原版 副本", clone.name)
+    }
+
+    @Test
     fun step_progressCounts() {
         val vanilla = InstallRequest(loader = ModLoader.VANILLA, gameVersion = "1.20.1")
         val fabric = vanilla.copy(loader = ModLoader.FABRIC)

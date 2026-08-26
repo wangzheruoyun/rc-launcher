@@ -3,7 +3,9 @@ package com.rc.launcher.ui.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import com.rc.launcher.ui.model.RendererPluginConfig
 import org.junit.Test
 
 /** Unit tests for the settings data model (task 14). */
@@ -136,4 +138,70 @@ class LauncherSettingsTest {
         assertTrue(small.width >= WindowSize.MIN_W)
         assertFalse(small.width == 0)
     }
+    @Test
+    fun rendererPluginConfig_defaultsValid() {
+        val s = LauncherSettings()
+        assertEquals(RendererPluginConfig(), s.rendererOptions)
+        assertEquals(null, s.validationError())
+    }
+
+    @Test
+    fun backup_roundTrip_defaults() {
+        val s = LauncherSettings()
+        val restored = LauncherSettings.fromBackupString(s.toBackupString())
+        assertNotNull(restored)
+        assertEquals(s, restored)
+    }
+
+    @Test
+    fun backup_roundTrip_customValues() {
+        val s = LauncherSettings(
+            mirrorId = MirrorCatalog.ALIYUN.id,
+            javaHeapMb = 4096,
+            rendererId = RendererOption.ZINK.id,
+            rendererOptions = RendererPluginConfig(
+                zinkVulkanDriver = "turnip",
+                angleBackend = "gl",
+                gl4esNoSrgb = true,
+                virglServer = "192.168.1.10:8080",
+            ),
+            gameFilesRoot = "/sdcard/games",
+        )
+        val restored = LauncherSettings.fromBackupString(s.toBackupString())
+        assertNotNull(restored)
+        assertEquals(s, restored)
+        assertEquals("turnip", restored!!.rendererOptions.zinkVulkanDriver)
+        assertEquals("gl", restored.rendererOptions.angleBackend)
+        assertEquals(true, restored.rendererOptions.gl4esNoSrgb)
+        assertEquals("192.168.1.10:8080", restored.rendererOptions.virglServer)
+    }
+
+    @Test
+    fun backup_ignoresUnknownKeysAndComments() {
+        val payload = """
+            # comment line
+            mirrorId=bmclapi
+            totally_unknown_key=ignored
+            javaHeapMb=2048
+        """.trimIndent()
+        val restored = LauncherSettings.fromBackupString(payload)
+        assertNotNull(restored)
+        assertEquals(2048, restored!!.javaHeapMb)
+        assertEquals(MirrorCatalog.BMCLAPI.id, restored.mirrorId)
+    }
+
+    @Test
+    fun backup_sanitizesOnImport() {
+        // Out-of-range heap is clamped; a padded virglServer is trimmed.
+        val payload = """
+            javaHeapMb=999999
+            renderer.virglServer=   spaced   
+        """.trimIndent()
+        val restored = LauncherSettings.fromBackupString(payload)
+        assertNotNull(restored)
+        assertEquals(LauncherSettings.MAX_HEAP_MB, restored!!.javaHeapMb)
+        assertEquals("spaced", restored.rendererOptions.virglServer)
+        assertEquals(null, restored.validationError())
+    }
+
 }

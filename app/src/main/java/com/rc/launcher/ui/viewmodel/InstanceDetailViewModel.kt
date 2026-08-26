@@ -64,4 +64,16 @@ class InstanceDetailViewModel(
         _instance.value = null
         return current.id
     }
+
+    /**
+     * Duplicate the currently-loaded instance. The clone is persisted with a
+     * unique id (and optional [overrideName]); the original stays loaded so the
+     * user keeps editing it. Returns the new clone's id, or null when nothing
+     * is loaded (task 13).
+     */
+    fun duplicate(overrideName: String? = null): String? {
+        val current = _instance.value ?: return null
+        val clone = repository.duplicate(current.id, overrideName) ?: return null
+        return clone.id
+    }
 }

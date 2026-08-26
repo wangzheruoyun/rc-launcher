@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -46,6 +47,7 @@ import androidx.navigation.NavHostController
 import com.rc.launcher.ui.model.GameDirectoryType
 import com.rc.launcher.ui.model.GameInstance
 import com.rc.launcher.ui.model.effectiveGameDir
+import com.rc.launcher.ui.navigation.InstanceDetailRoute
 import com.rc.launcher.ui.model.lastPlayedLabel
 import com.rc.launcher.ui.viewmodel.DashboardViewModel
 import com.rc.launcher.ui.viewmodel.InstanceDetailViewModel
@@ -232,6 +234,17 @@ fun InstanceDetailScreen(
             ) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = null)
                 Text(if (launching) "启动中…" else "启动")
+            }
+            TextButton(
+                onClick = {
+                    vm.duplicate()?.let { newId ->
+                        navController?.navigate(InstanceDetailRoute(newId))
+                    }
+                },
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                Text("复制实例")
             }
             TextButton(
                 onClick = { confirmDelete = true },

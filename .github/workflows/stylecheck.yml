@@ -83,3 +83,46 @@ jobs:
 
       - name: detekt
         run: ./gradlew detekt --no-daemon
+
+  # ---------------------------------------------------------------------------
+  # Deliverable contract: the release artifact MUST stay a single arm64-v8a .apk
+  # (no AAB, no .zip). Fails fast if a contributor re-introduces bundleRelease or
+  # a non-arm64-v8a ABI, so the build pipeline's hard contract (task 22) cannot
+  # silently regress. This is the contribution-facing half of that contract.
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Deliverable contract: the release artifact MUST stay a single arm64-v8a .apk
+  # (no AAB, no .zip). Fails fast if a contributor re-introduces bundleRelease or
+  # a non-arm64-v8a ABI, so the build pipeline's hard contract (task 22) cannot
+  # silently regress. This is the contribution-facing half of that contract.
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Deliverable contract: the release artifact MUST stay a single arm64-v8a .apk
+  # (no AAB, no .zip). Fails fast if a contributor re-introduces the
+  # `bundleRelease` Gradle task or a non-arm64-v8a ABI, so the build pipeline's
+  # hard contract (task 22) cannot silently regress. (CI workflow .yml files are
+  # intentionally not scanned here: the build-time "Verify APK deliverable" step
+  # already fails the build if any AAB is produced. We scan only the Gradle
+  # build scripts where `bundleRelease` would actually be invoked, which also
+  # avoids this very job self-matching its own guard text.)
+  # ---------------------------------------------------------------------------
+  contract:
+    name: Deliverable contract (APK-only, arm64-v8a)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject AAB / multi-ABI build reintroductions
+        run: |
+          set -euo pipefail
+          echo "Scanning Gradle build scripts for forbidden AAB / multi-ABI reintroductions..."
+          if grep -rEn "bundleRelease" --include='*.kts' --include='*.gradle' --include='*.gradle.kts' --exclude-dir=target --exclude-dir=snapshots --exclude-dir=.git . ; then
+            echo "::error::'bundleRelease' found - the release artifact must be a single .apk, not an AAB."
+            exit 1
+          fi
+          bad_abi=$(grep -rEn "abiFilters" --include='*.kts' --include='*.gradle.kts' . | grep -v "arm64-v8a" | grep -E "armeabi-v7a|x86_64|x86|armeabi|mips" || true)
+          if [ -n "$bad_abi" ]; then
+            echo "::error::non-arm64-v8a ABI found in abiFilters: $bad_abi"
+            exit 1
+          fi
+          echo "Deliverable contract OK: APK-only, arm64-v8a only."

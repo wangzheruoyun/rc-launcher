@@ -327,6 +327,28 @@ mod tests {
     }
 
     #[test]
+    fn incompatible_dependency_detected() {
+        // `a` requires `b >= 2.0`, but only `b 1.0` is installed.
+        let mut a = mod_with("a", None, vec![]);
+        a.dependencies
+            .push(crate::mods::metadata::ModDependency::new(
+                "b",
+                Some(crate::mods::constraint::VersionConstraint::parse(">=2.0").unwrap()),
+                true,
+            ));
+        let b = mod_with("b", None, vec![]);
+        let mut b = b;
+        b.version = Some("1.0".into());
+        let issues = resolve_issues(&[a, b], Some("1.18.2"));
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.kind == ModIssueKind::IncompatibleDependency),
+            "expected an incompatible-dependency issue, got {issues:?}"
+        );
+    }
+
+    #[test]
     fn duplicate_mod_detected() {
         let a1 = mod_with("dup", None, vec![]);
         let a2 = mod_with("dup", None, vec![]);

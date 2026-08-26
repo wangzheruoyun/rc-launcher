@@ -45,6 +45,74 @@ class GameInstanceTest {
     }
 
     @Test
+    fun effectiveGameDir_defaultUsesBaseDir() {
+        val inst = GameInstance("x", "X", "1.0", gameDirectoryType = GameDirectoryType.DEFAULT)
+        assertEquals("/data/games", inst.effectiveGameDir("/data/games"))
+    }
+
+    @Test
+    fun effectiveGameDir_isolatedUsesInstanceSubdir() {
+        val inst = GameInstance("x", "X", "1.0", gameDirectoryType = GameDirectoryType.ISOLATED)
+        assertEquals("/data/games/instances/x", inst.effectiveGameDir("/data/games"))
+    }
+
+    @Test
+    fun effectiveGameDir_customUsesProvidedPath() {
+        val inst = GameInstance(
+            "x", "X", "1.0",
+            gameDirectoryType = GameDirectoryType.CUSTOM,
+            customGameDir = "/custom/path",
+        )
+        assertEquals("/custom/path", inst.effectiveGameDir("/data/games"))
+    }
+
+    @Test
+    fun effectiveGameDir_customFallsBackWhenBlank() {
+        val inst = GameInstance(
+            "x", "X", "1.0",
+            gameDirectoryType = GameDirectoryType.CUSTOM,
+            customGameDir = "   ",
+        )
+        assertEquals("/data/games/instances/x", inst.effectiveGameDir("/data/games"))
+    }
+
+    @Test
+    fun dashboardOrder_recencyAfterFavorites() {
+        val t = 1_000_000L
+        val list = listOf(
+            GameInstance("old", "Old", "1.0", lastPlayed = t - 100),
+            GameInstance("new", "New", "1.0", lastPlayed = t - 10),
+            GameInstance("fav", "Fav", "1.0", lastPlayed = t - 50, isFavorite = true),
+        )
+        assertEquals(listOf("fav", "new", "old"), list.dashboardOrder().map { it.id })
+    }
+
+    @Test
+    fun dashboardOrder_breaksTiesByName() {
+        val list = listOf(
+            GameInstance("b", "B", "1.0", lastPlayed = 0L),
+            GameInstance("a", "A", "1.0", lastPlayed = 0L),
+        )
+        assertEquals(listOf("a", "b"), list.dashboardOrder().map { it.id })
+    }
+
+    @Test
+    fun recentlyPlayed_preservesOrderForEqualTimes() {
+        val list = listOf(
+            GameInstance("a", "A", "1.0", lastPlayed = 100L),
+            GameInstance("b", "B", "1.0", lastPlayed = 100L),
+        )
+        assertEquals(listOf("a", "b"), list.recentlyPlayed().map { it.id })
+    }
+
+    @Test
+    fun isPlayable_requiresNonBlankVersion() {
+        assertTrue(GameInstance("a", "A", "1.20.1").isPlayable)
+        assertFalse(GameInstance("b", "B", "").isPlayable)
+        assertFalse(GameInstance("c", "C", "   ").isPlayable)
+    }
+
+    @Test
     fun lastPlayedLabel_handlesNeverAndRecent() {
         val now = 10_000_000L
         assertEquals("从未游玩", GameInstance("x", "X", "1.0").copy(lastPlayed = 0L).lastPlayedLabel(now))

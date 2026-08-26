@@ -335,6 +335,25 @@ pub fn renderer_plugin(r: Renderer) -> RendererPlugin {
             signature: None,
             author: None,
         },
+        Renderer::Sdl => RendererPlugin {
+            id: "sdl2".into(),
+            display_name: "SDL2 (LWJGL)".into(),
+            gl_libname: "liblwjgl_sdl.so".into(),
+            backend: WindowingBackend::Sdl,
+            env: vec![
+                ("SDL_VIDEO_RENDERER".into(), "1".into()),
+                ("SDL_AUDIODRIVER".into(), "android".into()),
+            ],
+            supported_abis: Vec::new(),
+            // `liblwjgl_sdl.so` ships in the LWJGL 3.4.1 natives bundle
+            // (assets/app_runtime/lwjgl/3.4.1/natives/<abi>/), not the FCL APK
+            // lib dir, so it is resolved through `LwjglNatives`.
+            native_libs: vec![NativeLib::in_lwjgl_natives("liblwjgl_sdl.so")],
+            requires_validation: false,
+            trust: TrustLevel::System,
+            signature: None,
+            author: None,
+        },
     }
 }
 
@@ -355,7 +374,8 @@ impl RendererRegistry {
         Self::from_builtins()
     }
 
-    /// Build the built-in registry (all 5 FCL renderers).
+    /// Build the built-in registry (the 5 FCL renderers plus the LWJGL SDL
+    /// backend, all `System`-trusted).
     pub fn from_builtins() -> Self {
         let mut r = RendererRegistry::default();
         for variant in [
@@ -364,6 +384,7 @@ impl RendererRegistry {
             Renderer::VirGl,
             Renderer::Zink,
             Renderer::Angle,
+            Renderer::Sdl,
         ] {
             r.register(renderer_plugin(variant));
         }
@@ -468,18 +489,26 @@ mod tests {
     use crate::plugins::validation::TrustStore;
 
     #[test]
-    fn builtin_registry_has_all_five() {
+    fn builtin_registry_has_all_renderers() {
         let reg = RendererRegistry::builtin();
-        assert_eq!(reg.ids().len(), 5);
+        assert_eq!(reg.ids().len(), 6);
         for id in [
             "opengles2",
             "opengles2_ng",
             "opengles2_vgpu",
             "opengles3_desktopgl_zink_kopper",
             "opengles3_angle",
+            "sdl2",
         ] {
             assert!(reg.get(id).is_some(), "missing builtin {id}");
         }
+        // The SDL backend must drive the Sdl windowing backend and resolve its
+        // native from the LWJGL natives dir (not the FCL APK lib dir).
+        let sdl = reg.get("sdl2").unwrap();
+        assert_eq!(sdl.backend, WindowingBackend::Sdl);
+        assert_eq!(sdl.gl_libname, "liblwjgl_sdl.so");
+        assert_eq!(sdl.native_libs[0].source, NativeLibSource::LwjglNatives);
+        assert_eq!(sdl.trust, TrustLevel::System);
     }
 
     #[test]
@@ -492,6 +521,7 @@ mod tests {
             Renderer::VirGl,
             Renderer::Zink,
             Renderer::Angle,
+            Renderer::Sdl,
         ] {
             let p = renderer_plugin(r);
             assert_eq!(p.id, r.id());
@@ -511,7 +541,9 @@ mod tests {
             .author("alice")
             .build();
         reg.register(custom);
-        assert_eq!(reg.ids().len(), 5);
+        // `builtin()` now has 6 entries (the 5 FCL stacks + the LWJGL SDL
+        // backend); replacing `opengles2` keeps the count at 6.
+        assert_eq!(reg.ids().len(), 6);
         assert_eq!(reg.get("opengles2").unwrap().display_name, "Custom GL4ES");
     }
 

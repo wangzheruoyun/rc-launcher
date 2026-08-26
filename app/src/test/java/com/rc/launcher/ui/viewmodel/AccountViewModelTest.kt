@@ -6,6 +6,7 @@ import com.rc.launcher.ui.model.InMemoryAccountRepository
 import com.rc.launcher.ui.model.MicrosoftAccount
 import com.rc.launcher.ui.model.OfflineAccount
 import com.rc.launcher.ui.model.TokenStatus
+import com.rc.launcher.ui.model.nowSecs
 import com.rc.launcher.ui.viewmodel.LoginState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -109,5 +110,45 @@ class AccountViewModelTest {
         v.ensureFresh(before.uuid)
         val after = v.accounts.value.first()
         assertEquals(before, after)
+    }
+
+    @Test
+    fun loadAccounts_autoRefreshesExpiringMicrosoft() = runBlocking {
+        val expired = MicrosoftAccount(
+            uuid = "exp",
+            username = "Old",
+            expiresAt = nowSecs() - 10,
+            msExpiresAt = nowSecs() - 10,
+        )
+        val v = vm(InMemoryAccountRepository(listOf(expired)))
+        v.loadAccounts()
+        val acc = v.accounts.value.first() as MicrosoftAccount
+        assertEquals(TokenStatus.VALID, acc.tokenStatus)
+        assertTrue(acc.expiresAt > nowSecs())
+        // The active selection should settle on the (now valid) premium account.
+        assertEquals(acc.uuid, v.activeId.value)
+    }
+
+    @Test
+    fun refreshAllMicrosoft_refreshesEveryMicrosoft() = runBlocking {
+        val a = MicrosoftAccount(uuid = "a", username = "A", expiresAt = nowSecs() - 5, msExpiresAt = nowSecs() - 5)
+        val b = MicrosoftAccount(uuid = "b", username = "B", expiresAt = nowSecs() + 9999, msExpiresAt = nowSecs() + 9999)
+        val v = vm(InMemoryAccountRepository(listOf(a, b)))
+        v.loadAccounts()
+        v.refreshAllMicrosoft()
+        val microsoft = v.accounts.value.filterIsInstance<MicrosoftAccount>()
+        assertEquals(2, microsoft.size)
+        assertTrue(microsoft.all { it.tokenStatus == TokenStatus.VALID })
+    }
+
+    @Test
+    fun loadAccounts_surfacesErrorOnFailure() = runBlocking {
+        val failing = object : AccountRepository by InMemoryAccountRepository() {
+            override suspend fun list(): List<Account> = throw RuntimeException("boom")
+        }
+        val v = vm(failing)
+        v.loadAccounts()
+        assertNotNull(v.error.value)
+        assertTrue(v.accounts.value.isEmpty())
     }
 }

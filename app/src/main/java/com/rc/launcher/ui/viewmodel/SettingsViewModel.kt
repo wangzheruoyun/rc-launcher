@@ -7,6 +7,11 @@ import com.rc.launcher.ui.model.LauncherSettings
 import com.rc.launcher.ui.model.MirrorCatalog
 import com.rc.launcher.ui.model.MirrorSource
 import com.rc.launcher.ui.model.RendererOption
+import com.rc.launcher.ui.model.DefaultMirrorMeasurer
+import com.rc.launcher.ui.model.MirrorLatency
+import com.rc.launcher.ui.model.MirrorMeasurer
+import com.rc.launcher.ui.model.MirrorProbeState
+import com.rc.launcher.ui.model.RendererPluginConfig
 import com.rc.launcher.ui.model.ResolutionMode
 import com.rc.launcher.ui.model.SettingsRepositories
 import com.rc.launcher.ui.model.SettingsRepository
@@ -38,6 +43,10 @@ class SettingsViewModel(
     val mirrors: List<MirrorSource> = MirrorCatalog.all
     val renderers: List<RendererOption> = RendererOption.entries
     val dohServers: List<DohServer> = DohCatalog.all
+
+    /** Live state of an in-progress / completed mirror speed test. */
+    private val _mirrorProbe = MutableStateFlow<MirrorProbeState>(MirrorProbeState.Idle)
+    val mirrorProbe: StateFlow<MirrorProbeState> = _mirrorProbe.asStateFlow()
 
     /** Apply [next], sanitize, publish and persist (failures are swallowed). */
     private fun commit(next: LauncherSettings) {
@@ -85,6 +94,28 @@ class SettingsViewModel(
     fun setControllerVibration(on: Boolean) =
         commit(_settings.value.copy(controllerVibration = on))
 
+    // ---- Renderer plugin options (task 14, maps to FCL RendererPlugin config) --
+    fun setZinkVulkanDriver(id: String) = commit(
+        _settings.value.copy(
+            rendererOptions = _settings.value.rendererOptions.copy(zinkVulkanDriver = id),
+        ),
+    )
+    fun setAngleBackend(id: String) = commit(
+        _settings.value.copy(
+            rendererOptions = _settings.value.rendererOptions.copy(angleBackend = id),
+        ),
+    )
+    fun setGl4esNoSrgb(on: Boolean) = commit(
+        _settings.value.copy(
+            rendererOptions = _settings.value.rendererOptions.copy(gl4esNoSrgb = on),
+        ),
+    )
+    fun setVirglServer(text: String) = commit(
+        _settings.value.copy(
+            rendererOptions = _settings.value.rendererOptions.copy(virglServer = text),
+        ),
+    )
+
     // ---- Directory / misc --------------------------------------------------
 
     fun setGameFilesRoot(path: String) = commit(_settings.value.copy(gameFilesRoot = path))
@@ -94,4 +125,48 @@ class SettingsViewModel(
 
     /** Restore factory defaults. */
     fun resetToDefaults() = commit(LauncherSettings())
+
+    /** Serialize the current settings to the line-based backup format. */
+    fun exportSettings(): String = _settings.value.toBackupString()
+
+    /**
+     * Restore settings from a [LauncherSettings.toBackupString] payload.
+     * Returns `false` (and leaves the live store untouched) when the payload
+     * cannot be parsed, so a mangled paste can never corrupt active settings.
+     */
+    fun importSettings(payload: String): Boolean {
+        // A blank paste is a no-op rather than a destructive reset to defaults.
+        if (payload.isBlank()) return false
+        val restored = LauncherSettings.fromBackupString(payload) ?: return false
+        commit(restored)
+        return true
+    }
+
+    /**
+     * Probe every domestic mirror's latency and pin the fastest one (China
+     * optimisation, task 3 + task 14). The [measurer] is injectable so the unit
+     * tests run fully offline; the screen passes the real [DefaultMirrorMeasurer].
+     * Progress is published through [mirrorProbe] and the lowest-latency mirror
+     * is finally selected via [setMirror].
+     */
+    suspend fun measureAndSelectFastestMirror(
+        measurer: MirrorMeasurer = DefaultMirrorMeasurer,
+    ): MirrorProbeState.Done {
+        val candidates = mirrors.filter { !it.official }
+        _mirrorProbe.value = MirrorProbeState.Measuring(0, candidates.size)
+        val results = mutableListOf<MirrorLatency>()
+        candidates.forEachIndexed { index, mirror ->
+            results += measurer.probe(mirror)
+            _mirrorProbe.value = MirrorProbeState.Measuring(index + 1, candidates.size)
+        }
+        val best = results.filter { it.ms != null }.minByOrNull { it.ms!! }
+        val state = if (best != null) {
+            setMirror(best.mirrorId)
+            MirrorProbeState.Done(best.mirrorId, results)
+        } else {
+            MirrorProbeState.Done(null, results)
+        }
+        _mirrorProbe.value = state
+        return state
+    }
 }

@@ -184,8 +184,8 @@ impl DependencyResolver {
             ));
         }
 
-        // 2) Asset index.
-        if let Some(ai) = &resolved.asset_index {
+        // 2) Asset index (modern `assetIndex` block, or the legacy `assets` string).
+        if let Some(ai) = resolved.asset_index_ref().as_ref() {
             let dest = root
                 .join("assets")
                 .join("indexes")
@@ -276,9 +276,16 @@ impl DependencyResolver {
     }
 
     /// Build the asset-object download items from a fetched [`AssetsIndex`].
+    ///
+    /// Modern indexes store every object under `assets/objects/<hh>/<hash>` and
+    /// the object is fetched by its SHA-1 from the Mojang CDN. Very old versions
+    /// (the `map_to_resources` flag set) instead lay objects out under
+    /// `assets/resources/<logical-name>` using their *original* path; we still
+    /// download them by hash, so only the destination differs.
     pub fn plan_assets(&self, index: &AssetsIndex) -> Vec<DownloadItem> {
         let mut items = Vec::new();
         let root = &self.root;
+        let legacy = index.map_to_resources.unwrap_or(false);
         for (name, obj) in &index.objects {
             let hash = &obj.hash;
             let prefix = match hash.get(..2) {
@@ -289,9 +296,19 @@ impl DependencyResolver {
                 "https://resources.download.minecraft.net/{}/{}",
                 prefix, hash
             );
-            let dest = root.join("assets").join("objects").join(prefix).join(hash);
+            let (dest, id) = if legacy {
+                (
+                    root.join("assets").join("resources").join(name),
+                    format!("asset/legacy/{}", name),
+                )
+            } else {
+                (
+                    root.join("assets").join("objects").join(prefix).join(hash),
+                    format!("asset/{}", name),
+                )
+            };
             items.push(self.item(
-                &format!("asset/{}", name),
+                &id,
                 &url,
                 dest,
                 Some(hash.clone()),
@@ -380,16 +397,81 @@ impl DependencyResolver {
     ) -> RcResult<AssetsIndex> {
         fetch_json_with_mirrors(client, &self.mirror, url).await
     }
+
+    /// Resolve a version (walking `inheritsFrom`), fetch its asset index and
+    /// return the complete, deduplicated [`DownloadPlan`] — client jar, asset
+    /// index, libraries (+ natives), logging client **and** every asset object.
+    ///
+    /// This is the one-call convenience that turns a version id into a
+    /// ready-to-download plan: it wraps [`Self::resolve_version`] +
+    /// [`Self::fetch_assets_index`] + [`Self::build_full_plan`] into a single
+    /// mirror-aware pipeline. Every URL inherits transparent mirror fallback
+    /// from the [`crate::net::MirrorProvider`] held by this resolver.
+    pub async fn resolve_full_plan(
+        &self,
+        client: &reqwest::Client,
+        manifest: &VersionManifest,
+        version_id: &str,
+    ) -> RcResult<DownloadPlan> {
+        let resolved = self.resolve_version(client, manifest, version_id).await?;
+        let mut plan = self.build_plan(&resolved);
+        if let Some(ai) = resolved.asset_index_ref() {
+            let idx = self.fetch_assets_index(client, &ai.url).await?;
+            for item in self.plan_assets(&idx) {
+                plan.add(item);
+            }
+        }
+        plan.dedup();
+        Ok(plan)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
     use std::path::Path;
+    use std::sync::Arc;
 
     use super::*;
+    use crate::game::manifest::Latest;
     use crate::game::platform::{Arch, OsName, Platform};
     use crate::game::version::{AssetIndexRef, DownloadInfo, Downloads};
     use crate::net::{MirrorProvider, MirrorSource};
+
+    /// Minimal blocking HTTP/1.0 test server; `handler` returns `(status, body)`.
+    fn start_json_server(
+        handler: impl Fn(&str) -> (u16, String) + Send + Sync + 'static,
+    ) -> (String, std::thread::JoinHandle<()>) {
+        let handler = Arc::new(handler);
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let handle = std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut buf = [0u8; 16384];
+                let n = match stream.read(&mut buf) {
+                    Ok(n) if n > 0 => n,
+                    _ => continue,
+                };
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = req
+                    .lines()
+                    .next()
+                    .and_then(|l| l.split_whitespace().nth(1))
+                    .unwrap_or("/")
+                    .to_string();
+                let (status, body) = handler(&path);
+                let resp = format!(
+                    "HTTP/1.0 {status} OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+                let _ = stream.write_all(body.as_bytes());
+                let _ = stream.flush();
+            }
+        });
+        (format!("http://{addr}"), handle)
+    }
 
     fn resolver() -> DependencyResolver {
         let platform = Platform {
@@ -574,5 +656,114 @@ mod tests {
             .unwrap();
         assert!(client.url.contains("piston-data.mojang.com"));
         assert_eq!(client.checksum, Some(Checksum::Sha1("clientsha".into())));
+    }
+
+    #[test]
+    fn legacy_asset_index_included_in_plan() {
+        // A version that only declares the legacy `assets` string (no modern
+        // `assetIndex` block) must still produce an asset-index download item
+        // with the synthesised legacy URL.
+        let r = resolver();
+        let mut res = resolved();
+        res.asset_index = None;
+        res.assets = Some("1.12".into());
+        let plan = r.build_plan(&res);
+        let ai = plan
+            .items
+            .iter()
+            .find(|i| i.kind == ArtifactKind::AssetIndex)
+            .unwrap();
+        assert_eq!(ai.id, "assetindex/1.12");
+        assert_eq!(
+            ai.url,
+            "https://launchermeta.mojang.com/mc/assets/1.12/1.12.json"
+        );
+    }
+
+    #[test]
+    fn map_to_resources_uses_legacy_layout() {
+        // Legacy `map_to_resources` indexes store objects under assets/resources/<name>.
+        let r = resolver();
+        let idx: AssetsIndex = serde_json::from_str(
+            r#"{"map_to_resources":true,"objects":{"minecraft/sounds/a.ogg":{"hash":"0123456789abcdef0123456789abcdef01234567","size":42}}}"#,
+        )
+        .unwrap();
+        let items = r.plan_assets(&idx);
+        assert_eq!(items.len(), 1);
+        let it = &items[0];
+        assert_eq!(it.kind, ArtifactKind::AssetObject);
+        assert_eq!(
+            it.dest,
+            Path::new("/data/assets/resources/minecraft/sounds/a.ogg")
+        );
+        assert!(it.url.contains("resources.download.minecraft.net"));
+    }
+
+    #[test]
+    fn modern_assets_use_objects_layout() {
+        let r = resolver();
+        let idx: AssetsIndex = serde_json::from_str(
+            r#"{"objects":{"minecraft/sounds/a.ogg":{"hash":"0123456789abcdef0123456789abcdef01234567","size":42}}}"#,
+        )
+        .unwrap();
+        let items = r.plan_assets(&idx);
+        assert_eq!(
+            items[0].dest,
+            Path::new("/data/assets/objects/01/0123456789abcdef0123456789abcdef01234567")
+        );
+    }
+
+    #[tokio::test]
+    async fn resolve_full_plan_end_to_end() {
+        // Drive the whole task-4 pipeline against a local mirror: fetch the
+        // manifest entry's version.json, walk (no inheritance here) and fetch
+        // the asset index, then build a complete deduplicated plan.
+        let version_json = r#"{
+            "id":"1.20.4",
+            "assetIndex":{"id":"1.20","sha1":"idxsha","size":10,"url":"https://launchermeta.mojang.com/mc/assets/1.20.json"},
+            "downloads":{"client":{"url":"https://piston-data.mojang.com/v1/objects/aa/client.jar","sha1":"clientsha","size":100}},
+            "mainClass":"net.minecraft.client.main.Main",
+            "libraries":[{"name":"com.mojang:patchy:1.1"}]
+        }"#;
+        let asset_index_json = r#"{"objects":{"minecraft/sounds/a.ogg":{"hash":"0123456789abcdef0123456789abcdef01234567","size":42}}}"#;
+        let (base, _h) = start_json_server(move |path| match path {
+            p if p.ends_with("/1.20.4.json") => (200, version_json.to_string()),
+            p if p.ends_with("/1.20.json") => (200, asset_index_json.to_string()),
+            _ => (404, "not found".to_string()),
+        });
+        let provider = MirrorProvider::new(vec![MirrorSource::new("local", "Local", &base)]);
+        let client = reqwest::Client::new();
+
+        let manifest = VersionManifest {
+            latest: Latest {
+                release: String::new(),
+                snapshot: String::new(),
+            },
+            versions: vec![crate::game::manifest::VersionEntry {
+                id: "1.20.4".into(),
+                kind: "release".into(),
+                url: "https://piston-meta.mojang.com/v1/packages/abc/1.20.4.json".into(),
+                sha1: None,
+                time: None,
+                release_time: None,
+            }],
+        };
+        let r = DependencyResolver::new(Platform::android(), Arc::new(provider), "/data");
+        let plan = r
+            .resolve_full_plan(&client, &manifest, "1.20.4")
+            .await
+            .unwrap();
+
+        // client + asset index + patchy library + 1 asset object = 4
+        assert_eq!(plan.count_kind(ArtifactKind::Client), 1);
+        assert_eq!(plan.count_kind(ArtifactKind::AssetIndex), 1);
+        assert_eq!(plan.count_kind(ArtifactKind::Library), 1);
+        assert_eq!(plan.count_kind(ArtifactKind::AssetObject), 1);
+        assert_eq!(plan.len(), 4);
+        // Every item carries a canonical url plus at least one mirror candidate.
+        for it in &plan.items {
+            assert!(!it.url.is_empty(), "empty url for {}", it.id);
+            assert!(!it.mirrors.is_empty(), "no mirror for {}", it.id);
+        }
     }
 }

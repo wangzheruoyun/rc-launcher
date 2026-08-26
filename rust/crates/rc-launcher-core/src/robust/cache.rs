@@ -117,6 +117,90 @@ impl CacheStore {
         let _ = tokio::fs::remove_file(self.meta_path(key)).await;
         Ok(())
     }
+
+    /// Number of cached data entries currently present (best-effort: a directory
+    /// read error yields `0` rather than failing the caller).
+    pub async fn entry_count(&self) -> usize {
+        let mut count = 0usize;
+        let mut rd = match tokio::fs::read_dir(&self.root).await {
+            Ok(rd) => rd,
+            Err(_) => return 0,
+        };
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.ends_with(".bin") {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Approximate total size in bytes of every file in the cache directory
+    /// (data + side-car metadata). Best-effort.
+    pub async fn total_size_bytes(&self) -> u64 {
+        let mut total = 0u64;
+        let mut rd = match tokio::fs::read_dir(&self.root).await {
+            Ok(rd) => rd,
+            Err(_) => return 0,
+        };
+        while let Ok(Some(entry)) = rd.next_entry().await {
+            if let Ok(meta) = entry.metadata().await {
+                if meta.is_file() {
+                    total += meta.len();
+                }
+            }
+        }
+        total
+    }
+
+    /// Remove *every* cached entry (data + metadata). Returns the number of files
+    /// deleted. Best-effort: a single undeletable file does not abort the sweep
+    /// (task 19 — cache management).
+    pub async fn clear(&self) -> RcResult<u64> {
+        let mut rd = tokio::fs::read_dir(&self.root).await.map_err(RcError::Io)?;
+        let mut removed = 0u64;
+        while let Some(entry) = rd.next_entry().await? {
+            if entry.metadata().await.map(|m| m.is_file()).unwrap_or(false)
+                && tokio::fs::remove_file(entry.path()).await.is_ok()
+            {
+                removed += 1;
+            }
+        }
+        Ok(removed)
+    }
+
+    /// Delete entries whose cached copy is older than `older_than`, according to
+    /// the side-car metadata `stored_at`. Entries without metadata are left
+    /// untouched (treated as still fresh). Returns the number of entries pruned
+    /// (task 19 — cache management).
+    pub async fn prune_older_than(&self, older_than: Duration) -> RcResult<u64> {
+        let threshold = now_secs().saturating_sub(older_than.as_secs());
+        let mut rd = tokio::fs::read_dir(&self.root).await.map_err(RcError::Io)?;
+        let mut to_remove: Vec<String> = Vec::new();
+        while let Some(entry) = rd.next_entry().await? {
+            let path = entry.path();
+            if !path.to_string_lossy().ends_with(".meta") {
+                continue;
+            }
+            if let Ok(bytes) = tokio::fs::read(&path).await {
+                if let Ok(meta) = serde_json::from_slice::<EntryMeta>(&bytes) {
+                    if meta.stored_at < threshold {
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            to_remove.push(stem.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        let mut pruned = 0u64;
+        for stem in to_remove {
+            let _ = tokio::fs::remove_file(self.bin_path(&stem)).await;
+            let _ = tokio::fs::remove_file(self.meta_path(&stem)).await;
+            pruned += 1;
+        }
+        Ok(pruned)
+    }
 }
 
 fn now_secs() -> u64 {
@@ -132,6 +216,17 @@ pub fn cache_key(url: &str) -> String {
     let mut h = Sha1::new();
     h.update(url.as_bytes());
     format!("{:x}", h.finalize())
+}
+
+/// Like [`cache_key`] but also folds the requested byte range into the key, so a
+/// partial range fetch is cached under a *distinct* key from the full resource
+/// and can never clobber the whole-file entry (task 19 robustness fix).
+pub fn cache_key_range(url: &str, start: u64, end: Option<u64>) -> String {
+    let suffix = match end {
+        Some(e) => format!("{}:{}", start, e),
+        None => format!("{}:", start),
+    };
+    cache_key(&format!("{}#{}", url, suffix))
 }
 
 /// The outcome of a [`fetch_cached`] call.
@@ -165,13 +260,21 @@ pub async fn fetch_cached(
     retry_policy: &RetryPolicy,
     force_offline: bool,
 ) -> RcResult<Cached> {
+    // We only ever cache / serve the *entire* resource. A partial-range fetch
+    // must not clobber the whole-file cache, nor be answered from a whole-file
+    // cache (that would hand back the wrong bytes). Range requests therefore
+    // bypass the cache entirely (task 19 robustness fix).
+    let is_full = start == 0 && end.is_none();
+
     if !force_offline {
         let fetched = retry(retry_policy, || source.fetch_range(url, start, end)).await;
         match fetched {
             Ok(r) => {
-                // Update the cache; a cache-write failure must never fail the
-                // fetch, so it is intentionally ignored.
-                let _ = cache.put(key, &r.bytes, None).await;
+                // Only a *full* fetch is cached; a range fetch is never persisted
+                // (a cache-write failure must also never fail the fetch).
+                if is_full {
+                    let _ = cache.put(key, &r.bytes, None).await;
+                }
                 return Ok(Cached {
                     data: r.bytes,
                     from_cache: false,
@@ -179,17 +282,18 @@ pub async fn fetch_cached(
                 });
             }
             Err(e) => {
-                if !e.is_transient() {
-                    // Non-transient (404, bad status, checksum) — do not degrade.
+                if !e.is_transient() || !is_full {
+                    // Non-transient (404, bad status, checksum) or a range
+                    // request we cannot answer from a whole-file cache: propagate.
                     return Err(e);
                 }
-                // transient: fall through to cache degradation.
+                // Transient full-fetch failure: fall through to cache degradation.
             }
         }
     }
 
-    // Offline / degraded path.
-    if cache.contains(key).await {
+    // Offline / degraded path — only valid for a full fetch.
+    if is_full && cache.contains(key).await {
         if let Some(data) = cache.get(key).await {
             return Ok(Cached {
                 data,
@@ -402,5 +506,119 @@ mod tests {
         assert!(store.is_fresh(&key, &wide).await);
         // missing key is never fresh
         assert!(!store.is_fresh(&cache_key("nope"), &wide).await);
+    }
+
+    #[tokio::test]
+    async fn range_fetch_is_never_cached() {
+        // A partial range fetch must not clobber the whole-file cache.
+        let dir = tempfile::tempdir().unwrap();
+        let store = CacheStore::open(dir.path()).unwrap();
+        let key = cache_key_range("https://example/file", 0, Some(3));
+        let src = MockSource::new(vec![ok(b"hel")]);
+        let r = fetch_cached(
+            &*src,
+            &store,
+            &key,
+            "https://example/file",
+            0,
+            Some(3),
+            &RetryPolicy::for_tests(),
+            false,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.data, b"hel");
+        assert!(!r.from_cache);
+        assert!(!r.degraded);
+        // Nothing was persisted under the range key.
+        assert!(!store.contains(&key).await);
+        // And the full-file key was not clobbered either.
+        assert!(!store.contains(&cache_key("https://example/file")).await);
+    }
+
+    #[tokio::test]
+    async fn range_transient_failure_is_not_degraded() {
+        // We cannot answer a range request from the whole-file cache, so a
+        // transient network error for a range must surface (not silently serve
+        // the wrong bytes).
+        let dir = tempfile::tempdir().unwrap();
+        let store = CacheStore::open(dir.path()).unwrap();
+        let full_key = cache_key("https://example/file");
+        store
+            .put(&full_key, b"full-file-contents", None)
+            .await
+            .unwrap();
+
+        let key = cache_key_range("https://example/file", 0, Some(3));
+        let src = MockSource::new(vec![Err(RcError::Network("timeout".into()))]);
+        let r = fetch_cached(
+            &*src,
+            &store,
+            &key,
+            "https://example/file",
+            0,
+            Some(3),
+            &RetryPolicy::for_tests(),
+            false,
+        )
+        .await;
+        // A range request must NOT be answered from the whole-file cache (that
+        // would hand back the wrong bytes); it surfaces the network error.
+        assert!(matches!(r, Err(RcError::Network(_))));
+    }
+
+    #[tokio::test]
+    async fn cache_management_count_size_clear() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = CacheStore::open(dir.path()).unwrap();
+        store
+            .put(&cache_key("a"), b"aaaa", Some(Duration::from_secs(60)))
+            .await
+            .unwrap();
+        store.put(&cache_key("b"), b"bb", None).await.unwrap();
+        assert_eq!(store.entry_count().await, 2);
+        assert!(store.total_size_bytes().await >= 6);
+        // older_than=0 prunes nothing that was just stored.
+        assert_eq!(
+            store
+                .prune_older_than(Duration::from_secs(0))
+                .await
+                .unwrap(),
+            0
+        );
+        assert_eq!(store.entry_count().await, 2);
+        // Clear wipes both data and metadata files.
+        let removed = store.clear().await.unwrap();
+        assert_eq!(removed, 4);
+        assert_eq!(store.entry_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn prune_older_than_removes_only_stale_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = CacheStore::open(dir.path()).unwrap();
+        let fresh_key = cache_key("fresh");
+        store.put(&fresh_key, b"x", None).await.unwrap();
+
+        // Back-date one entry's metadata to simulate a stale, ancient cache entry.
+        let stale_key = cache_key("stale");
+        store.put(&stale_key, b"y", None).await.unwrap();
+        let backdated = EntryMeta {
+            stored_at: 1,
+            ttl_secs: None,
+        };
+        let bytes = serde_json::to_vec(&backdated).unwrap();
+        tokio::fs::write(store.meta_path(&stale_key), bytes)
+            .await
+            .unwrap();
+
+        let pruned = store
+            .prune_older_than(Duration::from_secs(3600))
+            .await
+            .unwrap();
+        assert_eq!(pruned, 1);
+        assert_eq!(store.entry_count().await, 1);
+        assert!(store.contains(&fresh_key).await);
+        assert!(!store.contains(&stale_key).await);
     }
 }

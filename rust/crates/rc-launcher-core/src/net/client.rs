@@ -31,7 +31,9 @@ use crate::download::compute_backoff;
 use crate::download::{FetchResult, HttpSource};
 use crate::error::{RcError, RcResult};
 use crate::net::dns::{self, DnsCache, DnsConfig, DnsMode};
-use crate::net::mirror::{extended_mirrors, MirrorMode, MirrorProvider, MirrorSource, MOJANG_HOSTS};
+use crate::net::mirror::{
+    extended_mirrors, MirrorMode, MirrorProvider, MirrorSource, MOJANG_HOSTS,
+};
 use crate::net::proxy::ProxyConfig;
 
 const DEFAULT_USER_AGENT: &str = concat!("RC-Launcher/", env!("CARGO_PKG_VERSION"));
@@ -531,7 +533,7 @@ impl NetworkClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::download::{DownloadManager, DownloadOptions, DownloadTask, HttpSource, sha1_bytes};
+    use crate::download::{sha1_bytes, DownloadManager, DownloadOptions, DownloadTask, HttpSource};
     use crate::net::mirror::MirrorProvider;
     use async_trait::async_trait;
     use std::io::{Read, Write};
@@ -598,9 +600,11 @@ mod tests {
                 let _ = s.flush();
             }
         });
-        TestServer { addr, _handle: handle }
+        TestServer {
+            addr,
+            _handle: handle,
+        }
     }
-
 
     /// Local, cloneable scripted outcome for the offline fetcher (`RcError` is not
     /// `Clone`, so we avoid storing it directly).
@@ -830,7 +834,7 @@ mod tests {
                 ..NetworkConfig::default()
             })
             .mirrors(vec![
-                MirrorSource::new("m", "M", &mirror_url).with_hosts(&["127.0.0.1"]),
+                MirrorSource::new("m", "M", &mirror_url).with_hosts(&["127.0.0.1"])
             ])
             .build()
             .await
@@ -866,7 +870,10 @@ mod tests {
             .unwrap();
         let url = format!("http://{}/game.jar", server.addr);
         // Range fetch [10, 20] inclusive -> 11 bytes (data[10..21]).
-        let fr = client.fetch_range(url.as_str(), 10, Some(20)).await.unwrap();
+        let fr = client
+            .fetch_range(url.as_str(), 10, Some(20))
+            .await
+            .unwrap();
         assert_eq!(fr.bytes, data[10..21]);
         assert!(fr.supports_range);
         // Whole fetch.
@@ -919,5 +926,4 @@ mod tests {
         assert_eq!(summary.size, data.len() as u64);
         assert_eq!(std::fs::read(&dest).unwrap(), data);
     }
-
 }

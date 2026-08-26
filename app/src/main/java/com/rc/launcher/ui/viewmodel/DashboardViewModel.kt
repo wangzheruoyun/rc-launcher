@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rc.launcher.ui.model.GameInstance
 import com.rc.launcher.ui.model.InstanceRepository
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -72,13 +73,23 @@ object SimulatedLaunchExecutor : LaunchExecutor {
  * drives the launch state machine. All native / unsafe concerns stay behind the
  * [LaunchExecutor] boundary, keeping the UI pure and testable.
  *
- * The constructor is parameterless (true no-arg) so `viewModel()` can instantiate
- * it; the repository and executor are injected as internal defaults and can be
- * swapped in tests / for the real Rust-core backend later.
+ * The constructor is parameterless (true no-arg) so `viewModel()` can
+ * instantiate it via reflection. The real [viewModelScope] is resolved lazily
+ * and only on a device that provides `Dispatchers.Main`; [setTestDriver] lets
+ * the unit tests inject a [LaunchExecutor] and a [CoroutineScope] (e.g.
+ * `Dispatchers.Unconfined`) so the async launch flow can be driven
+ * deterministically on the JVM without the Android main looper / Robolectric.
  */
 class DashboardViewModel : ViewModel() {
+
     private val repository: InstanceRepository = InstanceRepository
-    private val executor: LaunchExecutor = SimulatedLaunchExecutor
+
+    /** Production executor; swapped in tests via [setTestDriver]. */
+    private var executor: LaunchExecutor = SimulatedLaunchExecutor
+
+    /** Lazily resolved to [viewModelScope]; injected in tests to avoid Main. */
+    private var scope: CoroutineScope? = null
+    private fun launchScope(): CoroutineScope = scope ?: viewModelScope.also { scope = it }
 
     /** Live instance list, shared with the instances screen via the repository. */
     val instances: StateFlow<List<GameInstance>> = repository.instances
@@ -102,13 +113,18 @@ class DashboardViewModel : ViewModel() {
         _launchState.value = LaunchState.Launching(inst.id, inst.name)
 
         runJob?.cancel()
-        runJob = viewModelScope.launch {
+        runJob = launchScope().launch {
+            // prepare() may either throw or return a failed Result; both must be
+            // surfaced as LaunchState.Failed. The Rust-core integration (task 7
+            // launchPreview preflight) reports problems via a failed Result, not
+            // an exception, so we inspect the inner Result as well as any throw.
             val prepared = runCatching { executor.prepare(inst) }
-            if (prepared.isFailure) {
-                _launchState.value = LaunchState.Failed(
-                    inst.id,
-                    prepared.exceptionOrNull()?.message ?: "准备失败",
-                )
+            val preparedResult = prepared.getOrNull()
+            if (prepared.isFailure || preparedResult?.isFailure == true) {
+                val message = prepared.exceptionOrNull()?.message
+                    ?: preparedResult?.exceptionOrNull()?.message
+                    ?: "准备失败"
+                _launchState.value = LaunchState.Failed(inst.id, message)
                 return@launch
             }
             _launchState.value = LaunchState.Running(inst.id, inst.name)
@@ -133,5 +149,15 @@ class DashboardViewModel : ViewModel() {
     /** Toggle the floating performance HUD (also auto-shown while running). */
     fun toggleHud() {
         _hudVisible.value = !_hudVisible.value
+    }
+
+    /**
+     * Test-only seam: replace the [LaunchExecutor] and the coroutine [scope]
+     * used by [launch] / [stop]. Lets the launch state machine be driven on the
+     * JVM without the Android main looper.
+     */
+    internal fun setTestDriver(executor: LaunchExecutor, scope: CoroutineScope) {
+        this.executor = executor
+        this.scope = scope
     }
 }

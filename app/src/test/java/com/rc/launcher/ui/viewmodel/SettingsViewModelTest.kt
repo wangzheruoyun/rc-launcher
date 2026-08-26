@@ -4,9 +4,16 @@ import com.rc.launcher.ui.model.InMemorySettingsRepository
 import com.rc.launcher.ui.model.LauncherSettings
 import com.rc.launcher.ui.model.MirrorCatalog
 import com.rc.launcher.ui.model.RendererOption
+import com.rc.launcher.ui.model.MirrorLatency
+import com.rc.launcher.ui.model.MirrorMeasurer
+import com.rc.launcher.ui.model.MirrorProbeState
+import com.rc.launcher.ui.model.MirrorSource
+import com.rc.launcher.ui.model.RendererPluginConfig
 import com.rc.launcher.ui.model.ResolutionMode
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -108,4 +115,121 @@ class SettingsViewModelTest {
         assertEquals("gamepad", vm.settings.value.controllerLayoutId)
         assertEquals(0.5f, vm.settings.value.controllerDeadzone)
     }
+    @Test
+    fun rendererOptions_settersUpdateStateAndPersist() {
+        val repo = InMemorySettingsRepository()
+        val vm = SettingsViewModel(repo)
+        vm.setRenderer(RendererOption.ZINK.id)
+        vm.setZinkVulkanDriver("turnip")
+        vm.setAngleBackend("gl")
+        vm.setGl4esNoSrgb(true)
+        vm.setVirglServer("host:1234")
+
+        val s = vm.settings.value
+        assertEquals(RendererOption.ZINK.id, s.rendererId)
+        assertEquals("turnip", s.rendererOptions.zinkVulkanDriver)
+        assertEquals("gl", s.rendererOptions.angleBackend)
+        assertEquals(true, s.rendererOptions.gl4esNoSrgb)
+        assertEquals("host:1234", s.rendererOptions.virglServer)
+
+        // Persisted too.
+        val restored = SettingsViewModel(repo).settings.value
+        assertEquals("turnip", restored.rendererOptions.zinkVulkanDriver)
+        assertEquals("host:1234", restored.rendererOptions.virglServer)
+    }
+
+    @Test
+    fun exportImport_roundTrips() {
+        val repo = InMemorySettingsRepository()
+        val vm = SettingsViewModel(repo)
+        vm.setMirror(MirrorCatalog.MCBBS.id)
+        vm.setJavaHeapMb(3072)
+        vm.setRenderer(RendererOption.ANGLE.id)
+        vm.setAngleBackend("gl")
+
+        val payload = vm.exportSettings()
+        assertTrue(payload.contains("mirrorId=mcbbs"))
+        assertTrue(payload.contains("rendererId=opengles3_angle"))
+        assertTrue(payload.contains("renderer.angleBackend=gl"))
+
+        // A fresh VM on an empty repo, then import.
+        val vm2 = SettingsViewModel(InMemorySettingsRepository())
+        assertTrue(vm2.importSettings(payload))
+        assertEquals(MirrorCatalog.MCBBS.id, vm2.settings.value.mirrorId)
+        assertEquals(3072, vm2.settings.value.javaHeapMb)
+        assertEquals("gl", vm2.settings.value.rendererOptions.angleBackend)
+    }
+
+    @Test
+    fun importSettings_rejectsBlankAndKeepsState() {
+        val vm = SettingsViewModel(InMemorySettingsRepository())
+        vm.setMirror(MirrorCatalog.ALIYUN.id)
+        // Blank / whitespace-only payloads are no-ops.
+        assertEquals(false, vm.importSettings("   "))
+        assertEquals(false, vm.importSettings(""))
+        // State is untouched.
+        assertEquals(MirrorCatalog.ALIYUN.id, vm.settings.value.mirrorId)
+    }
+
+    @Test
+    fun export_defaultsProducesAllKeys() {
+        val vm = SettingsViewModel(InMemorySettingsRepository())
+        val payload = vm.exportSettings()
+        assertNotNull(payload)
+        assertTrue(payload.contains("mirrorId="))
+        assertTrue(payload.contains("renderer.zinkVulkanDriver="))
+        assertTrue(payload.contains("renderer.angleBackend="))
+        assertTrue(payload.contains("renderer.gl4esNoSrgb="))
+        assertTrue(payload.contains("renderer.virglServer="))
+    }
+
+    private class FakeMirrorMeasurer(private val latencies: Map<String, Long?>) : MirrorMeasurer {
+        override suspend fun probe(mirror: MirrorSource): MirrorLatency =
+            MirrorLatency(mirror.id, latencies[mirror.id], null)
+    }
+
+    @Test
+    fun measureAndSelectFastestMirror_selectsLowestLatency() = runBlocking {
+        val vm = SettingsViewModel(InMemorySettingsRepository())
+        vm.setMirror(MirrorCatalog.BMCLAPI.id)
+        val fake = FakeMirrorMeasurer(
+            mapOf(
+                MirrorCatalog.BMCLAPI.id to 500L,
+                MirrorCatalog.MCBBS.id to 120L,
+                MirrorCatalog.ALIYUN.id to 900L,
+            ),
+        )
+        val result = vm.measureAndSelectFastestMirror(fake)
+        assertEquals(MirrorCatalog.MCBBS.id, result.bestId)
+        assertEquals(MirrorCatalog.MCBBS.id, vm.settings.value.mirrorId)
+        assertTrue(vm.mirrorProbe.value is MirrorProbeState.Done)
+    }
+
+    @Test
+    fun measureAndSelectFastestMirror_noReachableKeepsCurrent() = runBlocking {
+        val vm = SettingsViewModel(InMemorySettingsRepository())
+        vm.setMirror(MirrorCatalog.ALIYUN.id)
+        val fake = FakeMirrorMeasurer(
+            mapOf(
+                MirrorCatalog.BMCLAPI.id to null,
+                MirrorCatalog.MCBBS.id to null,
+                MirrorCatalog.ALIYUN.id to null,
+            ),
+        )
+        val result = vm.measureAndSelectFastestMirror(fake)
+        assertEquals(null, result.bestId)
+        // Current selection is left untouched when nothing is reachable.
+        assertEquals(MirrorCatalog.ALIYUN.id, vm.settings.value.mirrorId)
+    }
+
+    @Test
+    fun measureAndSelectFastestMirror_updatesProbeState() = runBlocking {
+        val vm = SettingsViewModel(InMemorySettingsRepository())
+        val fake = FakeMirrorMeasurer(mapOf(MirrorCatalog.BMCLAPI.id to 100L))
+        vm.measureAndSelectFastestMirror(fake)
+        val state = vm.mirrorProbe.value
+        assertTrue(state is MirrorProbeState.Done)
+        assertEquals(MirrorCatalog.BMCLAPI.id, (state as MirrorProbeState.Done).bestId)
+    }
+
 }

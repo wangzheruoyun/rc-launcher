@@ -53,8 +53,19 @@ jobs:
   audit:
     name: Mirror / manifest / license audit
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Cargo registry (license audit)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-health-${{ hashFiles('rust/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-health-
 
       - name: Set up Python
         uses: actions/setup-python@v5

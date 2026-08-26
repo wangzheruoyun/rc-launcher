@@ -71,6 +71,44 @@ pub enum CrashCategory {
     /// Crashed, but nothing in the log explains it.
     Unknown,
 }
+/// Triage severity for a crash, used by the Compose UI to pick a colour, by
+/// the auto-remediation logic to decide whether a retry/quick fix is worth
+/// attempting, and by the telemetry gate to decide whether a report should be
+/// uploaded (task 19). Distinct from [`CrashCategory`] (what broke) - two very
+/// different failures can share the same severity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CrashSeverity {
+    /// The game never reached a playable state and needs a config change or a
+    /// re-download (wrong JRE, missing native lib, corrupt jar, ...).
+    Fatal,
+    /// An environment problem the user can usually fix without redownloading
+    /// (free disk, re-auth, lower memory, switch renderer).
+    Recoverable,
+    /// The user deliberately stopped the game - not an error at all.
+    UserAction,
+    /// Informational; nothing went wrong (clean exit).
+    Info,
+}
+
+impl CrashSeverity {
+    /// Stable id for the FFI / UI (task 10, task 20).
+    pub fn id(self) -> &'static str {
+        match self {
+            CrashSeverity::Fatal => "fatal",
+            CrashSeverity::Recoverable => "recoverable",
+            CrashSeverity::UserAction => "user_action",
+            CrashSeverity::Info => "info",
+        }
+    }
+
+    /// Whether the launcher should offer an automatic remediation (retry with
+    /// different renderer / lower memory / re-verify files) rather than just
+    /// showing the verdict.
+    pub fn auto_remediable(self) -> bool {
+        matches!(self, CrashSeverity::Recoverable)
+    }
+}
 
 /// Read one crash message out of the compiled-in i18n catalogues (task 20).
 ///
@@ -151,6 +189,41 @@ impl CrashCategory {
     pub fn localized_advice(self, language: crate::i18n::Language) -> String {
         crate::i18n::t_in(language, &crate::i18n::crash_advice_key(self.id()))
     }
+    /// How serious this category is, for UI triage and automatic remediation.
+    ///
+    /// Mirrors FCL's `JVMCrashActivity` severity tiers but is computed in the
+    /// core so the Compose UI only has to render it (task 7 / task 18).
+    pub fn severity(self) -> CrashSeverity {
+        use CrashSeverity::*;
+        match self {
+            CrashCategory::CleanExit => Info,
+            CrashCategory::UserTerminated => UserAction,
+            CrashCategory::KilledBySystem => Recoverable,
+            CrashCategory::OutOfMemory => Recoverable,
+            CrashCategory::UnsupportedJavaVersion => Fatal,
+            CrashCategory::MissingNativeLibrary => Fatal,
+            CrashCategory::GraphicsFailure => Recoverable,
+            CrashCategory::NativeCrash => Fatal,
+            CrashCategory::CorruptedFile => Fatal,
+            CrashCategory::MissingMainClass => Fatal,
+            CrashCategory::AuthenticationFailure => Recoverable,
+            CrashCategory::DiskFull => Recoverable,
+            CrashCategory::PermissionDenied => Recoverable,
+            CrashCategory::ModLoaderFailure => Recoverable,
+            CrashCategory::GameError => Recoverable,
+            CrashCategory::Unknown => Recoverable,
+        }
+    }
+
+    /// True for categories the user can usually fix without re-downloading the
+    /// version (adjust memory, switch renderer, re-auth, free disk, grant
+    /// storage). Used to decide whether to surface a "quick fix" button.
+    pub fn is_user_recoverable(self) -> bool {
+        matches!(
+            self.severity(),
+            CrashSeverity::Recoverable | CrashSeverity::UserAction | CrashSeverity::Info
+        )
+    }
 }
 
 /// One classification rule: a category plus the (lowercase) needles that imply it.
@@ -173,6 +246,11 @@ pub const RULES: &[CrashRule] = &[
             "there is insufficient memory for the java runtime environment",
             "native memory allocation (mmap) failed",
             "out of memory: java heap space",
+            "gc overhead limit exceeded",
+            "direct buffer memory",
+            "cannot allocate memory",
+            "unable to create new native thread",
+            "metaspace",
         ],
     },
     CrashRule {
@@ -195,6 +273,11 @@ pub const RULES: &[CrashRule] = &[
             "dlopen failed",
             "cannot load library",
             "library not found",
+            "cannot open shared object file",
+            "could not load library",
+            "unable to load native library",
+            ".so not found",
+            "library \\\"lib",
         ],
     },
     CrashRule {
@@ -213,6 +296,16 @@ pub const RULES: &[CrashRule] = &[
             "failed to initialize graphics",
             "org.lwjgl.glfw.glfwexception",
             "renderer initialization failed",
+            "eglcreatesurface",
+            "eglcreatecontext",
+            "eglchooseconfig",
+            "could not create egl",
+            "could not initialize egl",
+            "failed to create egl",
+            "opengl context creation failed",
+            "no egl display",
+            "swiftshader",
+            "geteglerror",
         ],
     },
     CrashRule {
@@ -225,6 +318,11 @@ pub const RULES: &[CrashRule] = &[
             "sigabrt",
             "exception_access_violation",
             "problematic frame",
+            "received signal",
+            "fatal signal",
+            "fatal error detected",
+            "core dumped",
+            "unexpected termination",
         ],
     },
     CrashRule {
@@ -391,6 +489,9 @@ impl CrashReport {
             "summary": self.category.summary(),
             "advice": self.category.advice(),
             "advice_zh": self.category.advice_zh(),
+            "severity": self.category.severity().id(),
+            "user_recoverable": self.category.is_user_recoverable(),
+            "auto_remediable": self.category.severity().auto_remediable(),
             "crashed": self.crashed(),
             "exit_code": self.exit_code,
             "signal": self.signal,
@@ -897,6 +998,113 @@ mod tests {
         assert_eq!(
             extract_hs_err_paths("saved as \"/a/hs_err_pid1.log\"."),
             vec![PathBuf::from("/a/hs_err_pid1.log")]
+        );
+    }
+    #[test]
+    fn severity_triage_is_stable_and_consistent() {
+        let all = [
+            CrashCategory::CleanExit,
+            CrashCategory::UserTerminated,
+            CrashCategory::KilledBySystem,
+            CrashCategory::OutOfMemory,
+            CrashCategory::UnsupportedJavaVersion,
+            CrashCategory::MissingNativeLibrary,
+            CrashCategory::GraphicsFailure,
+            CrashCategory::NativeCrash,
+            CrashCategory::CorruptedFile,
+            CrashCategory::MissingMainClass,
+            CrashCategory::AuthenticationFailure,
+            CrashCategory::DiskFull,
+            CrashCategory::PermissionDenied,
+            CrashCategory::ModLoaderFailure,
+            CrashCategory::GameError,
+            CrashCategory::Unknown,
+        ];
+        // severity id is the *tier* and is intentionally shared across categories,
+        // so we only assert it is non-empty and stable per category.
+        for c in all {
+            assert!(!c.severity().id().is_empty());
+            // fatal => not user recoverable
+            if c.severity() == CrashSeverity::Fatal {
+                assert!(!c.is_user_recoverable(), "{:?}", c);
+            }
+            // the recoverable flag mirrors severity (auto-remediable or softer)
+            let expect = matches!(
+                c.severity(),
+                CrashSeverity::Recoverable | CrashSeverity::UserAction | CrashSeverity::Info
+            );
+            assert_eq!(c.is_user_recoverable(), expect, "{:?}", c);
+        }
+    }
+
+    #[test]
+    fn severity_classifies_fatal_vs_recoverable() {
+        assert_eq!(CrashCategory::NativeCrash.severity(), CrashSeverity::Fatal);
+        assert_eq!(
+            CrashCategory::UnsupportedJavaVersion.severity(),
+            CrashSeverity::Fatal
+        );
+        assert_eq!(
+            CrashCategory::MissingMainClass.severity(),
+            CrashSeverity::Fatal
+        );
+        assert_eq!(CrashCategory::CleanExit.severity(), CrashSeverity::Info);
+        assert_eq!(
+            CrashCategory::UserTerminated.severity(),
+            CrashSeverity::UserAction
+        );
+        assert_eq!(
+            CrashCategory::OutOfMemory.severity(),
+            CrashSeverity::Recoverable
+        );
+        assert!(CrashCategory::GraphicsFailure.is_user_recoverable());
+        assert!(!CrashCategory::NativeCrash.is_user_recoverable());
+        assert!(CrashSeverity::Recoverable.auto_remediable());
+        assert!(!CrashSeverity::Fatal.auto_remediable());
+    }
+
+    #[test]
+    fn new_graphics_patterns_map_to_graphics_failure() {
+        for msg in [
+            "EGLNativeContext: eglCreateContext failed",
+            "Could not initialize EGL: eglChooseConfig returned null",
+            "OpenGL context creation failed",
+            "No EGL Display found",
+            "libGL error: swiftshader could not initialise",
+            "getEGLError",
+        ] {
+            let r = diag(Some(1), None, &[msg]);
+            assert_eq!(r.category, CrashCategory::GraphicsFailure, "{msg}");
+        }
+    }
+
+    #[test]
+    fn new_oom_and_native_patterns_map_correctly() {
+        assert_eq!(
+            diag(
+                Some(1),
+                None,
+                &["java.lang.OutOfMemoryError: GC overhead limit exceeded"]
+            )
+            .category,
+            CrashCategory::OutOfMemory
+        );
+        assert_eq!(
+            diag(Some(1), None, &["FATAL SIGNAL 11 (SIGSEGV) at 0x0"]).category,
+            CrashCategory::NativeCrash
+        );
+        assert_eq!(
+            diag(
+                Some(1),
+                None,
+                &["java.lang.UnsatisfiedLinkError: dlopen failed: library \"libopenal.so\" not found"]
+            )
+            .category,
+            CrashCategory::MissingNativeLibrary
+        );
+        assert_eq!(
+            diag(Some(1), None, &["cannot allocate memory for thread-local"]).category,
+            CrashCategory::OutOfMemory
         );
     }
 }

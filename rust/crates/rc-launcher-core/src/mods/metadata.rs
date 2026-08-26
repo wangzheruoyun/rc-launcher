@@ -640,6 +640,19 @@ mod tests {
     }
 
     #[test]
+    fn optifine_name_variants_derive_mc_version() {
+        // Lowercase prefix + `.disabled` suffix + trailing `!` must still
+        // parse out the MC version used for compatibility checks.
+        let m = ModMetadata::optifine_from_name("optifine_1.20.1_HD_U_I7.jar.disabled!");
+        assert_eq!(m.modid, "optifine");
+        assert!(m.minecraft.as_ref().unwrap().matches("1.20.1"));
+        // A bare "optifine.jar" (no version) yields no MC constraint.
+        let bare = ModMetadata::optifine_from_name("optifine.jar");
+        assert_eq!(bare.modid, "optifine");
+        assert!(bare.minecraft.is_none());
+    }
+
+    #[test]
     fn malformed_dep_does_not_fail_parse() {
         let json =
             r#"{ "id": "x", "version": "1", "depends": { "minecraft": "totally-not-a-version" } }"#;

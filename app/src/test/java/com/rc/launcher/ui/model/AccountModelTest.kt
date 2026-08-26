@@ -104,4 +104,22 @@ class AccountModelTest {
         assertTrue(valid.isExpired.not())
         assertEquals(TokenStatus.VALID, valid.tokenStatus)
     }
+
+    @Test
+    fun formatDuration_formatsVariousMagnitudes() {
+        assertEquals("已过期", formatDuration(0))
+        assertEquals("已过期", formatDuration(-5))
+        assertEquals("45秒", formatDuration(45))
+        assertEquals("3分4秒", formatDuration(3 * 60 + 4))
+        assertEquals("5小时12分", formatDuration(5 * 3600 + 12 * 60))
+        assertEquals("2天3小时", formatDuration(2 * 86400 + 3 * 3600))
+    }
+
+    @Test
+    fun microsoft_remainingSecs_reflectsExpiry() {
+        val future = MicrosoftAccount(uuid = "x", username = "y", expiresAt = nowSecs() + 120, msExpiresAt = nowSecs() + 120)
+        assertTrue(future.remainingSecs in 100..130)
+        val past = MicrosoftAccount(uuid = "x", username = "y", expiresAt = nowSecs() - 100, msExpiresAt = nowSecs() - 100)
+        assertEquals(0, past.remainingSecs)
+    }
 }

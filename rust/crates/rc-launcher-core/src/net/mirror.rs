@@ -52,7 +52,6 @@ pub enum MirrorMode {
     Off,
 }
 
-
 /// A single download mirror.
 ///
 /// Mirrors are configured as *path-preserving* rewrites: the host of a canonical
@@ -174,7 +173,6 @@ pub fn extended_mirrors() -> Vec<MirrorSource> {
     ));
     v
 }
-
 
 /// Result of measuring a mirror's reachability / latency.
 #[derive(Debug, Clone, PartialEq, Eq)]

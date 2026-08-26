@@ -53,7 +53,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rc.launcher.ui.model.ControlElement
+import com.rc.launcher.ui.model.GamepadAxis
+import com.rc.launcher.ui.model.IssueSeverity
 import com.rc.launcher.ui.model.JoystickKind
+import com.rc.launcher.ui.model.LayoutIssue
+import com.rc.launcher.ui.model.LayoutSummary
 import com.rc.launcher.ui.model.MappedKey
 import com.rc.launcher.ui.model.VirtualButton
 import com.rc.launcher.ui.model.VirtualJoystick
@@ -84,6 +88,7 @@ fun ControllerScreen(
     val savedLayouts by viewModel.savedLayouts.collectAsStateWithLifecycle()
     val selectedId by viewModel.selectedElementId.collectAsStateWithLifecycle()
     val dirty by viewModel.dirty.collectAsStateWithLifecycle()
+    val issues by viewModel.issues.collectAsStateWithLifecycle()
 
     val allLayouts = viewModel.builtInLayouts + savedLayouts
 
@@ -103,6 +108,9 @@ fun ControllerScreen(
                 style = MaterialTheme.typography.titleLarge,
             )
         }
+
+        // ---- Validation + summary -----------------------------------------
+        LayoutValidationBanner(issues = issues, summary = viewModel.summary())
 
         // ---- Layout picker -------------------------------------------------
         Surface(
@@ -367,7 +375,7 @@ private fun joystickEditor(viewModel: ControlLayoutViewModel, js: VirtualJoystic
     Text("半径：${(js.radius * 100).roundToInt()}%")
     Slider(
         value = js.radius,
-        onValueChange = { viewModel.updateJoystick(js.id, it, js.kind) },
+        onValueChange = { viewModel.updateJoystick(js.id, it, js.kind, js.axisX, js.axisY) },
         valueRange = VirtualJoystick.MIN_RADIUS..VirtualJoystick.MAX_RADIUS,
     )
     Text("驱动轴", style = MaterialTheme.typography.titleSmall)
@@ -376,9 +384,81 @@ private fun joystickEditor(viewModel: ControlLayoutViewModel, js: VirtualJoystic
         kinds.forEachIndexed { index, kind ->
             SegmentedButton(
                 selected = js.kind == kind,
-                onClick = { viewModel.updateJoystick(js.id, js.radius, kind) },
+                onClick = { viewModel.updateJoystick(js.id, js.radius, kind, js.axisX, js.axisY) },
                 shape = SegmentedButtonDefaults.itemShape(index, kinds.size),
             ) { Text(kind.label) }
+        }
+    }
+    Text("外接手柄轴（可选）", style = MaterialTheme.typography.titleSmall)
+    AxisBindingRow(
+        label = "X 轴",
+        selected = js.axisX,
+        onPick = { axis -> viewModel.updateJoystick(js.id, js.radius, js.kind, axis, js.axisY) },
+    )
+    AxisBindingRow(
+        label = "Y 轴",
+        selected = js.axisY,
+        onPick = { axis -> viewModel.updateJoystick(js.id, js.radius, js.kind, js.axisX, axis) },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AxisBindingRow(
+    label: String,
+    selected: GamepadAxis?,
+    onPick: (GamepadAxis?) -> Unit,
+) {
+    Text(label, style = MaterialTheme.typography.bodySmall)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = 6,
+    ) {
+        FilterChip(
+            selected = selected == null,
+            onClick = { onPick(null) },
+            label = { Text("无") },
+        )
+        for (axis in GamepadAxis.entries) {
+            FilterChip(
+                selected = selected == axis,
+                onClick = { onPick(axis) },
+                label = { Text(axis.label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun LayoutValidationBanner(issues: List<LayoutIssue>, summary: LayoutSummary) {
+    val errors = issues.filter { it.severity == IssueSeverity.ERROR }
+    val warnings = issues.filter { it.severity == IssueSeverity.WARNING }
+    Surface(
+        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                "布局概览：${summary.buttonCount} 个按键 · ${summary.joystickCount} 个摇杆 " +
+                    "（移动 ${summary.moveStickCount} / 视角 ${summary.lookStickCount}）· " +
+                    "已绑定 ${summary.keysCovered.size} 种按键",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (errors.isNotEmpty()) {
+                for (e in errors) {
+                    Text("⛔ ${e.message}", color = Color(0xFFB00020), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (warnings.isNotEmpty()) {
+                for (w in warnings) {
+                    Text("⚠️ ${w.message}", color = Color(0xFFB26A00), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (errors.isEmpty() && warnings.isEmpty()) {
+                Text("✅ 布局校验通过", color = Color(0xFF1B7A34), style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
 }

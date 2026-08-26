@@ -1,5 +1,11 @@
 package com.rc.launcher.ui.model
 
+/** Hard cap on an instance display name, to keep derived file-system ids sane. */
+const val MAX_INSTANCE_NAME_LENGTH: Int = 64
+
+/** Java major versions the launcher can actually provision (tasks 12/13). */
+val SUPPORTED_JAVA_VERSIONS: Set<Int> = setOf(8, 17, 21)
+
 /**
  * Data model for the version-installation wizard (task 13).
  *
@@ -122,9 +128,12 @@ data class InstallRequest(
         gameVersion.isBlank() -> "请选择游戏版本"
         requiresLoaderVersion && loaderVersion == null -> "请选择 ${loader.label} 版本"
         name.isBlank() -> "请填写实例名称"
+        name.length > MAX_INSTANCE_NAME_LENGTH ->
+            "实例名称过长（最多 ${MAX_INSTANCE_NAME_LENGTH} 字）"
         gameDirectoryType == GameDirectoryType.CUSTOM && customGameDir.isBlank() ->
             "自定义目录不能为空"
-        javaVersion != null && javaVersion < 8 -> "Java 版本无效"
+        javaVersion != null && javaVersion !in SUPPORTED_JAVA_VERSIONS ->
+            "Java 版本不受支持"
         else -> null
     }
 
