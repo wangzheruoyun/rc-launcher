@@ -244,12 +244,6 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
-        run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -352,11 +346,6 @@ jobs:
           java-version: 17
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-      - name: Install Android SDK packages
-        run: |
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0"
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
