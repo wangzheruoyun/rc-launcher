@@ -1,13 +1,15 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("io.gitlab.arturbosch.detekt")
-    id("org.jlleitschuh.gradle.ktlint")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.detekt)
+    alias(libs.plugins.ktlint)
 }
 
 android {
     namespace = "com.rc.launcher"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.rc.launcher"
@@ -18,7 +20,7 @@ android {
 
         // Match the ABIs produced by the Rust core (cargo-ndk).
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            abiFilters += listOf("arm64-v8a")
         }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -79,12 +81,11 @@ android {
         compose = true
     }
 
-    // Kotlin 1.9.24 ships the Compose compiler as a separate extension; the
-    // dedicated `org.jetbrains.kotlin.plugin.compose` Gradle plugin only exists
-    // for Kotlin 2.0+, so enable Compose the 1.9.x way.
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.4"
-    }
+    // Compose is enabled via the `org.jetbrains.kotlin.plugin.compose` Gradle plugin
+    // (applied in the plugins block above), which bundles the Compose compiler
+    // matched to the Kotlin version. The old Kotlin 1.9.x `composeOptions {
+    // kotlinCompilerExtensionVersion }` block is gone — the compiler now travels
+    // with the Kotlin plugin.
 
     // Robolectric-backed JVM Compose UI tests (task 21) need the Android
     // resources + default return values to inflate composables off-device.
@@ -110,44 +111,76 @@ android {
     }
 }
 
-// Pin the whole Compose stack to a single coherent version during
-// resolution. The dependency graph (material3 / material-icons-extended /
-// navigation-compose / ...) otherwise pulls the LATEST published compose-ui
-// (1.7.0+), whose PointerButtons / PointerButton / `pressed` API differs from
-// what the code targets, breaking the build. Force every androidx.compose.*
-// module we use to 1.5.4 (Kotlin 1.9.22 / Compose compiler 1.5.4 compatible),
-// applied as a resolution rule so it cannot float upward.
+// ---------------------------------------------------------------------------
+// Compose stack coherence (Task 1 scaffolding hardening).
+//
+// Material 3's TypographyTokens calls `TextStyle.copy$default`, a Kotlin
+// synthetic method whose *signature* depends on the exact Compose UI version
+// it was compiled against. Shipping a Material 3 built against Compose UI
+// 1.6.x together with Compose UI 1.5.x on the runtime classpath produced a
+// runtime `java.lang.NoSuchMethodError` (see logcat/25_08-13-50-16_522.log).
+//
+// We prevent that whole class of bug two ways, both sourced from the version
+// catalog so the numbers can never silently drift apart:
+//   1. The Compose BOM (platform(libs.compose.bom)) aligns every Compose
+//      artifact to one mutually-compatible set.
+//   2. resolutionStrategy.force hard-pins the whole Compose stack to the
+//      single `compose` / `material3` versions below; `force` wins over the
+//      BOM constraints, guaranteeing the runtime classpath is coherent even if
+//      a transitive dependency ever tried to pull a newer Compose UI.
+// ---------------------------------------------------------------------------
+val composeVersion = libs.versions.compose.get()
+val material3Version = libs.versions.material3.get()
+val materialIconsExtendedVersion = libs.versions.materialIconsExtended.get()
+
 configurations.all {
     resolutionStrategy {
-        // Hard-pin the whole Compose stack to a single coherent 1.5.4 set.
-        // navigation-compose / material3 can otherwise pull a newer compose-ui
-        // (1.7.0+), which removed PointerButton / isSecondaryPressed and breaks
-        // the build. `force` wins over transitive `strictly` constraints so the
+        // Hard-pin the whole Compose stack to a single coherent set. `force`
+        // wins over transitive `strictly` constraints and over the BOM, so the
         // version cannot float upward.
         force(
-            "androidx.compose.ui:ui:1.5.4",
-            "androidx.compose.ui:ui-graphics:1.5.4",
-            "androidx.compose.ui:ui-tooling:1.5.4",
-            "androidx.compose.ui:ui-tooling-preview:1.5.4",
-            "androidx.compose.foundation:foundation:1.5.4",
-            "androidx.compose.runtime:runtime:1.5.4",
-            "androidx.compose.animation:animation:1.5.4",
-            "androidx.compose.material3:material3:1.2.0",
-            "androidx.compose.material:material-icons-extended:1.5.4",
+            "androidx.compose.ui:ui:$composeVersion",
+            "androidx.compose.ui:ui-graphics:$composeVersion",
+            "androidx.compose.ui:ui-tooling:$composeVersion",
+            "androidx.compose.ui:ui-tooling-preview:$composeVersion",
+            "androidx.compose.foundation:foundation:$composeVersion",
+            "androidx.compose.runtime:runtime:$composeVersion",
+            "androidx.compose.animation:animation:$composeVersion",
+            "androidx.compose.material3:material3:$material3Version",
+            "androidx.compose.material:material-icons-extended:$materialIconsExtendedVersion",
         )
         eachDependency {
-            if (requested.group == "androidx.compose.ui" ||
-                requested.group == "androidx.compose.foundation" ||
-                requested.group == "androidx.compose.runtime" ||
-                requested.group == "androidx.compose.animation"
-            ) {
-                useVersion("1.5.4")
-                because("pin Compose to a single coherent 1.5.4 set")
+            // Pin every module of the Compose stack to the one coherent set so a
+            // transitive dependency can never silently pull a newer Material 3
+            // (or ui/foundation/runtime) whose `TextStyle.copy$default` signature
+            // diverges from the runtime Compose UI — the exact
+            // `java.lang.NoSuchMethodError` class seen in
+            // logcat/25_08-13-50-16_522.log. `force` above already wins over the
+            // BOM; `eachDependency` is the belt-and-suspenders guarantee for any
+            // dependency that requests a Compose artifact by a floating version.
+            when {
+                requested.group in setOf(
+                    "androidx.compose.ui",
+                    "androidx.compose.foundation",
+                    "androidx.compose.runtime",
+                    "androidx.compose.animation",
+                ) -> {
+                    useVersion(composeVersion)
+                    because("pin the Compose stack to a single coherent set")
+                }
+                requested.group == "androidx.compose.material3" -> {
+                    useVersion(material3Version)
+                    because("pin Material 3 to the version aligned with the Compose BOM / compose ui")
+                }
+                requested.group == "androidx.compose.material" &&
+                requested.name == "material-icons-extended" -> {
+                    useVersion(materialIconsExtendedVersion)
+                    because("material-icons-extended tracks its own 1.7.x line, not the 1.12.x ui line")
+                }
             }
         }
     }
 }
-
 
 dependencies {
     // Project modules — clear dependency direction:
@@ -155,33 +188,31 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":runtime"))
 
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.lifecycle.runtime.ktx)
+    implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.activity.compose)
 
-    val composeVersion = "1.5.4"
-    implementation("androidx.compose.ui:ui:$composeVersion")
-    implementation("androidx.compose.ui:ui-graphics:$composeVersion")
-    implementation("androidx.compose.ui:ui-tooling-preview:$composeVersion")
-    implementation("androidx.compose.material3:material3:1.2.0")
-    implementation("androidx.compose.material:material-icons-extended:1.5.4")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    // Compose BOM supplies a coherent version for every androidx.compose.* dep.
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
+    implementation(libs.navigation.compose)
+    // Type-safe navigation routes (task 11): every @Serializable route class needs
+    // the kotlinx-serialization runtime + the plugin applied above.
+    implementation(libs.kotlinx.serialization.json)
 
-    debugImplementation("androidx.compose.ui:ui-tooling:$composeVersion")
+    debugImplementation(libs.compose.ui.tooling)
 
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(libs.junit)
     // --- Task 21: Compose UI tests (run on the JVM via Robolectric) ---
-    testImplementation("androidx.compose.ui:ui-test-junit4:$composeVersion")
-    testImplementation("org.robolectric:robolectric:4.12.2")
-    // --- Task 21: Compose UI instrumented tests (reference FCL androidTest / MCTier) ---
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4:$composeVersion")
-    androidTestImplementation("androidx.test:runner:1.6.1")
-    androidTestImplementation("androidx.test:rules:1.6.1")
-    debugImplementation("androidx.compose.ui:ui-test-manifest:$composeVersion")
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.robolectric)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
 
 // --- Task 26: unified Kotlin style checks (mirrors the Rust fmt/clippy gate) ---

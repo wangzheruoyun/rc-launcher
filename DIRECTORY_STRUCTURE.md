@@ -25,14 +25,6 @@ com.rc.launcher/
 │       └── stylecheck.yml
 ├── app/
 │   ├── src/
-│   │   ├── androidTest/
-│   │   │   └── java/
-│   │   │       └── com/
-│   │   │           └── rc/
-│   │   │               └── launcher/
-│   │   │                   ├── ui/
-│   │   │                   │   └── ComposeNavigationTest.kt
-│   │   │                   └── ExampleInstrumentedTest.kt
 │   │   ├── main/
 │   │   │   ├── java/
 │   │   │   │   └── com/
@@ -42,6 +34,7 @@ com.rc.launcher/
 │   │   │   │               │   ├── awt/
 │   │   │   │               │   │   ├── AwtAndroidKeys.kt
 │   │   │   │               │   │   ├── AwtCanvasBridge.kt
+│   │   │   │               │   │   ├── AwtControl.kt
 │   │   │   │               │   │   ├── AwtGeometry.kt
 │   │   │   │               │   │   ├── AwtInput.kt
 │   │   │   │               │   │   ├── AwtSessionInfo.kt
@@ -127,6 +120,7 @@ com.rc.launcher/
 │   │                       └── ui/
 │   │                           ├── awt/
 │   │                           │   ├── AwtAndroidKeysTest.kt
+│   │                           │   ├── AwtControlTest.kt
 │   │                           │   ├── AwtGeometryTest.kt
 │   │                           │   ├── AwtInputTest.kt
 │   │                           │   ├── AwtSessionInfoTest.kt
@@ -339,6 +333,7 @@ com.rc.launcher/
 │   │   ├── gen_android_strings.cpython-312.pyc
 │   │   ├── health_audit.cpython-312.pyc
 │   │   └── i18n_common.cpython-312.pyc
+│   ├── check_awt_wire.py
 │   ├── check_i18n.py
 │   ├── gen_android_strings.py
 │   ├── health_audit.py
