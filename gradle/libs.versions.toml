@@ -17,7 +17,7 @@
 #   `compose` / `material3` versions below.
 
 [versions]
-agp = "9.1.2"
+agp = "8.7.3"
 # Kotlin 2.4.x — the Compose compiler is now bundled into the Kotlin Gradle plugin
 # via `org.jetbrains.kotlin.plugin.compose` (no separate `composeCompiler` version).
 kotlin = "2.4.10"
