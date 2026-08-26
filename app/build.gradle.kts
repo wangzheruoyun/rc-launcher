@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.rc.launcher"
-    compileSdk = 34
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.rc.launcher"
