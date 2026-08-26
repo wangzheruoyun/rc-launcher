@@ -595,7 +595,6 @@ private fun SkinPreviewDialog(
 }
 
 @Composable
-@Composable
 private fun ConfirmRemoveDialog(
     account: Account,
     onConfirm: () -> Unit,
@@ -615,6 +614,7 @@ private fun ConfirmRemoveDialog(
     )
 }
 
+@Composable
 private fun AddOfflineDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,

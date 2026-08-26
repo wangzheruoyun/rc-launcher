@@ -54,6 +54,7 @@ import com.rc.launcher.ui.model.LauncherSettings
 import com.rc.launcher.ui.model.ResolutionMode
 import com.rc.launcher.ui.model.RendererOption
 import com.rc.launcher.ui.model.RendererPluginConfig
+import com.rc.launcher.ui.model.MirrorCatalog
 import com.rc.launcher.ui.model.MirrorProbeState
 import com.rc.launcher.ui.theme.ThemeData
 import com.rc.launcher.ui.theme.ThemeNightMode
@@ -227,8 +228,8 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    when (mirrorProbe) {
-                        is MirrorProbeState.Measuring -> "测速中 ${mirrorProbe.done}/${mirrorProbe.total}…"
+                    when (val probe = mirrorProbe) {
+                        is MirrorProbeState.Measuring -> "测速中 ${probe.done}/${probe.total}…"
                         else -> "测速并选择最快镜像"
                     },
                 )
