@@ -140,6 +140,7 @@ kotlin {
 val composeVersion = libs.versions.compose.get()
 val material3Version = libs.versions.material3.get()
 val materialIconsExtendedVersion = libs.versions.materialIconsExtended.get()
+val navigationComposeVersion = libs.versions.navigationCompose.get()
 
 configurations.all {
     resolutionStrategy {
@@ -156,6 +157,7 @@ configurations.all {
             "androidx.compose.animation:animation:$composeVersion",
             "androidx.compose.material3:material3:$material3Version",
             "androidx.compose.material:material-icons-extended:$materialIconsExtendedVersion",
+            "androidx.navigation:navigation-compose:$navigationComposeVersion",
         )
         eachDependency {
             // Pin every module of the Compose stack to the one coherent set so a
