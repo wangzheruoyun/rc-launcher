@@ -9,6 +9,7 @@ use std::path::Path;
 use md5::Md5;
 use sha1::Digest;
 use sha1::Sha1;
+use sha2::Sha256;
 
 use crate::error::{RcError, RcResult};
 use tokio::fs as tfs;
@@ -28,6 +29,18 @@ pub fn md5_bytes(data: &[u8]) -> String {
     hex(&h.finalize())
 }
 
+/// Hash an in-memory byte slice with SHA-256, returned as lowercase hex.
+pub fn sha256_bytes(data: &[u8]) -> String {
+    let mut h = Sha256::new();
+    h.update(data);
+    hex(&h.finalize())
+}
+
+/// SHA-256 of a file on disk (streamed in fixed-size blocks).
+pub async fn sha256_path(path: &Path) -> RcResult<String> {
+    hash_path(path, Algo::Sha256).await
+}
+
 /// SHA-1 of a file on disk (streamed in fixed-size blocks).
 pub async fn sha1_path(path: &Path) -> RcResult<String> {
     hash_path(path, Algo::Sha1).await
@@ -41,6 +54,7 @@ pub async fn md5_path(path: &Path) -> RcResult<String> {
 enum Algo {
     Sha1,
     Md5,
+    Sha256,
 }
 
 async fn hash_path(path: &Path, algo: Algo) -> RcResult<String> {
@@ -60,6 +74,17 @@ async fn hash_path(path: &Path, algo: Algo) -> RcResult<String> {
         }
         Algo::Md5 => {
             let mut h = Md5::new();
+            loop {
+                let n = file.read(&mut buf).await.map_err(RcError::Io)?;
+                if n == 0 {
+                    break;
+                }
+                h.update(&buf[..n]);
+            }
+            Ok(hex(&h.finalize()))
+        }
+        Algo::Sha256 => {
+            let mut h = Sha256::new();
             loop {
                 let n = file.read(&mut buf).await.map_err(RcError::Io)?;
                 if n == 0 {
@@ -104,6 +129,15 @@ mod tests {
     }
 
     #[test]
+    fn sha256_known_vector() {
+        // SHA-256("abc")
+        assert_eq!(
+            sha256_bytes(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
     fn md5_known_vector() {
         assert_eq!(md5_bytes(b"abc"), "900150983cd24fb0d6963f7d28e17f72");
     }
@@ -112,6 +146,17 @@ mod tests {
     fn hex_eq_ignores_case() {
         assert!(hex_eq("ABCDEF", "abcdef"));
         assert!(!hex_eq("abcdef", "abcdeg"));
+    }
+
+    #[tokio::test]
+    async fn sha256_path_matches_bytes() {
+        let dir = std::env::temp_dir().join(format!("rc_sha256_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("f.bin");
+        let data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        std::fs::write(&p, &data).unwrap();
+        assert_eq!(sha256_path(&p).await.unwrap(), sha256_bytes(&data));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

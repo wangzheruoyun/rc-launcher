@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{RcError, RcResult};
 use crate::launch::options::LwjglVersion;
+use crate::runtime::manifest::LwjglBundle;
 use crate::runtime::{Abi, JavaVersion};
 
 /// Directory name of the Java-8 caciocavallo bundle.
@@ -149,6 +150,69 @@ impl AppRuntime {
         // The AWT bridge is optional (only needed when `use_cacio` is on), so a
         // missing cacio bundle is reported by the caller, not here.
         let _ = java;
+        Ok(())
+    }
+
+    /// Verify the LWJGL bundle (JARs + `arm64-v8a` natives) for `version`
+    /// against its recorded SHA-1 / SHA-256 / size, scoped to `abi` (task 1).
+    ///
+    /// This is the "extract-and-verify on first launch" gate for the LWJGL
+    /// runtime: the Android side unpacks `assets/app_runtime/lwjgl/<version>/`
+    /// out of the APK on first boot, and this method proves the unpacked bytes
+    /// still match FCL's prebuilt bundle before a JVM is spawned. A corrupt or
+    /// truncated `.so`/`.jar` is rejected here with a precise
+    /// [`RcError::ChecksumMismatch`] instead of letting Minecraft 1.13+
+    /// (which loads LWJGL's OpenGL binding) die with an opaque
+    /// `UnsatisfiedLinkError` at the first GL call.
+    pub fn verify_lwjgl(
+        &self,
+        version: LwjglVersion,
+        abi: Abi,
+        bundle: &LwjglBundle,
+    ) -> RcResult<()> {
+        let dir = self.lwjgl_dir(version);
+        if !dir.is_dir() {
+            return Err(RcError::MissingFile(format!(
+                "LWJGL {} bundle not found: {}",
+                version.as_dir(),
+                dir.display()
+            )));
+        }
+        // JARs live at the top level of the bundle directory.
+        for art in &bundle.jars {
+            let p = dir.join(&art.file);
+            let data = std::fs::read(&p).map_err(RcError::Io)?;
+            art.verify(&data).map_err(|e| {
+                RcError::Other(format!(
+                    "LWJGL {} jar {} failed verification: {e}",
+                    version.as_dir(),
+                    art.file
+                ))
+            })?;
+        }
+        // Natives are ABI-scoped (`natives/<abi>/`). RC only ships arm64-v8a, so
+        // any other ABI correctly fails the directory-existence check below.
+        let natives = self.lwjgl_natives_dir(version, abi);
+        if !natives.is_dir() {
+            return Err(RcError::MissingFile(format!(
+                "LWJGL {} natives for {} not found: {}",
+                version.as_dir(),
+                abi.as_android_abi(),
+                natives.display()
+            )));
+        }
+        for art in &bundle.natives {
+            let p = natives.join(&art.file);
+            let data = std::fs::read(&p).map_err(RcError::Io)?;
+            art.verify(&data).map_err(|e| {
+                RcError::Other(format!(
+                    "LWJGL {} native {} ({}) failed verification: {e}",
+                    version.as_dir(),
+                    art.file,
+                    abi.as_android_abi()
+                ))
+            })?;
+        }
         Ok(())
     }
 }

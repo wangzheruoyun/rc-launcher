@@ -19,7 +19,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{RcError, RcResult};
-use crate::launch::options::Renderer;
+use crate::launch::options::{LwjglVersion, Renderer};
+use crate::launch::render::lwjgl_native_manifest;
 use crate::runtime::Abi;
 
 use super::native_lib::{NativeLib, NativeLibSource};
@@ -238,8 +239,25 @@ impl RendererPlugin {
 /// shipped renderers (see `FCL_APK_RUNTIME_ASSETS_CATALOG.md`), so this is the
 /// single source of truth the `Renderer` enum's `id()` / `gl_libname()` /
 /// `env()` delegate from.
+/// The LWJGL core native libraries every renderer depends on (task 1).
+///
+/// These are the OpenGL(ES) binding layer (`liblwjgl.so`, `liblwjgl_opengl.so`,
+/// `liblwjgl_stb.so`, `liblwjgl_tinyfd.so`, `libfreetype.so`, ...) that ship in
+/// `assets/app_runtime/lwjgl/<version>/natives/arm64-v8a/`. They are part of the
+/// renderer plugin *dependency graph* (resolved through [`NativeLibSource::LwjglNatives`])
+/// so the safe-loading pipeline knows each renderer pulls in the LWJGL runtime
+/// and can verify/preflight it. The `required` split mirrors
+/// [`lwjgl_native_manifest`] — only `liblwjgl.so` / `liblwjgl_opengl.so` are
+/// mandatory for Minecraft 1.13+ to get a GL context.
+fn lwjgl_core_native_libs() -> Vec<NativeLib> {
+    lwjgl_native_manifest(LwjglVersion::V3_3_3)
+        .iter()
+        .map(|l| NativeLib::in_lwjgl_natives(l.file_name).optional(!l.required))
+        .collect()
+}
+
 pub fn renderer_plugin(r: Renderer) -> RendererPlugin {
-    match r {
+    let mut plugin = match r {
         Renderer::Gl4es => RendererPlugin {
             id: "opengles2".into(),
             display_name: "GL4ES 1.1.4".into(),
@@ -354,7 +372,18 @@ pub fn renderer_plugin(r: Renderer) -> RendererPlugin {
             signature: None,
             author: None,
         },
+    };
+    // task 1: fold the LWJGL core native libraries into every built-in
+    // renderer's dependency graph so safe loading / preflight treats them as
+    // first-class dependencies (resolved via `LwjglNatives`).
+    plugin.native_libs.extend(lwjgl_core_native_libs());
+    // The SDL backend additionally needs `liblwjgl_sdl.so` (LWJGL 3.4.1 only).
+    if r == Renderer::Sdl {
+        plugin
+            .native_libs
+            .push(NativeLib::in_lwjgl_natives("liblwjgl_sdl.so").optional(true));
     }
+    plugin
 }
 
 /// The set of renderer plugins available to the launcher.

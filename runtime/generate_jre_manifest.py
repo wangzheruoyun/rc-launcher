@@ -11,7 +11,7 @@ updating the prebuilt binaries, or with ``--check`` in CI to fail when the
 committed manifest no longer matches the actual binaries.
 
 Usage:
-    python3 generate_jre_manifest.py            # (re)write jre_manifest.json
+    python3 generate_jre_manifest.py            # (re)write jre_manifest.json (+ lwjgl)
     python3 generate_jre_manifest.py --check    # exit 1 if it would change
 """
 from __future__ import annotations
@@ -24,6 +24,10 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 JAVA_DIR = os.path.join(HERE, "src", "main", "assets", "app_runtime", "java")
 MANIFEST = os.path.join(JAVA_DIR, "jre_manifest.json")
+# LWJGL prebuilt bundles (task 1): one subdir per version under
+# `assets/app_runtime/lwjgl/<version>/`, each with `*.jar` at the top level and
+# `natives/arm64-v8a/*.so` (RC only ships the arm64-v8a ABI).
+LWJGL_DIR = os.path.join(HERE, "src", "main", "assets", "app_runtime", "lwjgl")
 
 JRE_DIRS = {
     "jre8": 8,
@@ -39,6 +43,16 @@ ABI_SUFFIX = {
     "x86": "x86",
     "x86_64": "x86_64",
 }
+
+
+def sha256_of(path: str) -> tuple[str, int]:
+    h = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+            size += len(chunk)
+    return h.hexdigest(), size
 
 
 def sha1_of(path: str) -> tuple[str, int]:
@@ -100,10 +114,57 @@ def scan() -> dict:
     versions.sort(key=lambda v: v["major"])
     return {
         "schema_version": 1,
-        "source": "FCL-release-1.3.2.7-arm64-v8a.apk assets/app_runtime/java",
+        "source": "FCL-release-1.3.2.7-arm64-v8a.apk assets/app_runtime/java + app_runtime/lwjgl",
         "generated_at": "",
         "versions": versions,
+        "lwjgl": scan_lwjgl(),
     }
+
+
+def scan_lwjgl() -> list:
+    """Scan `assets/app_runtime/lwjgl/<version>/` for every jar + native .so.
+
+    Emits one bundle per version with SHA-1 + SHA-256 + size for every
+    artifact, mirroring the JRE scan above (task 1).
+    """
+    bundles = []
+    if not os.path.isdir(LWJGL_DIR):
+        return bundles
+    for version in sorted(os.listdir(LWJGL_DIR)):
+        vdir = os.path.join(LWJGL_DIR, version)
+        if not os.path.isdir(vdir):
+            continue
+        jars = []
+        for fn in sorted(os.listdir(vdir)):
+            if fn.endswith(".jar"):
+                sha, size = sha1_of(os.path.join(vdir, fn))
+                sha2, _ = sha256_of(os.path.join(vdir, fn))
+                jars.append({
+                    "file": fn,
+                    "sha1": sha,
+                    "sha256": sha2,
+                    "size": size,
+                })
+        natives = []
+        native_dir = os.path.join(vdir, "natives", "arm64-v8a")
+        if os.path.isdir(native_dir):
+            for fn in sorted(os.listdir(native_dir)):
+                if fn.endswith(".so"):
+                    sha, size = sha1_of(os.path.join(native_dir, fn))
+                    sha2, _ = sha256_of(os.path.join(native_dir, fn))
+                    natives.append({
+                        "file": fn,
+                        "sha1": sha,
+                        "sha256": sha2,
+                        "size": size,
+                    })
+        bundles.append({
+            "version": version,
+            "jars": jars,
+            "natives": natives,
+        })
+    bundles.sort(key=lambda b: b["version"])
+    return bundles
 
 
 def main() -> int:

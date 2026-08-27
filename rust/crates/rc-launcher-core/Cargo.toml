@@ -31,6 +31,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "hickory-dns", "json", "stream"] }
 # Cryptographic hashes for post-download verification.
 sha1 = "0.10"
+sha2 = "0.10"
 md-5 = "0.10"
 # Trait objects with async methods (HttpSource) without hand-rolling futures.
 async-trait = "0.1"

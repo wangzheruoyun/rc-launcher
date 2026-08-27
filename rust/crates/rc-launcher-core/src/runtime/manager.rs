@@ -507,6 +507,18 @@ mod tests {
             from_json.versions, scanned.versions,
             "jre_manifest.json is out of sync with the prebuilt binaries"
         );
+        // task 1: the LWJGL section must also match the prebuilt binaries so a
+        // corrupt/truncated LWJGL JAR or native .so is caught by CI before it
+        // ever reaches a device.
+        if let Some(app_runtime) = prebuilt.parent() {
+            if app_runtime.join("lwjgl").is_dir() {
+                let scanned_all = JreManifest::from_app_runtime_root(app_runtime).unwrap();
+                assert_eq!(
+                    from_json.lwjgl, scanned_all.lwjgl,
+                    "jre_manifest.json LWJGL section is out of sync with the prebuilt binaries"
+                );
+            }
+        }
     }
 
     /// A tiny JRE package: the files [`RuntimeManager::verify_required_files`]
@@ -603,6 +615,7 @@ mod tests {
                     archive(ArchiveKind::Bin, Some(Abi::Arm64V8a)),
                 ],
             }],
+            lwjgl: None,
         };
 
         let tmp = tempfile::tempdir().unwrap();

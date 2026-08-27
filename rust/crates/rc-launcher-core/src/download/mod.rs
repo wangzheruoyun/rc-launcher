@@ -21,7 +21,7 @@ mod manager;
 pub(crate) mod testing;
 
 pub use client::{FetchResult, HttpSource, ReqwestSource};
-pub use hash::{hex_eq, md5_bytes, md5_path, sha1_bytes, sha1_path};
+pub use hash::{hex_eq, md5_bytes, md5_path, sha1_bytes, sha1_path, sha256_bytes, sha256_path};
 pub use manager::{
     compute_backoff, plan_chunks, Checksum, DownloadManager, DownloadOptions, DownloadSummary,
     DownloadTask, Progress, ProgressCallback,

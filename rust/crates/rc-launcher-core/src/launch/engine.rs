@@ -44,6 +44,7 @@ use crate::launch::options::LaunchOptions;
 use crate::launch::process::{GameExit, GameProcess, LogLine, SpawnSpec};
 use crate::launch::render::{LwjglNativeBundle, RenderIntegration};
 use crate::launch::runtime_assets::AppRuntime;
+use crate::runtime::manifest::JreManifest;
 use crate::runtime::JavaVersion;
 
 /// Which preflight checks to run before spawning.
@@ -263,6 +264,38 @@ impl LaunchEngine {
                         self.options.lwjgl_version,
                         self.options.abi,
                     )?;
+                    // task 1: end-to-end integrity check of the unpacked LWJGL
+                    // bundle. The Android side extracts `assets/app_runtime/lwjgl`
+                    // from the APK on first launch; here we prove the bytes still
+                    // match FCL's prebuilt bundle (SHA-1 + SHA-256 + size, ABI
+                    // scoped) so a corrupt/truncated `.so`/`.jar` is caught
+                    // *before* the JVM boots. The manifest lives next to the JRE
+                    // packages; if it is absent we degrade to a warning rather
+                    // than blocking launch (the presence checks above still run).
+                    let manifest_path = rt.root().join("java").join("jre_manifest.json");
+                    if manifest_path.is_file() {
+                        match std::fs::read_to_string(&manifest_path) {
+                            Ok(json) => match JreManifest::from_json_str(&json) {
+                                Ok(manifest) => {
+                                    if let Some(b) =
+                                        manifest.lwjgl_bundle(self.options.lwjgl_version.as_dir())
+                                    {
+                                        rt.verify_lwjgl(
+                                            self.options.lwjgl_version,
+                                            self.options.abi,
+                                            b,
+                                        )?;
+                                    }
+                                }
+                                Err(e) => warnings.push(format!(
+                                    "could not parse jre_manifest.json, skipping LWJGL integrity check: {e}"
+                                )),
+                            },
+                            Err(e) => warnings.push(format!(
+                                "could not read jre_manifest.json, skipping LWJGL integrity check: {e}"
+                            )),
+                        }
+                    }
                     // task 17 (continued): the renderer's own OpenGL→OpenGL ES
                     // backing libs (GL4ES / ANGLE / Mesa / Zink) are just as
                     // load-bearing as the LWJGL natives. A missing

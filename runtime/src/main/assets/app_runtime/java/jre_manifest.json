@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "source": "FCL-release-1.3.2.7-arm64-v8a.apk assets/app_runtime/java",
+  "source": "FCL-release-1.3.2.7-arm64-v8a.apk assets/app_runtime/java + app_runtime/lwjgl",
   "generated_at": "",
   "versions": [
     {
@@ -84,6 +84,280 @@
           "file": "bin-arm64.tar.xz",
           "sha1": "498bbfdaee5d425b09402ba8b4dc48b93da69f4f",
           "size": 5453168
+        }
+      ]
+    }
+  ],
+  "lwjgl": [
+    {
+      "version": "3.3.3",
+      "jars": [
+        {
+          "file": "lwjgl-3.3.3-merged-modules.jar",
+          "sha1": "25037790606ffb71bc89d182b3f076bb0cf4dcc5",
+          "sha256": "8b835d10e256b5e38e518169d4ba005e4bae5393b084758526d751e2d581928a",
+          "size": 1125529
+        },
+        {
+          "file": "lwjgl-freetype.jar",
+          "sha1": "bc32c1ac4111db8271b8d914d352ec0dfd004ff4",
+          "sha256": "5c4e2ff87fa4faf5c55d9922fffec62faf449ad2733000951ab9c17da0d3adf8",
+          "size": 451815
+        },
+        {
+          "file": "lwjgl-lwjglx.jar",
+          "sha1": "81ac7dd58743fe1dac133644753ffea44aed7ad1",
+          "sha256": "7346cb92ce8668c314dd4d751057fc3b4fbc4c3111973cbc3e8ec50166b111c9",
+          "size": 237333
+        },
+        {
+          "file": "lwjgl-nanovg.jar",
+          "sha1": "0edf38c8b85ac9dd4dab45fb87813e84d498b244",
+          "sha256": "a76270407fe11569eb83cb3e644d05efed7a5595e0a7cd0a2743d46ba83177e4",
+          "size": 126928
+        },
+        {
+          "file": "lwjgl-openal.jar",
+          "sha1": "0556e58827e10fa9ce656982e85f9a72d8d6f2ae",
+          "sha256": "5cba886d84d7fe79c411c2711fcec24ac06419b6838d442cfd6c6758803db584",
+          "size": 109538
+        },
+        {
+          "file": "lwjgl-shaderc.jar",
+          "sha1": "20ed6a6b3b45c7a27f5d9d6390fe1adfc5e222b2",
+          "sha256": "d2fb00df0697c5fa85b0c877a2bbe61f99d2d1caf245a035188f01f9f84b5c60",
+          "size": 24400
+        },
+        {
+          "file": "lwjgl-spvc.jar",
+          "sha1": "376c2e3dbcccf08343dca85e35fd92f5a69dd626",
+          "sha256": "e5e5ded01b5fe2f8c1fcf189ea4242ffd23416de268b85337d134e86644a4224",
+          "size": 127690
+        },
+        {
+          "file": "lwjgl-stb.jar",
+          "sha1": "b6bde702ecd330175c8a2952f63d9118ab234535",
+          "sha256": "7da67c67d9674daf94248d857f15b82fa07bb9d91b006ede7eb9447de6af78be",
+          "size": 115903
+        },
+        {
+          "file": "lwjgl-tinyfd.jar",
+          "sha1": "0d9d996f609463bdc7645800ccb9bf7676ad98cd",
+          "sha256": "a8a07d746a9f5bc16ba3102a5665c47c315f9846c404e7259f6b76bea4492aed",
+          "size": 7711
+        },
+        {
+          "file": "lwjgl-vma.jar",
+          "sha1": "200621b736f1285daf10703d98d0345d324ba025",
+          "sha256": "0d97d3dd96031873630f5c200c986dcc7aeff7654f8d524884689e74d1522018",
+          "size": 98286
+        },
+        {
+          "file": "lwjgl-vulkan.jar",
+          "sha1": "077e69566b821b1115fd078bb04d1c9e70d41809",
+          "sha256": "e10c2122de8fdfb5e9e35de8c59112b8104bc446554402c1f24743d976d1f96d",
+          "size": 6106103
+        },
+        {
+          "file": "lwjgl.jar",
+          "sha1": "e6dc610bf49dba90c3676a9222bfcfaadca29a38",
+          "sha256": "4210729d04c0f0218c053fffd2a95845937135484f6b4cb0ae25a6eceb4e83a3",
+          "size": 793777
+        }
+      ],
+      "natives": [
+        {
+          "file": "libfreetype.so",
+          "sha1": "52ab5173cb65a21bce4eca4b580fbfec4179cd99",
+          "sha256": "e29baaa7677bb06931260f06abf8850af8073e550ea7d1a4556c75fb187d866d",
+          "size": 723256
+        },
+        {
+          "file": "liblwjgl.so",
+          "sha1": "d8237c623b76a35daa77c42d7054dc3058cbfb81",
+          "sha256": "70e8642abcd11a368c0b4cbbeae31e33f2e031553ba3a05f9375fc6b92c8a40f",
+          "size": 511504
+        },
+        {
+          "file": "liblwjgl_nanovg.so",
+          "sha1": "c60447d7b83536a299b2eccb1b2fe8a0a7268e0a",
+          "sha256": "bdb66cf94262bbd1fdcf4e07de61278301d68cfec9865cc99abac5dde2d1ddd5",
+          "size": 361280
+        },
+        {
+          "file": "liblwjgl_opengl.so",
+          "sha1": "de71acbf32163f892841232ca48a44830485b88e",
+          "sha256": "c3b456be14c1dfd3969106c1a6e069ea2381b3044604962c97e9531086a6eb00",
+          "size": 351424
+        },
+        {
+          "file": "liblwjgl_stb.so",
+          "sha1": "33a73672d8c8cff63e56b01dcd04ee84fe9ea01d",
+          "sha256": "bb289be0e19aa9b997a6801b550fd9b056be8ee3fc9883e8cd8edfef4b969c94",
+          "size": 349272
+        },
+        {
+          "file": "liblwjgl_tinyfd.so",
+          "sha1": "a873bba8926fd91e342075c440e40d5aaadc8913",
+          "sha256": "2c58ffc3e7902ae80c6fa56e4a5416a78b10ebcf7aedf03e5d9a72d438ead5b5",
+          "size": 83288
+        },
+        {
+          "file": "liblwjgl_vma.so",
+          "sha1": "9d6ec5e70a1cfe08c0d27dddbf3230884b96cfac",
+          "sha256": "fbb31358b6166cd8d3f92fcf877af1d0167e96e182f3bafe19e142800894848d",
+          "size": 492880
+        },
+        {
+          "file": "libshaderc.so",
+          "sha1": "119a052e9ba079ce48b32223689164bc7c2fc699",
+          "sha256": "3ea0879da7809ab0ec74f8012ca7129e5383f4431d46d514171076f843a177f0",
+          "size": 8603992
+        }
+      ]
+    },
+    {
+      "version": "3.4.1",
+      "jars": [
+        {
+          "file": "lwjgl-3.4.1-merged-modules.jar",
+          "sha1": "26b6187e08491228429ed71a2ac0a302a6fa8f34",
+          "sha256": "30f5ad238a911d9852950ed42a1999641d1fecc72e6819db91729330623d6776",
+          "size": 1100422
+        },
+        {
+          "file": "lwjgl-freetype.jar",
+          "sha1": "cbf0218f892c2ef77e3b429e57f259ab2035b4f3",
+          "sha256": "e7001800c634f13f15f767493c1debfb92d5422942c5160c524df0fa3de54a46",
+          "size": 465796
+        },
+        {
+          "file": "lwjgl-lwjglx.jar",
+          "sha1": "b5056747eee8cabaf95f40e4443bb96eb7d9e130",
+          "sha256": "03838ef76b021ea9e3b50c392659d34e61e851a1d327344e088fb939781cde2c",
+          "size": 237121
+        },
+        {
+          "file": "lwjgl-nanovg.jar",
+          "sha1": "1c63274880064a0236c7d4b425603ba09f84963d",
+          "sha256": "e825f799ac378d13e61bcae419953ecc23b8ee272c26408ffdb09f151af602c4",
+          "size": 76348
+        },
+        {
+          "file": "lwjgl-openal.jar",
+          "sha1": "2de28dbd7fe17de79acd612494314e0d313e9cde",
+          "sha256": "c3791d86a6ae43f3d56a718697335b6e4eca1736c5169a3c29a1231c15ab8411",
+          "size": 150981
+        },
+        {
+          "file": "lwjgl-sdl.jar",
+          "sha1": "f80fd1be41947c9dfcc5c8f51b14204aa28be24c",
+          "sha256": "569e3faea224741f043b9d138d792c34e124bbe54cbc143cd94869089b1f8ef5",
+          "size": 992333
+        },
+        {
+          "file": "lwjgl-shaderc.jar",
+          "sha1": "62248632882669d57b569a42c02006b0827f469c",
+          "sha256": "fa02faae80950e5bb28bdcc5a9cc7cbb7e552d723b72777d2ab1adece9d2287e",
+          "size": 147618
+        },
+        {
+          "file": "lwjgl-spng.jar",
+          "sha1": "79f8734733853554c6f216bd64c087e5cb76c4c0",
+          "sha256": "10daa293281297d1a968a615a957233d4b8268cf7446fae118212e2330b0fb12",
+          "size": 114650
+        },
+        {
+          "file": "lwjgl-spvc.jar",
+          "sha1": "bb0f95206bb5eef8ec4bd7f1ea6f8235ebed2f77",
+          "sha256": "ddd4ba883d72b6ac2759370c81877b1ac291c552e2eb1d97911199755cb6e571",
+          "size": 141553
+        },
+        {
+          "file": "lwjgl-stb.jar",
+          "sha1": "a45a070fd96074d33fbbd120384f1884120184a7",
+          "sha256": "4f36cacea19d64f37a16dac91095d3542626fac726bb6934ecd480f5677ce7b6",
+          "size": 136953
+        },
+        {
+          "file": "lwjgl-tinyfd.jar",
+          "sha1": "77848ca789a46536ebb4fbf0d0d1f5dd7875440e",
+          "sha256": "879e1403a5547cc335eb44a27052f5e33510ccc04ddd317f5825f76cc91cdc09",
+          "size": 7677
+        },
+        {
+          "file": "lwjgl-vma.jar",
+          "sha1": "7c75d1b9c63b76f9a82ef86d6cf0faecb52fe830",
+          "sha256": "1895f7f3ad8d16e90db490a8abdc094048976e462e42d747c40941cf559fef2b",
+          "size": 103366
+        },
+        {
+          "file": "lwjgl-vulkan.jar",
+          "sha1": "7d716c9a0b03de43c4c8d2563a17133f12de1de3",
+          "sha256": "75957d2845320adf2799c9f154c4e2b35202cf007d0d1e36a238a2fb212391fa",
+          "size": 8540747
+        },
+        {
+          "file": "lwjgl.jar",
+          "sha1": "e6d60f83c8c67f575c491ae60790ccc86f5c4991",
+          "sha256": "a675ff2a93ecb9f94bdd72bb3a9ab648f4413225749c46fc83d5aae8a8260275",
+          "size": 1169477
+        }
+      ],
+      "natives": [
+        {
+          "file": "libfreetype.so",
+          "sha1": "be4acdc88ebe6d1274776a39f1ba71115f3d7148",
+          "sha256": "68638d4ee371a79027accf1f1bb3c489f40d912590c5970877c035bbd2c272bd",
+          "size": 733760
+        },
+        {
+          "file": "liblwjgl.so",
+          "sha1": "fd28260e32c50bc7e7863a6ffb0d8f6bfc1e71ee",
+          "sha256": "e76694d8a4ce0f9922c93b1c2e5776f317a9339c9013d776147e4c4a84d7f91e",
+          "size": 558960
+        },
+        {
+          "file": "liblwjgl_nanovg.so",
+          "sha1": "f0e03ce5a9b620c5b70a6f8e42f8b293fd5b9e36",
+          "sha256": "9f640ca57cb787feea8b17e4d4aa2f463ec954358cdfaa776a7d4c66c9de5bc0",
+          "size": 311416
+        },
+        {
+          "file": "liblwjgl_opengl.so",
+          "sha1": "4d129259d2a1a9d8957b54ff0be8206f183d1937",
+          "sha256": "ccc474a7691bc1b4e6ae36905c19eb7c53cf916d94ca9e0b35a564bbcad26b1f",
+          "size": 352736
+        },
+        {
+          "file": "liblwjgl_spng.so",
+          "sha1": "5d80b4e69759d36b6abc8937281630a40d543dc4",
+          "sha256": "fc2a68d37bf754258d869f6b7875fd20fbcbc58b30616bf9f789262788513f9e",
+          "size": 94744
+        },
+        {
+          "file": "liblwjgl_stb.so",
+          "sha1": "7096386c514eecd8a7f9df6eb97c5e7324588018",
+          "sha256": "adefdf01f6f0ff384b6302c73ce5f7c0bf45695d9e20a28eae832a43c6cc46f1",
+          "size": 420504
+        },
+        {
+          "file": "liblwjgl_tinyfd.so",
+          "sha1": "2c3cd5c02f04838b281ccea08c517b65bd3348dc",
+          "sha256": "e3c2b6849c73a8bc7221eb1db167773270bfeb3433b6fb1240adfeaeb615f8b9",
+          "size": 88264
+        },
+        {
+          "file": "liblwjgl_vma.so",
+          "sha1": "82904eef2dd1bf38f0c6867b8908e2b358c954b0",
+          "sha256": "c7d58d5bff0b5c90bdfa13f646fe52140ab294b8a6f63533367a018095f2a16d",
+          "size": 499600
+        },
+        {
+          "file": "libshaderc.so",
+          "sha1": "119a052e9ba079ce48b32223689164bc7c2fc699",
+          "sha256": "3ea0879da7809ab0ec74f8012ca7129e5383f4431d46d514171076f843a177f0",
+          "size": 8603992
         }
       ]
     }
