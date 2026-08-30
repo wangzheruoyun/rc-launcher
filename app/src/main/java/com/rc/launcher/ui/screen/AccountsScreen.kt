@@ -55,6 +55,8 @@ import com.rc.launcher.ui.model.InMemoryAccountRepository
 import com.rc.launcher.ui.model.MicrosoftAccount
 import com.rc.launcher.ui.model.OfflineAccount
 import com.rc.launcher.ui.model.TokenStatus
+import com.rc.launcher.ui.model.ThirdPartyLogin
+import com.rc.launcher.ui.model.ThirdPartyServerInfo
 import com.rc.launcher.ui.model.nowSecs
 import com.rc.launcher.ui.model.offlineUuid
 import com.rc.launcher.ui.viewmodel.AccountViewModel
@@ -101,6 +103,7 @@ fun AccountsScreen(
 
     val scope = rememberCoroutineScope()
     var showAddOffline by remember { mutableStateOf(false) }
+    var showThirdParty by remember { mutableStateOf(false) }
     var previewAccount by remember { mutableStateOf<Account?>(null) }
     var pendingRemove by remember { mutableStateOf<Account?>(null) }
 
@@ -147,6 +150,13 @@ fun AccountsScreen(
                     Icon(Icons.Filled.PersonAdd, contentDescription = null)
                     Text("添加离线账号")
                 }
+                OutlinedButton(
+                    onClick = { showThirdParty = true },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.PersonAdd, contentDescription = null)
+                    Text("第三方账号")
+                }
             }
         }
 
@@ -191,7 +201,14 @@ fun AccountsScreen(
         }
     }
 
-    if (loginState !is LoginState.Idle) {
+    if (showThirdParty) {
+        ThirdPartyLoginDialog(
+            state = loginState,
+            onConnect = { url -> scope.launch(Dispatchers.IO) { viewModel.beginThirdPartyDiscovery(url) } },
+            onLogin = { login -> scope.launch(Dispatchers.IO) { viewModel.completeThirdPartyLogin(login) } },
+            onDismiss = { showThirdParty = false; viewModel.cancelLogin() },
+        )
+    } else if (loginState !is LoginState.Idle) {
         MicrosoftLoginDialog(
             state = loginState,
             onConfirm = {
@@ -644,6 +661,121 @@ private fun AddOfflineDialog(
         },
     )
 }
+
+
+@Composable
+private fun ThirdPartyLoginDialog(
+    state: LoginState,
+    onConnect: (String) -> Unit,
+    onLogin: (ThirdPartyLogin) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var serverUrl by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    val provider = "authlib_injector"
+    val info = (state as? LoginState.ThirdPartyServer)?.info
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            when {
+                state is LoginState.ThirdPartySigningIn -> {
+                    Button(onClick = {}, enabled = false) { Text("请稍候") }
+                }
+                info != null -> {
+                    Button(
+                        onClick = {
+                            onLogin(
+                                ThirdPartyLogin(
+                                    provider = provider,
+                                    serverUrl = info.serverUrl.ifBlank { serverUrl },
+                                    username = username,
+                                    password = password,
+                                ),
+                            )
+                        },
+                        enabled = username.isNotBlank() && password.isNotBlank(),
+                    ) { Text("登录") }
+                }
+                else -> {
+                    Button(
+                        onClick = { if (serverUrl.isNotBlank()) onConnect(serverUrl.trim()) },
+                        enabled = serverUrl.isNotBlank() && state !is LoginState.ThirdPartySigningIn,
+                    ) { Text("连接服务器") }
+                }
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        title = { Text("第三方账号登录") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    state is LoginState.ThirdPartySigningIn -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp)
+                            Text("正在与验证服务器通信…")
+                        }
+                    }
+                    state is LoginState.Error -> {
+                        Text(state.message, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                if (info == null) {
+                    Text("输入第三方验证服务器地址（Authlib-Injector / 外置验证服务器）。大陆网络下若无法直连微软，可改用此类服务登录。")
+                    OutlinedTextField(
+                        value = serverUrl,
+                        onValueChange = { serverUrl = it },
+                        label = { Text("服务器地址") },
+                        placeholder = { Text("https://auth.example.com") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                "服务器：${info.serverName.ifBlank { info.serverUrl }}",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            info.links.firstOrNull { it.label == "register" }?.let { link ->
+                                TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url))) }) {
+                                    Text("注册账号")
+                                }
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("用户名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("密码") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        },
+    )
+}
+
 
 @Preview(showBackground = true)
 @Composable

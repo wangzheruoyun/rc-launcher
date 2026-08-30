@@ -183,6 +183,17 @@ jobs:
       - name: Verify the AWT wire contract (Rust <-> Kotlin)
         run: python3 scripts/check_awt_wire.py
 
+      # Task 9 - the screen-orientation policy and the window size-class table
+      # exist twice as well (Rust `display` module + `ui/AdaptiveLayout.kt`),
+      # because Compose has to re-resolve the layout on every rotation without a
+      # JNI crossing. This check diffs the two ports through the golden fixtures,
+      # asserts the settings ids / `android:screenOrientation` values agree with
+      # `MainActivity` and the manifest, and verifies the manifest really lets the
+      # Activity rotate *without* being recreated (a recreation would throw away
+      # the game surface and its input coordinate space).
+      - name: Verify the adaptive-layout parity (Rust <-> Kotlin)
+        run: python3 scripts/check_layout_parity.py
+
       - name: Prebuilt JRE assets present
         run: |
           for v in jre8 jre17 jre21; do

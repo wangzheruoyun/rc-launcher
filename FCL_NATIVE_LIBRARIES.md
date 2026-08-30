@@ -1,3 +1,4 @@
+以下是你需要套用的文件，从 fcl_apk 中找到他们
 === lib/*.so (count=30) ===
 lib/arm64-v8a/libEGL_angle.so
 lib/arm64-v8a/libEGL_mesa.so

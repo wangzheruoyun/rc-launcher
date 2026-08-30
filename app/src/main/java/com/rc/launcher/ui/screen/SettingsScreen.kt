@@ -2,6 +2,7 @@ package com.rc.launcher.ui.screen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,18 +46,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.ui.platform.LocalContext
+import com.rc.launcher.ui.theme.BackgroundConfig
+import com.rc.launcher.ui.theme.BackgroundEffect
+import com.rc.launcher.ui.theme.BackgroundCache
+import com.rc.launcher.ui.theme.BackgroundValidator
+import com.rc.launcher.ui.theme.BackgroundLimits
+import com.rc.launcher.ui.theme.RcBackground
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.rc.launcher.ui.ProvideRcWindowInfo
 import com.rc.launcher.ui.navigation.AwtRoute
 import com.rc.launcher.ui.navigation.ControllerRoute
 import com.rc.launcher.ui.model.LauncherSettings
+import com.rc.launcher.ui.model.OrientationMode
 import com.rc.launcher.ui.model.ResolutionMode
 import com.rc.launcher.ui.model.RendererOption
 import com.rc.launcher.ui.model.RendererPluginConfig
 import com.rc.launcher.ui.model.MirrorCatalog
 import com.rc.launcher.ui.model.MirrorProbeState
+import com.rc.launcher.ui.rcWindowInfo
 import com.rc.launcher.ui.theme.ThemeData
 import com.rc.launcher.ui.theme.ThemeNightMode
 import com.rc.launcher.ui.theme.ThemeViewModel
@@ -76,6 +92,11 @@ import kotlinx.coroutines.launch
  * game-directory configuration. It maps 1:1 onto FCL's settings panel and the
  * renderer-plugin configuration items.
  *
+ * **Adaptive (task 9).** The screen keys its padding and its maximum text width
+ * off the measured window ([rcWindowInfo]) and hosts the screen-orientation
+ * preference (跟随系统 / 强制横屏 / 强制竖屏) that [com.rc.launcher.MainActivity]
+ * applies to the Activity.
+ *
  * All state lives in [SettingsViewModel] (one [LauncherSettings] [StateFlow]);
  * the appearance sub-section reuses the [ThemeViewModel] from task 11. Every
  * mutator sanitises its input, so the UI can never push an out-of-range value
@@ -93,17 +114,23 @@ fun SettingsScreen(
     val themes by themeViewModel.availableThemes.collectAsStateWithLifecycle()
     val currentTheme by themeViewModel.currentTheme.collectAsStateWithLifecycle()
     val nightMode by themeViewModel.nightMode.collectAsStateWithLifecycle()
+    val backgroundConfig by themeViewModel.backgroundConfig.collectAsStateWithLifecycle()
     // Task 20: the string table drives every label below; collecting the selected
     // language separately keeps the picker in sync with the engine.
     val strings = LocalRcStrings.current
     val selectedLanguage by localeViewModel.selected.collectAsStateWithLifecycle()
     val effectiveLanguage by localeViewModel.effective.collectAsStateWithLifecycle()
 
+    // Task 9: the settings rows are wide; on a landscape phone or a tablet they
+    // are capped and padded instead of being stretched edge to edge.
+    val window = rcWindowInfo()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
+            .padding(window.contentPaddingDp.dp)
+            .widthIn(max = window.maxContentWidthDp.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // ---- Live validation (task 14 / task 19 robustness) --------------
@@ -156,6 +183,56 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        // ---- Custom launcher background (task 11) --------------------------
+        BackgroundSettingsSection(
+            config = backgroundConfig,
+            nightMode = nightMode,
+            onChange = { themeViewModel.setBackgroundConfig(it) },
+        )
+
+        // ---- Screen & orientation (task 9) --------------------------------
+        SettingsSection("屏幕与方向") {
+            Text("屏幕方向", style = MaterialTheme.typography.titleMedium)
+            val orientations: List<OrientationMode> = settingsViewModel.orientationModes
+            SingleChoiceSegmentedButtonRow {
+                for ((index, mode) in orientations.withIndex()) {
+                    SegmentedButton(
+                        selected = settings.orientationMode() == mode,
+                        onClick = { settingsViewModel.setOrientation(mode.id) },
+                        shape = SegmentedButtonDefaults.itemShape(
+                            index = index,
+                            count = orientations.size,
+                        ),
+                    ) {
+                        Text(mode.label)
+                    }
+                }
+            }
+            Text(
+                settings.orientationMode().description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            // Live geometry: makes the adaptive breakpoints (and a rotation)
+            // observable instead of magic, and doubles as a bug report aid.
+            Text(
+                "当前窗口 ${window.widthDp} x ${window.heightDp} dp · " +
+                    "${if (window.isLandscape) "横屏" else "竖屏"} · " +
+                    "宽度 ${window.widthClass.id} / 高度 ${window.heightClass.id} · " +
+                    "${if (window.usesNavigationRail) "侧边导航栏" else "底部导航栏"} · " +
+                    "实例 ${window.instanceColumns} 列",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                "旋转屏幕不会重建界面（Activity 声明了 configChanges），因此界面状态与" +
+                    "游戏画面的坐标系都不会丢失；横竖屏切换时会释放正在按下的按键，避免" +
+                    "触摸坐标错位。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         // ---- Language & region (task 20) ----------------------------------
@@ -730,8 +807,129 @@ private fun ColorSwatch(color: Color, modifier: Modifier = Modifier) {
     ) {}
 }
 
-@Preview(showBackground = true)
+// ============================================================================
+// Custom background (task 11)
+// ============================================================================
+
+@Composable
+private fun BackgroundSettingsSection(
+    config: BackgroundConfig,
+    nightMode: ThemeNightMode,
+    onChange: (BackgroundConfig) -> Unit,
+) {
+    val strings = LocalRcStrings.current
+    val context = LocalContext.current
+    var pickError by remember { mutableStateOf(false) }
+
+    // Launch the system picker. `GetContent` returns a `content://` URI whose read
+    // grant we persist; we then copy the bytes into our own files dir so the
+    // background survives a revoked grant / uninstalled gallery app.
+    val pickLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        val source = BackgroundCache.cacheUri(context, uri) ?: uri.toString()
+        if (BackgroundValidator.isValidUri(source)) {
+            pickError = false
+            onChange(config.copy(uri = source, enabled = true))
+        } else {
+            pickError = true
+        }
+    }
+
+    SettingsSection(strings[RcStringKeys.BACKGROUND_TITLE]) {
+        SwitchSetting(
+            title = strings[RcStringKeys.BACKGROUND_ENABLE],
+            subtitle = if (config.uri == null) strings[RcStringKeys.BACKGROUND_NONE_SELECTED] else null,
+            checked = config.enabled,
+            onCheckedChange = { onChange(config.copy(enabled = it)) },
+        )
+
+        Button(onClick = { pickLauncher.launch("image/*") }) {
+            Text(strings[RcStringKeys.BACKGROUND_PICK])
+        }
+        if (pickError) {
+            Text(
+                strings[RcStringKeys.BACKGROUND_INVALID],
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        // Live preview — renders regardless of the master switch so the user can
+        // see the effect before turning it on (task 11: "预览").
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(RoundedCornerShape(12.dp)),
+        ) {
+            RcBackground(config = config.copy(enabled = config.uri != null), nightMode = nightMode)
+        }
+
+        Text(strings[RcStringKeys.BACKGROUND_EFFECT], style = MaterialTheme.typography.titleMedium)
+        val effects = listOf(
+            BackgroundEffect.NONE, BackgroundEffect.BLUR,
+            BackgroundEffect.DARKEN, BackgroundEffect.BLUR_DARKEN,
+        )
+        val effectLabel = mapOf(
+            BackgroundEffect.NONE to strings[RcStringKeys.BACKGROUND_EFFECT_NONE],
+            BackgroundEffect.BLUR to strings[RcStringKeys.BACKGROUND_EFFECT_BLUR],
+            BackgroundEffect.DARKEN to strings[RcStringKeys.BACKGROUND_EFFECT_DARKEN],
+            BackgroundEffect.BLUR_DARKEN to strings[RcStringKeys.BACKGROUND_EFFECT_BLUR_DARKEN],
+        )
+        SingleChoiceSegmentedButtonRow {
+            for ((index, effect) in effects.withIndex()) {
+                SegmentedButton(
+                    selected = config.effect == effect,
+                    onClick = { onChange(config.copy(effect = effect)) },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = effects.size),
+                ) {
+                    Text(effectLabel[effect] ?: effect.name)
+                }
+            }
+        }
+
+        SliderSetting(
+            title = strings[RcStringKeys.BACKGROUND_BLUR],
+            value = config.blurRadiusDp.toFloat(),
+            valueRange = BackgroundLimits.MIN_BLUR_DP.toFloat()..BackgroundLimits.MAX_BLUR_DP.toFloat(),
+            steps = (BackgroundLimits.MAX_BLUR_DP - BackgroundLimits.MIN_BLUR_DP) / 4,
+            onValueChange = { onChange(config.copy(blurRadiusDp = it.roundToInt())) },
+            label = "${config.blurRadiusDp} dp",
+            enabled = config.effect.blurs,
+        )
+        SliderSetting(
+            title = strings[RcStringKeys.BACKGROUND_DARKEN],
+            value = config.darkenAlpha,
+            valueRange = BackgroundLimits.MIN_DARKEN..BackgroundLimits.MAX_DARKEN,
+            steps = 19,
+            onValueChange = { onChange(config.copy(darkenAlpha = it)) },
+            label = "${(config.darkenAlpha * 100).roundToInt()}%",
+            enabled = config.effect.darkens,
+        )
+
+        SwitchSetting(
+            title = strings[RcStringKeys.BACKGROUND_FOLLOW_THEME],
+            subtitle = strings[RcStringKeys.BACKGROUND_FOLLOW_THEME_SUMMARY],
+            checked = config.followTheme,
+            onCheckedChange = { onChange(config.copy(followTheme = it)) },
+        )
+    }
+}
+
+@Preview(name = "Settings portrait", showBackground = true, widthDp = 392, heightDp = 872)
 @Composable
 private fun SettingsScreenPreview() {
-    SettingsScreen()
+    ProvideRcWindowInfo { SettingsScreen() }
+}
+
+/** Task 9: the same centre on a landscape window (capped width, wider padding). */
+@Preview(name = "Settings landscape", showBackground = true, widthDp = 872, heightDp = 392)
+@Composable
+private fun SettingsScreenLandscapePreview() {
+    ProvideRcWindowInfo { SettingsScreen() }
 }

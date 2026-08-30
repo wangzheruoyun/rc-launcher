@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -30,16 +31,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.rc.launcher.ui.ProvideRcWindowInfo
 import com.rc.launcher.ui.component.FloatingHud
 import com.rc.launcher.ui.component.InstanceCard
 import com.rc.launcher.ui.component.ResourceSummary
 import com.rc.launcher.ui.model.recentlyPlayed
 import com.rc.launcher.ui.model.dashboardOrder
 import com.rc.launcher.ui.navigation.InstanceDetailRoute
+import com.rc.launcher.ui.rcWindowInfo
 import com.rc.launcher.ui.resource.rememberFps
 import com.rc.launcher.ui.resource.rememberResourceUsage
 import com.rc.launcher.ui.viewmodel.DashboardViewModel
@@ -52,6 +56,15 @@ import com.rc.launcher.ui.viewmodel.MainViewModel
  * a "最近游玩" rail, the full instance grid, a one-tap launch flow and a
  * floating frame-rate HUD. State comes from [DashboardViewModel] (instances +
  * launch lifecycle + HUD) and [MainViewModel] (Rust core greeting).
+ *
+ * **Adaptive (task 9).** Every dimension is derived from the measured window
+ * ([rcWindowInfo]): the greeting and the resource panel sit side by side once the
+ * window is wide enough, the instance grid re-flows into
+ * [com.rc.launcher.ui.RcWindowInfo.instanceColumns] columns, and a short
+ * landscape window drops the "最近游玩" rail so the little height that is left
+ * goes to the actual cards. The instances are chunked into [Row]s (instead of a
+ * nested lazy grid) because the whole screen already lives in a vertical
+ * scroller.
  */
 @Composable
 fun HomeScreen(
@@ -80,44 +93,67 @@ fun HomeScreen(
         navController?.navigate(InstanceDetailRoute(id))
     }
 
+    // Task 9: one measurement drives the padding, the columns and which
+    // sections are worth their vertical space in the current orientation.
+    val window = rcWindowInfo()
+    val columns = window.instanceColumns
+    val twoPane = window.dashboardColumns > 1
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(window.contentPaddingDp.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Header
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("主页", style = MaterialTheme.typography.headlineSmall)
-                    val coreStateVal = coreState
-                    Text(
-                        text = when (coreStateVal) {
-                            is MainUiState.Ready -> "核心 ${coreStateVal.coreVersion} 已就绪"
-                            is MainUiState.Loading -> "正在连接核心…"
-                            is MainUiState.Error -> "核心不可用：${coreStateVal.message}"
+            // Header (+ the resource panel beside it once the window is wide).
+            val header: @Composable () -> Unit = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("主页", style = MaterialTheme.typography.headlineSmall)
+                        val coreStateVal = coreState
+                        Text(
+                            text = when (coreStateVal) {
+                                is MainUiState.Ready -> "核心 ${coreStateVal.coreVersion} 已就绪"
+                                is MainUiState.Loading -> "正在连接核心…"
+                                is MainUiState.Error -> "核心不可用：${coreStateVal.message}"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    AssistChip(
+                        onClick = { dashboard.toggleHud() },
+                        label = { Text(if (hudOn) "隐藏 HUD" else "性能 HUD") },
+                        leadingIcon = {
+                            Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
                         },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                AssistChip(
-                    onClick = { dashboard.toggleHud() },
-                    label = { Text(if (hudOn) "隐藏 HUD" else "性能 HUD") },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
-                    },
-                )
+            }
+            if (twoPane) {
+                // Landscape / tablet: greeting and live usage share one band, which
+                // keeps the cards above the fold on a short window.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.weight(1f)) { header() }
+                    Box(modifier = Modifier.weight(1f)) { ResourceSummary(usage) }
+                }
+            } else {
+                header()
+                ResourceSummary(usage)
             }
 
-            ResourceSummary(usage)
-
-            if (recent.isNotEmpty()) {
+            // The "recently played" rail is the first thing to go when the window
+            // is short (a landscape phone): the full grid below already has them.
+            if (recent.isNotEmpty() && !window.isShort) {
                 SectionTitle("最近游玩")
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -137,13 +173,26 @@ fun HomeScreen(
 
             SectionTitle("游戏实例 (${instances.size})")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                for (inst in instances.dashboardOrder()) {
-                    InstanceCard(
-                        instance = inst,
-                        launching = inst.id == launchingId,
-                        onLaunch = { dashboard.launch(inst.id) },
-                        onOpen = { openInstance(inst.id) },
-                    )
+                // Chunked rows rather than a nested lazy grid: this screen is
+                // already inside a vertical scroller, so a lazy grid here would be
+                // measured with an infinite height.
+                for (row in instances.dashboardOrder().chunked(columns)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        for (inst in row) {
+                            InstanceCard(
+                                instance = inst,
+                                launching = inst.id == launchingId,
+                                onLaunch = { dashboard.launch(inst.id) },
+                                onOpen = { openInstance(inst.id) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        // Keep the cards of a ragged last row at their column width
+                        // instead of letting one card span the whole row.
+                        repeat(columns - row.size) {
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                    }
                 }
             }
         }
@@ -223,4 +272,17 @@ private fun LaunchBanner(
             }
         }
     }
+}
+
+@Preview(name = "Home portrait", showBackground = true, widthDp = 392, heightDp = 872)
+@Composable
+private fun HomeScreenPortraitPreview() {
+    ProvideRcWindowInfo { HomeScreen() }
+}
+
+/** Task 9: the landscape dashboard (two-pane header, re-flowed grid). */
+@Preview(name = "Home landscape", showBackground = true, widthDp = 872, heightDp = 392)
+@Composable
+private fun HomeScreenLandscapePreview() {
+    ProvideRcWindowInfo { HomeScreen() }
 }

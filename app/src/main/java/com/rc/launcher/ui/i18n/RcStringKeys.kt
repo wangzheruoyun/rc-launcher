@@ -54,6 +54,22 @@ object RcStringKeys {
     const val THEME_NIGHT_LIGHT = "theme.night.light"
     const val THEME_NIGHT_DARK = "theme.night.dark"
 
+    // --- custom launcher background (task 11) ---
+    const val BACKGROUND_TITLE = "background.title"
+    const val BACKGROUND_ENABLE = "background.enable"
+    const val BACKGROUND_PICK = "background.pick"
+    const val BACKGROUND_NONE_SELECTED = "background.none_selected"
+    const val BACKGROUND_INVALID = "background.invalid"
+    const val BACKGROUND_EFFECT = "background.effect"
+    const val BACKGROUND_EFFECT_NONE = "background.effect.none"
+    const val BACKGROUND_EFFECT_BLUR = "background.effect.blur"
+    const val BACKGROUND_EFFECT_DARKEN = "background.effect.darken"
+    const val BACKGROUND_EFFECT_BLUR_DARKEN = "background.effect.blur_darken"
+    const val BACKGROUND_BLUR = "background.blur"
+    const val BACKGROUND_DARKEN = "background.darken"
+    const val BACKGROUND_FOLLOW_THEME = "background.follow_theme"
+    const val BACKGROUND_FOLLOW_THEME_SUMMARY = "background.follow_theme.summary"
+
     // --- settings sections ---
     const val SETTINGS_SECTION_APPEARANCE = "settings.section.appearance"
     const val SETTINGS_SECTION_LANGUAGE = "settings.section.language"
@@ -108,6 +124,11 @@ object RcStringKeys {
         NAV_HOME, NAV_INSTANCES, NAV_DOWNLOADS, NAV_SETTINGS, NAV_ACCOUNTS,
         SCREEN_INSTANCE_DETAIL, SCREEN_INSTALL, SCREEN_CONTROLLER, SCREEN_AWT,
         THEME_NIGHT_TOGGLE, THEME_NIGHT_SYSTEM, THEME_NIGHT_LIGHT, THEME_NIGHT_DARK,
+        BACKGROUND_TITLE, BACKGROUND_ENABLE, BACKGROUND_PICK, BACKGROUND_NONE_SELECTED,
+        BACKGROUND_INVALID, BACKGROUND_EFFECT, BACKGROUND_EFFECT_NONE,
+        BACKGROUND_EFFECT_BLUR, BACKGROUND_EFFECT_DARKEN, BACKGROUND_EFFECT_BLUR_DARKEN,
+        BACKGROUND_BLUR, BACKGROUND_DARKEN, BACKGROUND_FOLLOW_THEME,
+        BACKGROUND_FOLLOW_THEME_SUMMARY,
         SETTINGS_SECTION_APPEARANCE, SETTINGS_SECTION_LANGUAGE,
         SETTINGS_SECTION_NETWORK, SETTINGS_SECTION_JAVA, SETTINGS_SECTION_RENDERER,
         SETTINGS_SECTION_CONTROLLER, SETTINGS_SECTION_DIRECTORY,

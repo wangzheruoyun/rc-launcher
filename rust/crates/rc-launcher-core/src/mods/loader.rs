@@ -86,6 +86,7 @@ impl FromStr for ModLoader {
             "fabric" | "fabricloader" => ModLoader::Fabric,
             "quilt" | "quiltloader" => ModLoader::Quilt,
             "liteloader" | "lite" | "lite_mod" => ModLoader::LiteLoader,
+            "neoforge" | "neo_forge" => ModLoader::Forge,
             "optifine" | "optifinehd" => ModLoader::OptiFine,
             _ => ModLoader::Vanilla,
         };

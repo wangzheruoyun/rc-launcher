@@ -1,0 +1,13 @@
+# RC Launcher built-in modpack catalog (offline fallback, FCL-style modpack_data.txt).
+# TAB-separated columns:
+# id | slug | name | summary | categories(csv) | loaders(csv) | game_versions(csv) | environment(client|server|both) | source | dependencies(csv) | tags(csv) | downloads | featured(0|1) | project_url
+all-the-mods-9	all-the-mods-9	All the Mods 9	A giant kitchen-sink modpack with hundreds of mods.	technology,magic,adventure	forge,neoforge	1.20.1	both	builtin		kitchensink,exploration,tech	5000000	1	https://www.curseforge.com/minecraft/modpacks/all-the-mods-9
+better-mc	better-mc	Better MC	Vanilla-plus modpack balancing exploration, combat and tech.	adventure,technology	forge,fabric	1.19.2,1.20.1	both	builtin		vanillaplus,exploration,combat	8000000	1	https://www.curseforge.com/minecraft/modpacks/better-mc
+rlcraft	rlcraft	RLCraft	Brutally hard survival modpack inspired by Roguelike Adventures.	adventure,game-mechanics	forge	1.12.2	both	builtin		hardcore,survival,rpg	6000000	1	https://www.curseforge.com/minecraft/modpacks/rlcraft
+skyfactory-4	skyfactory-4	SkyFactory 4	A skyblock progression modpack with magic and tech.	technology,worldgen	forge	1.12.2	both	builtin		skyblock,tech,magic	4000000	0	https://www.curseforge.com/minecraft/modpacks/skyfactory-4
+prominence-2	prominence-2	Prominence 2	RPG-focused modpack with quests and bosses.	adventure,magic	neoforge	1.20.1	both	builtin		rpg,quests,bosses	3000000	0	https://www.curseforge.com/minecraft/modpacks/prominence-2
+valhelsia-5	valhelsia-5	Valhelsia 5	A balanced kitchen-sink pack for modern Minecraft.	technology,magic,decoration	neoforge	1.20.1	both	builtin		kitchensink,building,magic	2000000	0	https://www.curseforge.com/minecraft/modpacks/valhelsia-5
+cursed-walking	cursed-walking	Cursed Walking	Zombie-apocalypse survival modpack.	adventure,game-mechanics	forge	1.16.5	both	builtin		zombie,survival,apocalypse	1000000	0	https://www.curseforge.com/minecraft/modpacks/cursed-walking
+stoneblock-2	stoneblock-2	Stoneblock 2	Skyblock underground: mine stone in a compact world.	technology,worldgen	forge	1.12.2	both	builtin		skyblock,tech,mining	2500000	0	https://www.curseforge.com/minecraft/modpacks/stoneblock-2
+medieval-minecraft	medieval-minecraft	Medieval Minecraft	A medieval-themed adventure and building pack.	adventure,decoration	forge,fabric	1.19.2,1.20.1	both	builtin		medieval,building,roleplay	3500000	0	https://www.curseforge.com/minecraft/modpacks/medieval-minecraft
+ftb-presents-direwolf20	ftb-presents-direwolf20	FTB Presents Direwolf20	Classic FTB kitchen-sink experience.	technology,magic	forge	1.19.2,1.20.1	both	builtin		ftb,kitchensink,tech	1500000	0	https://www.curseforge.com/minecraft/modpacks/ftb-presents-direwolf20

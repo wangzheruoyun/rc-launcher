@@ -26,6 +26,7 @@ is `rust/crates/rc-launcher-core/src/lib.rs`.
 | `runtime` | `JreManager`, `JreHome`, `JavaVersion`, `RuntimeManifest` | JRE/JDK supply: manifest, pure-Rust `.tar.xz` extraction, multi-version homes. |
 | `launch` | `LaunchEngine`, `LaunchOptions`, `LaunchCommand`, `AwtSession`, `RendererProfile` | JVM arg/classpath assembly, process supervision, AWT bridge, render config. |
 | `plugins` | `RendererPlugin`, `NativeLib`, `TrustStore`, `PluginValidator` | Pluggable renderer + native-lib injection, tamper/trust validation. |
+| `display` | `OrientationPolicy`, `WindowMetrics`, `SizeClass`, `ScreenOrientation`, `rotation_flips` | Screen-orientation policy + window size classes (mirrored by `ui/AdaptiveLayout.kt`). |
 | `i18n` | catalogue types, `Language`, `translate`/`format` helpers | zh-CN / zh-Hant / en catalogues, negotiation, `{name}` + plurals, overlay. |
 | `robust` | `RetryPolicy`, `bounded_cache`, `CrashReporter` | Retry/backoff, offline cache degradation, crash reporting. |
 | `util` | `BufPool`, `ObjectPool`, helpers | Zero-alloc hot-path buffers (task 25). |

@@ -7,7 +7,7 @@
 //! VM (defensive boundary — see task 19).
 
 use jni::objects::{GlobalRef, JClass, JObject, JString, JValue};
-use jni::sys::{jboolean, jstring, JNI_FALSE, JNI_TRUE};
+use jni::sys::{jboolean, jfloat, jint, jstring, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 use jni::JavaVM;
 
@@ -201,8 +201,20 @@ fn err_json(env: &mut JNIEnv, msg: &str) -> jstring {
 fn rc_to_json(env: &mut JNIEnv, r: RcResult<serde_json::Value>) -> jstring {
     match r {
         Ok(v) => jstr(env, &v.to_string()),
-        Err(e) => err_json(env, &e.to_string()),
+        Err(e) => auth_err_json(env, &e),
     }
+}
+
+/// Like [`err_json`] but also attaches the mainland-China network fallback hint
+/// (`cn_fallback_hint`) to the error payload when `e` is a network-level failure
+/// (task 10). The Kotlin UI surfaces the hint when a login fails because
+/// Microsoft / Xbox / Mojang (or a third-party auth server) is unreachable.
+fn auth_err_json(env: &mut JNIEnv, e: &crate::error::RcError) -> jstring {
+    let mut obj = json!({ "error": e.to_string() });
+    if let Some(hint) = e.cn_login_fallback_hint() {
+        obj["cn_fallback_hint"] = json!(hint);
+    }
+    jstr(env, &obj.to_string())
 }
 
 /// Parse a hex string into bytes (even length, all hex digits).
@@ -408,6 +420,81 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authEnsureFresh(
         };
         let mut g = lock_manager();
         let account = runtime().block_on(g.ensure_fresh(&id));
+        drop(g);
+        rc_to_json(
+            &mut env,
+            account.and_then(|a| {
+                serde_json::to_value(&a).map_err(|e| crate::error::RcError::Auth(e.to_string()))
+            }),
+        )
+    })
+}
+
+/// `RustBridge.authBeginThirdParty(serverUrl): String` — JSON server metadata.
+///
+/// Discovers an external auth server's name + register links so the UI can show
+/// them before the user types credentials (task 10).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authBeginThirdParty(
+    mut env: JNIEnv,
+    _class: JClass,
+    server_url: JString,
+) -> jstring {
+    auth_ffi!({
+        let url = match read_input(&mut env, &server_url) {
+            Some(s) => s,
+            None => {
+                return auth_err_json(
+                    &mut env,
+                    &crate::error::RcError::Auth("missing server url".into()),
+                )
+            }
+        };
+        let g = lock_manager();
+        let info = runtime().block_on(g.begin_third_party(&url));
+        drop(g);
+        rc_to_json(
+            &mut env,
+            info.and_then(|i| {
+                serde_json::to_value(&i).map_err(|e| crate::error::RcError::Auth(e.to_string()))
+            }),
+        )
+    })
+}
+
+/// `RustBridge.authCompleteThirdParty(loginJson): String` — JSON account (or error).
+///
+/// Completes a third-party login (Authlib-Injector / token relay). Blocks while
+/// authenticating against the external auth server; call from a background
+/// thread. On a network-level failure the returned JSON carries `cn_fallback_hint`
+/// (task 10).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authCompleteThirdParty(
+    mut env: JNIEnv,
+    _class: JClass,
+    login_json: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &login_json) {
+            Some(s) => s,
+            None => {
+                return auth_err_json(
+                    &mut env,
+                    &crate::error::RcError::Auth("missing login config".into()),
+                )
+            }
+        };
+        let login: crate::auth::third_party::ThirdPartyLogin = match serde_json::from_str(&raw) {
+            Ok(l) => l,
+            Err(e) => {
+                return auth_err_json(
+                    &mut env,
+                    &crate::error::RcError::Auth(format!("invalid third-party login: {e}")),
+                )
+            }
+        };
+        let mut g = lock_manager();
+        let account = runtime().block_on(g.complete_third_party(&login));
         drop(g);
         rc_to_json(
             &mut env,
@@ -632,6 +719,204 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_launchRenderers(
     _class: JClass,
 ) -> jstring {
     auth_ffi!({ jstr(&mut env, &launch_renderers_json().to_string()) })
+}
+
+// === Screen orientation / adaptive layout FFI (task 9) =======================
+//
+// The Compose layer mirrors `display::WindowMetrics` locally (a rotation must
+// not cost a JNI round trip per recomposition), so these two entry points exist
+// to keep the mirror honest and to feed the settings picker / diagnostics from
+// the core: `displayOrientations()` is the catalogue behind
+// 「跟随系统 / 强制横屏 / 强制竖屏」, and `displayLayout()` resolves one concrete
+// window size the same way the Kotlin `RcWindowInfo` does. The Kotlin parity
+// test asserts the two answers are identical.
+
+/// `RustBridge.displayOrientations(): String` — JSON array of the orientation
+/// policies the launcher supports (`id` + `android_screen_orientation`).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_displayOrientations(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        jstr(
+            &mut env,
+            &crate::display::orientation_catalog_json().to_string(),
+        )
+    })
+}
+
+/// `RustBridge.displayLayout(requestJson): String` — resolve the adaptive-layout
+/// decisions for one window.
+///
+/// `requestJson` = `{ "width_dp": u32, "height_dp": u32, "orientation"?: string }`.
+/// The optional `orientation` is an [`crate::display::OrientationPolicy`] id; when
+/// present, the reply also carries the `window` geometry the policy would force
+/// (`orient`), which is what the launch options do with the game window.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_displayLayout(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        jstr(&mut env, &display_layout_json(&value).to_string())
+    })
+}
+
+/// Pure core of [`Java_com_rc_launcher_core_RustBridge_displayLayout`] (unit-tested
+/// without a JVM).
+pub fn display_layout_json(request: &serde_json::Value) -> serde_json::Value {
+    use crate::display::{OrientationPolicy, WindowMetrics};
+
+    let dp = |key: &str, fallback: u32| -> u32 {
+        request
+            .get(key)
+            .and_then(|v| v.as_u64())
+            .map(|v| v.min(u64::from(u16::MAX)) as u32)
+            .unwrap_or(fallback)
+    };
+    let default = WindowMetrics::default();
+    let metrics = WindowMetrics::new(
+        dp("width_dp", default.width_dp),
+        dp("height_dp", default.height_dp),
+    );
+    let mut out = metrics.to_json();
+    if let Some(id) = request.get("orientation").and_then(|v| v.as_str()) {
+        let policy = OrientationPolicy::from_id_or_default(id);
+        let window = policy.orient(crate::launch::WindowSize {
+            width: metrics.width_dp,
+            height: metrics.height_dp,
+        });
+        out["policy"] = policy.to_json();
+        out["window"] = serde_json::json!({
+            "width": window.width,
+            "height": window.height,
+        });
+    }
+    out
+}
+
+// === Discord Rich Presence FFI (task 5) ======================================
+//
+// JSON-in / JSON-out bridge for the `discord` subsystem. The Compose settings
+// screen drives the bridge through these four entry points (configure / update /
+// clear / status) plus `discordShutdown` for a full disconnect. Every entry
+// point is wrapped in `catch_unwind` so a panic never aborts the VM, and each
+// returns a JSON `DiscordStateInfo` snapshot the UI can render directly.
+
+use crate::discord::{self, DiscordConfig, RichPresence};
+
+/// `RustBridge.discordConfigure(requestJson): String` — (re)configure the bridge.
+///
+/// `requestJson` = `{ "enabled": bool, "application_id"?: string,
+/// "library_path"?: string }`. Returns the [`DiscordStateInfo`] JSON snapshot.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_discordConfigure(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let cfg: DiscordConfig = match DiscordConfig::from_json(&raw) {
+            Ok(c) => c,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        jstr(&mut env, &discord::configure(&cfg).to_json())
+    })
+}
+
+/// `RustBridge.discordUpdate(presenceJson): String` — update the rich presence.
+///
+/// `presenceJson` is a [`RichPresence`] JSON object; any omitted field is left
+/// unset. Returns the [`DiscordStateInfo`] JSON snapshot.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_discordUpdate(
+    mut env: JNIEnv,
+    _class: JClass,
+    presence: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &presence) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing presence"),
+        };
+        let p: RichPresence = match RichPresence::from_json(&raw) {
+            Ok(p) => p,
+            Err(e) => return err_json(&mut env, &format!("bad presence: {e}")),
+        };
+        jstr(&mut env, &discord::update_presence(&p).to_json())
+    })
+}
+
+/// `RustBridge.discordClear(): String` — clear the "now playing" card without
+/// disconnecting. Returns the [`DiscordStateInfo`] JSON snapshot.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_discordClear(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        // `discord::clear_presence` is panic-free; still guard the boundary.
+        let info = discord::clear_presence();
+        info.to_json()
+    }));
+    match built {
+        Ok(s) => match env.new_string(s) {
+            Ok(j) => j.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.discordStatus(): String` — return the current
+/// [`DiscordStateInfo`] JSON snapshot (no side effects).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_discordStatus(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| discord::status().to_json()));
+    match built {
+        Ok(s) => match env.new_string(s) {
+            Ok(j) => j.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.discordShutdown(): String` — fully disconnect from Discord and
+/// release the native library. Returns the [`DiscordStateInfo`] JSON snapshot.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_discordShutdown(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        discord::shutdown().to_json()
+    }));
+    match built {
+        Ok(s) => match env.new_string(s) {
+            Ok(j) => j.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+        Err(_) => std::ptr::null_mut(),
+    }
 }
 
 // === FFI / JNI bridge: event bus + async callbacks (task 10) =================
@@ -889,6 +1174,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_downloadAsync(
 use crate::launch::awt::{MouseButton, PointerPhase, ScaleMode};
 use crate::launch::awt_host::AwtHost;
 use crate::launch::fakefx::{AwtSession, AwtSessionConfig};
+use crate::launch::input::PointerSource;
 use crate::launch::AwtTransport;
 use crate::runtime::JavaVersion;
 use jni::objects::{JByteArray, JByteBuffer};
@@ -1024,6 +1310,7 @@ fn awt_info_json(slot: &AwtSlot) -> serde_json::Value {
 /// Geometry / focus / repaint changes coming from the Compose layer.
 fn awt_configure_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde_json::Value> {
     let host = awt_host(slot)?;
+    let mut input_notes: Vec<String> = Vec::new();
     if let Some(value) = req.get("surface") {
         let (w, h) = parse_size(value)?;
         host.set_surface_size(w, h)?;
@@ -1048,6 +1335,12 @@ fn awt_configure_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde
         if req.get("reset_input").and_then(|v| v.as_bool()) == Some(true) {
             session.reset_input();
         }
+        // Task 12: sensitivity / pointer mode / hybrid touch / key remapping.
+        // A stale binding is reported, never fatal: the rest of the update lands.
+        if let Some(value) = req.get("input") {
+            let (_, notes) = session.apply_input_json(value);
+            input_notes = notes;
+        }
         if let Some(argb) = req.get("fill").and_then(|v| v.as_u64()) {
             session.fill(argb as u32);
         }
@@ -1055,7 +1348,13 @@ fn awt_configure_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde
             session.clear();
         }
     }
-    Ok(host.to_json())
+    let mut out = host.to_json();
+    if !input_notes.is_empty() {
+        if let Some(map) = out.as_object_mut() {
+            map.insert("input_notes".to_string(), json!(input_notes));
+        }
+    }
+    Ok(out)
 }
 
 /// Attach the named-pipe transport to an already open session.
@@ -1114,7 +1413,56 @@ fn apply_awt_event(session: &mut AwtSession, event: &serde_json::Value) -> RcRes
                     other => return Err(bad(format!("unknown mouse button {other:?}"))),
                 },
             };
-            Ok(session.pointer(phase, f32_at("x"), f32_at("y"), button))
+            let source = event
+                .get("source")
+                .and_then(|v| v.as_str())
+                .map(PointerSource::from_id)
+                .unwrap_or(if kind == "mouse" {
+                    PointerSource::Mouse
+                } else {
+                    PointerSource::Touch
+                });
+            Ok(session.pointer_from(phase, f32_at("x"), f32_at("y"), button, source))
+        }
+        // Task 12: relative motion from a captured physical mouse. Android
+        // reports how far the mouse moved, not where it is, so this is a
+        // *different* event and not a pointer with a computed position.
+        "pointer_relative" | "mouse_relative" | "relative" => {
+            let source = event
+                .get("source")
+                .and_then(|v| v.as_str())
+                .map(PointerSource::from_id)
+                .unwrap_or(PointerSource::Mouse);
+            Ok(session.pointer_relative(f32_at("dx"), f32_at("dy"), source))
+        }
+        // Task 12: the pointer was captured / released by the UI.
+        "capture" | "pointer_capture" | "grab" => {
+            let captured = event
+                .get("captured")
+                .or_else(|| event.get("grabbed"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            Ok(session.set_capture(captured))
+        }
+        // Task 12: a captured mouse has no surface position, so its clicks
+        // happen wherever the virtual pointer currently is.
+        "button" => {
+            let down = event
+                .get("down")
+                .or_else(|| event.get("pressed"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            let button = match event
+                .get("button")
+                .and_then(|v| v.as_str())
+                .unwrap_or("left")
+            {
+                "left" | "primary" => MouseButton::Left,
+                "middle" => MouseButton::Middle,
+                "right" | "secondary" => MouseButton::Right,
+                other => return Err(bad(format!("unknown mouse button {other:?}"))),
+            };
+            Ok(session.button(button, down))
         }
         "scroll" | "wheel" => {
             let ticks = event
@@ -1122,10 +1470,22 @@ fn apply_awt_event(session: &mut AwtSession, event: &serde_json::Value) -> RcRes
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0)
                 .clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+            // No position at all means "at the pointer" (a captured mouse).
+            if event.get("x").is_none() && event.get("y").is_none() {
+                return Ok(session.scroll_at_pointer(ticks));
+            }
             Ok(session.scroll(f32_at("x"), f32_at("y"), ticks))
         }
         "key_down" | "key_up" => {
             let down = kind == "key_down";
+            // Task 12: `KeyEvent.getScanCode()` is the Linux evdev code, which is
+            // exactly what `GLFWKeyCallback` wants — forward it verbatim when the
+            // UI has one, and let the core fill it in when it does not.
+            let scancode = event
+                .get("scancode")
+                .and_then(|v| v.as_i64())
+                .map(|v| v.clamp(0, i32::MAX as i64) as i32)
+                .filter(|v| *v > 0);
             if let Some(code) = event.get("code").and_then(|v| v.as_i64()) {
                 let code = code.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
                 return Ok(if down {
@@ -1138,11 +1498,7 @@ fn apply_awt_event(session: &mut AwtSession, event: &serde_json::Value) -> RcRes
                 .get("name")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| bad(format!("{kind} needs a \"code\" or a \"name\"")))?;
-            Ok(if down {
-                session.key_down_named(name)
-            } else {
-                session.key_up_named(name)
-            })
+            Ok(session.key_named(name, scancode, down))
         }
         "text" | "type" => {
             let text = event
@@ -1188,6 +1544,7 @@ fn awt_input_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde_jso
         }
     }
     let (px, py) = session.pointer_position();
+    let (gx, gy) = session.game_cursor();
     Ok(json!({
         "queued": queued,
         "pending": session.pending_events(),
@@ -1195,6 +1552,12 @@ fn awt_input_json(slot: &AwtSlot, req: &serde_json::Value) -> RcResult<serde_jso
         "focused": session.is_focused(),
         "pointer": { "x": px, "y": py },
         "rejected": rejected,
+        // Task 12: the UI mirrors the capture state (it has to hide its own
+        // pointer overlay and keep the Android pointer captured) and shows the
+        // game cursor in the diagnostics panel.
+        "captured": session.is_captured(),
+        "pointer_mode": session.input_settings().pointer_mode.id(),
+        "game_cursor": { "x": gx, "y": gy },
     }))
 }
 
@@ -1611,6 +1974,119 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_awtDrainEvents(
     }
 }
 
+// === Gamepad mapping database + input calibration FFI (task 4) ============
+//
+// JSON-in / JSON-out bridge for the `gamepad` subsystem. Profile metadata and
+// plug-and-play identification are returned as JSON (consumed by the UI picker
+// and the Kotlin `GamepadDatabase` mirror); axis/stick calibration is plain
+// float math so it can run per-frame on the input thread. Every entry point is
+// wrapped in `catch_unwind` so a panic never aborts the VM.
+
+/// `RustBridge.getControllerProfiles(): String` — built-in controller profile
+/// metadata as a JSON array.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_getControllerProfiles(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let metas: Vec<crate::gamepad::GamepadProfileMeta> = crate::gamepad::list_profiles();
+        let json = serde_json::to_string(&metas).unwrap_or_else(|_| "[]".to_string());
+        match env.new_string(json) {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.identifyController(vendorId: Int, productId: Int): String` —
+/// returns the matched profile metadata as JSON (or the generic fallback).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_identifyController(
+    env: JNIEnv,
+    _class: JClass,
+    vendor_id: jint,
+    product_id: jint,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let vid = (vendor_id as u32 & 0xFFFF) as u16;
+        let pid = (product_id as u32 & 0xFFFF) as u16;
+        let meta = crate::gamepad::identify(vid, pid).meta();
+        let json = serde_json::to_string(&meta).unwrap_or_else(|_| "{}".to_string());
+        match env.new_string(json) {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.calibrateAxis(value, deadzone, sensitivity, invert): Float` —
+/// applies a single-axis dead-zone + sensitivity + invert (task 4 input layer).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_calibrateAxis(
+    _env: JNIEnv,
+    _class: JClass,
+    value: jfloat,
+    deadzone: jfloat,
+    sensitivity: jfloat,
+    invert: jboolean,
+) -> jfloat {
+    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let cal = crate::gamepad::AxisCalibration {
+            deadzone,
+            sensitivity,
+            invert: invert == JNI_TRUE,
+        };
+        cal.calibrate(value)
+    }));
+    match out {
+        Ok(v) => v,
+        Err(_) => 0.0,
+    }
+}
+
+/// `RustBridge.calibrateStick(x, y, deadzone, sensitivity, invertX, invertY): String` —
+/// applies a radial stick dead-zone + sensitivity + per-axis invert, returning
+/// the calibrated `(x, y)` as a JSON pair.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_calibrateStick(
+    env: JNIEnv,
+    _class: JClass,
+    x: jfloat,
+    y: jfloat,
+    deadzone: jfloat,
+    sensitivity: jfloat,
+    invert_x: jboolean,
+    invert_y: jboolean,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let cal = crate::gamepad::StickCalibration {
+            deadzone,
+            sensitivity,
+            invert_x: invert_x == JNI_TRUE,
+            invert_y: invert_y == JNI_TRUE,
+        };
+        let (nx, ny) = cal.calibrate(x, y);
+        let json = format!("[{},{}]", nx, ny);
+        match env.new_string(json) {
+            Ok(s) => s.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1715,11 +2191,75 @@ mod tests {
     }
 
     #[test]
+    fn orientation_catalogue_is_ui_ready() {
+        let arr = crate::display::orientation_catalog_json();
+        let items = arr.as_array().unwrap();
+        assert_eq!(items.len(), 3);
+        let ids: Vec<&str> = items.iter().map(|i| i["id"].as_str().unwrap()).collect();
+        // Exactly the three ids the Kotlin `OrientationMode` persists.
+        assert_eq!(ids, vec!["system", "landscape", "portrait"]);
+    }
+
+    #[test]
+    fn display_layout_resolves_a_window() {
+        // Phone portrait: bottom bar, one column.
+        let out = display_layout_json(&json!({ "width_dp": 392, "height_dp": 872 }));
+        assert_eq!(out["orientation"], "portrait");
+        assert_eq!(out["width_class"], "compact");
+        assert_eq!(out["navigation_rail"], false);
+        assert_eq!(out["instance_columns"], 1);
+
+        // The same phone rotated: rail, three columns, no bottom bar.
+        let out = display_layout_json(&json!({ "width_dp": 872, "height_dp": 392 }));
+        assert_eq!(out["orientation"], "landscape");
+        assert_eq!(out["navigation_rail"], true);
+        assert_eq!(out["instance_columns"], 3);
+        assert_eq!(out["short"], true);
+    }
+
+    #[test]
+    fn display_layout_is_fail_soft_and_can_orient_a_window() {
+        // A missing / bogus request degrades to the reference phone instead of
+        // erroring out (the UI must always get a usable layout).
+        let out = display_layout_json(&json!({}));
+        assert_eq!(out["width_dp"], 392);
+        assert_eq!(out["height_dp"], 872);
+        let out = display_layout_json(&json!({ "width_dp": 0, "height_dp": 0 }));
+        // Degenerate geometry is clamped, never rejected, and still yields a
+        // renderable layout (a 1x1 window counts as square ⇒ rail side).
+        assert_eq!(out["width_dp"], 1);
+        assert_eq!(out["height_dp"], 1);
+        assert_eq!(out["orientation"], "square");
+        assert!(out["instance_columns"].as_u64().unwrap() >= 1);
+        // A huge width_dp cannot overflow the u32 cast either.
+        let out = display_layout_json(&json!({ "width_dp": 9_999_999_999u64, "height_dp": 10 }));
+        assert_eq!(out["width_class"], "expanded");
+
+        // With a policy the reply also carries the forced window geometry.
+        let out = display_layout_json(
+            &json!({ "width_dp": 1280, "height_dp": 720, "orientation": "portrait" }),
+        );
+        assert_eq!(out["policy"]["id"], "portrait");
+        assert_eq!(
+            out["policy"]["android_screen_orientation"],
+            "sensorPortrait"
+        );
+        assert_eq!(out["window"]["width"], 720);
+        assert_eq!(out["window"]["height"], 1280);
+        // An unknown policy id degrades to "follow system" (no swap).
+        let out = display_layout_json(
+            &json!({ "width_dp": 1280, "height_dp": 720, "orientation": "sideways" }),
+        );
+        assert_eq!(out["policy"]["id"], "system");
+        assert_eq!(out["window"]["width"], 1280);
+    }
+
+    #[test]
     fn renderer_catalogue_is_complete() {
         let out = launch_renderers_json();
         let arr = out.as_array().unwrap();
-        // 5 FCL stacks + the LWJGL SDL backend (task 9).
-        assert_eq!(arr.len(), 6);
+        // 5 FCL stacks + the LWJGL SDL backend (task 9) + Mobile Glues (task 8).
+        assert_eq!(arr.len(), 7);
         assert_eq!(arr[0]["id"], "opengles2");
         assert_eq!(arr[0]["gl_libname"], "libgl4es_114.so");
         assert_eq!(arr[0]["env"]["LIBGL_ES"], "2");
@@ -1730,6 +2270,13 @@ mod tests {
             .expect("sdl2 renderer must be in the FFI catalogue");
         assert_eq!(sdl["gl_libname"], "liblwjgl_sdl.so");
         assert_eq!(sdl["backend"], "Sdl");
+        // The catalogue must surface the Mobile Glues renderer added for task 8.
+        let mg = arr
+            .iter()
+            .find(|r| r["id"] == "mobile_glues")
+            .expect("mobile_glues renderer must be in the FFI catalogue");
+        assert_eq!(mg["gl_libname"], "libmobileglues.so");
+        assert_eq!(mg["backend"], "GlSurface");
         assert!(arr.iter().all(|r| {
             r["id"].is_string() && r["gl_libname"].is_string() && r["backend"].is_string()
         }));
@@ -1739,7 +2286,8 @@ mod tests {
 #[cfg(test)]
 mod awt_tests {
     use super::*;
-    use crate::launch::awt::{AwtControl, AwtFrame, CursorKind};
+    use crate::launch::awt::{AwtControl, AwtEventRecord, AwtFrame, CursorKind};
+    use crate::launch::input::{game_event, GameInputEvent};
 
     /// A tiny 4×2 desktop on an 8×4 surface (exact 2× scale, no letterbox bars).
     fn open_tiny(slot: &mut AwtSlot) -> serde_json::Value {
@@ -1913,18 +2461,37 @@ mod awt_tests {
             ]}),
         )
         .unwrap();
-        // press + release + synthetic click + 2 keys + 2 typed chars + wheel
-        assert_eq!(out["queued"], 8);
-        assert_eq!(out["pending"], 8);
+        // AWT (8): press + release + synthetic click + 2 keys + 2 typed chars +
+        // wheel. Native (7, task 12): button down, button up, 2 keys, 2 chars,
+        // wheel — the game gets its own copy of everything it can use. There is
+        // no cursor event because (4,2) on the surface *is* the centre of this
+        // 4×2 desktop, which is where the game cursor already sits: a move that
+        // does not change a pixel is not an event.
+        assert_eq!(out["queued"], 15);
+        assert_eq!(out["pending"], 15);
         assert_eq!(out["pointer"], json!({ "x": 2, "y": 1 }));
         assert_eq!(out["focused"], true);
         assert_eq!(out["rejected"], json!([]));
+        assert_eq!(out["captured"], false);
+        assert_eq!(out["pointer_mode"], "absolute");
         // SHIFT is held, so the modifier mask is non-zero.
         assert_ne!(out["modifiers"], 0);
 
         // Draining hands them to the JVM as 32-byte records.
         let bytes = awt_drain_events_bytes(&slot);
-        assert_eq!(bytes.len(), 8 * 32);
+        assert_eq!(bytes.len(), 15 * 32);
+        let records = AwtEventRecord::decode_batch(&bytes).unwrap();
+        let (native, awt): (Vec<_>, Vec<_>) = records
+            .iter()
+            .partition(|r| GameInputEvent::from_record(r).is_some());
+        assert_eq!(awt.len(), 8, "the AWT stream is unchanged");
+        assert!(
+            native
+                .iter()
+                .filter_map(GameInputEvent::from_record)
+                .any(|e| e.kind == game_event::KEY),
+            "a physical key must reach the game, not only Swing"
+        );
         assert_eq!(
             awt_input_json(&slot, &json!({ "events": [] })).unwrap()["pending"],
             0
@@ -1946,7 +2513,10 @@ mod awt_tests {
             ]}),
         )
         .unwrap();
-        assert_eq!(out["queued"], 1, "the good event still reached the JVM");
+        assert_eq!(
+            out["queued"], 2,
+            "the good event still reached the JVM (AWT + native)"
+        );
         assert_eq!(out["rejected"].as_array().unwrap().len(), 4);
         assert!(out["rejected"][0].as_str().unwrap().contains("wiggle"));
 
@@ -2039,8 +2609,32 @@ mod awt_tests {
             "session",
             "link",
             "transport",
+            // Task 12: the Compose layer renders the pointer mode / sensitivity
+            // and needs the game cursor for the diagnostics panel.
+            "input",
+            "game_input",
         ] {
             assert!(out.get(key).is_some(), "snapshot is missing {key}");
+        }
+        for key in [
+            "pointer_mode",
+            "captured",
+            "hybrid_touch",
+            "native_input",
+            "sensitivity",
+            "scroll_permille",
+            "bindings",
+        ] {
+            assert!(out["input"].get(key).is_some(), "input.{key}");
+        }
+        for key in ["x", "y", "invert_y"] {
+            assert!(
+                out["input"]["sensitivity"].get(key).is_some(),
+                "input.sensitivity.{key}"
+            );
+        }
+        for key in ["cursor", "grabbed", "framebuffer", "stats"] {
+            assert!(out["game_input"].get(key).is_some(), "game_input.{key}");
         }
         for key in ["x", "y", "width", "height"] {
             assert!(out["placement"].get(key).is_some(), "placement.{key}");
@@ -2356,6 +2950,149 @@ mod awt_tests {
             true
         );
         assert_eq!(awt_close_json(&mut slot)["closed"], true);
+    }
+
+    // ---- Physical keyboard & mouse over the FFI (task 12) ------------------
+
+    #[test]
+    fn a_relative_mouse_batch_moves_the_pointer_without_a_position() {
+        let mut slot: AwtSlot = None;
+        awt_open_json(
+            &mut slot,
+            &json!({
+                "screen": { "width": 64, "height": 32 },
+                "surface": { "width": 64, "height": 32 }
+            }),
+        )
+        .unwrap();
+        let out = awt_input_json(
+            &slot,
+            &json!({ "events": [
+                { "type": "capture", "captured": true },
+                { "type": "pointer_relative", "dx": 6.0, "dy": 3.0, "source": "mouse" }
+            ]}),
+        )
+        .unwrap();
+        assert_eq!(out["rejected"], json!([]));
+        assert_eq!(out["captured"], true);
+        assert_eq!(out["pointer_mode"], "captured");
+        assert_eq!(out["pointer"], json!({ "x": 6, "y": 3 }));
+        assert_eq!(out["game_cursor"], json!({ "x": 38, "y": 19 }));
+        // The grab state and the move both reached the game.
+        let records = AwtEventRecord::decode_batch(&awt_drain_events_bytes(&slot)).unwrap();
+        let native: Vec<GameInputEvent> = records
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .collect();
+        assert!(native
+            .iter()
+            .any(|e| e.kind == game_event::GRAB_STATE && e.p0 == 1));
+        assert!(native.iter().any(|e| e.kind == game_event::CURSOR_POS));
+    }
+
+    #[test]
+    fn a_touch_is_filtered_while_the_pointer_is_captured() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        awt_configure_json(
+            &slot,
+            &json!({ "input": { "pointer_mode": "captured", "hybrid_touch": false } }),
+        )
+        .unwrap();
+        let out = awt_input_json(
+            &slot,
+            &json!({ "events": [
+                { "type": "pointer", "phase": "down", "x": 4.0, "y": 2.0, "source": "touch" }
+            ]}),
+        )
+        .unwrap();
+        assert_eq!(out["queued"], 0, "a palm must not click for you");
+        assert_eq!(out["rejected"], json!([]), "filtered is not an error");
+        // A mouse sample still gets through.
+        let out = awt_input_json(
+            &slot,
+            &json!([{ "type": "pointer", "phase": "down", "x": 4.0, "y": 2.0, "source": "mouse" }]),
+        )
+        .unwrap();
+        assert!(out["queued"].as_u64().unwrap() > 0);
+    }
+
+    #[test]
+    fn a_hardware_key_forwards_its_scancode_to_the_game() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        let out = awt_input_json(
+            &slot,
+            &json!({ "events": [
+                { "type": "key_down", "name": "key.keyboard.w", "scancode": 17 }
+            ]}),
+        )
+        .unwrap();
+        assert_eq!(out["rejected"], json!([]));
+        let key = AwtEventRecord::decode_batch(&awt_drain_events_bytes(&slot))
+            .unwrap()
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .find(|e| e.kind == game_event::KEY)
+            .expect("the game must see the key");
+        assert_eq!(key.p0, 'W' as i32, "GLFW_KEY_W");
+        assert_eq!(
+            key.p1, 17,
+            "evdev KEY_W, straight from KeyEvent.getScanCode()"
+        );
+        assert_eq!(key.p2, 1, "GLFW_PRESS");
+    }
+
+    #[test]
+    fn configure_applies_the_input_settings_and_reports_a_stale_binding() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        let out = awt_configure_json(
+            &slot,
+            &json!({ "input": {
+                "sensitivity": { "x": 2.0, "y": 2.0, "invert_y": true },
+                "scroll_permille": 2000,
+                "bindings": { "keys": { "e": "f", "banana": "q" }, "buttons": { "1": 3 } },
+            }}),
+        )
+        .unwrap();
+        assert_eq!(out["input"]["sensitivity"]["x"], 2.0);
+        assert_eq!(out["input"]["sensitivity"]["invert_y"], true);
+        assert_eq!(out["input"]["scroll_permille"], 2000);
+        assert_eq!(out["input"]["bindings"]["keys"]["e"], "f");
+        assert_eq!(
+            out["input_notes"].as_array().map(|a| a.len()),
+            Some(1),
+            "a stale binding must be reported, not swallowed: {out}"
+        );
+        // The remap is live: pressing "e" presses "f".
+        awt_input_json(&slot, &json!([{ "type": "key_down", "name": "e" }])).unwrap();
+        let records = AwtEventRecord::decode_batch(&awt_drain_events_bytes(&slot)).unwrap();
+        assert!(records
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .any(|e| e.kind == game_event::KEY && e.p0 == 'F' as i32));
+    }
+
+    #[test]
+    fn a_bad_capture_or_relative_event_never_kills_the_batch() {
+        let mut slot: AwtSlot = None;
+        open_tiny(&mut slot);
+        let out = awt_input_json(
+            &slot,
+            &json!({ "events": [
+                { "type": "pointer_relative" },
+                { "type": "pointer_relative", "dx": "sideways" },
+                { "type": "capture" },
+                { "type": "capture", "captured": false },
+                { "type": "key_down", "name": "escape", "scancode": -5 }
+            ]}),
+        )
+        .unwrap();
+        // A relative move with no numbers is a zero move: harmless, not an error.
+        assert_eq!(out["rejected"], json!([]));
+        assert_eq!(out["captured"], false, "the last capture wins");
+        assert!(out["queued"].as_u64().unwrap() > 0, "escape still arrived");
     }
 }
 

@@ -200,6 +200,21 @@ data class AwtControlState(
         bye?.let { append(" · 已结束：").append(it) }
     }
 
+    /**
+     * Whether a captured pointer has to be **released** right now (task 12).
+     *
+     * Two things the JVM tells us mean "the player is about to type, not to
+     * look around": a focused text component asking for the keyboard, and an
+     * I-beam cursor over one. With the pointer captured there is no visible
+     * cursor and no soft keyboard, so a Forge installer's text field or the chat
+     * box would be impossible to use — the UI therefore drops the capture and
+     * gives the pointer back.
+     *
+     * `bye` counts too: a bridge that said goodbye will never release it for us.
+     */
+    val wantsPointerReleased: Boolean
+        get() = wantsKeyboard || cursor.isText || caret != null || bye != null
+
     companion object {
         val EMPTY = AwtControlState()
 

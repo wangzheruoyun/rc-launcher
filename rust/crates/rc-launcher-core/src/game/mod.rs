@@ -28,6 +28,7 @@ pub mod manifest;
 pub mod platform;
 pub mod resolve;
 pub mod version;
+pub mod version_extra;
 
 pub use assets::{AssetObject, AssetsIndex};
 pub use library::{Action, Artifact, ExtractRule, Library, LibraryDownloads, Rule};
@@ -38,6 +39,7 @@ pub use version::{
     AssetIndexRef, DownloadInfo, Downloads, JavaVersion, ResolvedVersion, VersionArguments,
     VersionJson,
 };
+pub use version_extra::{UnlistedVersionDb, VersionAliasDb};
 
 #[cfg(test)]
 mod tests {

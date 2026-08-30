@@ -7,6 +7,7 @@ import com.rc.launcher.ui.model.LauncherSettings
 import com.rc.launcher.ui.model.MirrorCatalog
 import com.rc.launcher.ui.model.MirrorSource
 import com.rc.launcher.ui.model.RendererOption
+import com.rc.launcher.ui.model.OrientationMode
 import com.rc.launcher.ui.model.DefaultMirrorMeasurer
 import com.rc.launcher.ui.model.MirrorLatency
 import com.rc.launcher.ui.model.MirrorMeasurer
@@ -42,6 +43,7 @@ class SettingsViewModel(
     // Catalogues for the UI (single source of truth, shared with the Rust core).
     val mirrors: List<MirrorSource> = MirrorCatalog.all
     val renderers: List<RendererOption> = RendererOption.entries
+    val orientationModes: List<OrientationMode> = OrientationMode.entries
     val dohServers: List<DohServer> = DohCatalog.all
 
     /** Live state of an in-progress / completed mirror speed test. */
@@ -83,6 +85,7 @@ class SettingsViewModel(
         commit(_settings.value.copy(resolutionScale = scale))
     fun setFramerateLimit(fps: Int) = commit(_settings.value.copy(framerateLimit = fps))
     fun setFullscreen(on: Boolean) = commit(_settings.value.copy(fullscreen = on))
+    fun setOrientation(id: String) = commit(_settings.value.copy(orientationModeId = id))
 
     // ---- Controller --------------------------------------------------------
 

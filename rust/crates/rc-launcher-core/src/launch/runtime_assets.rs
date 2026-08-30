@@ -18,7 +18,9 @@
 //! actually present (robustness: a missing LWJGL bundle must fail *before* we
 //! spawn a JVM that would die with an unhelpful `UnsatisfiedLinkError`).
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use zip::ZipArchive;
 
 use crate::error::{RcError, RcResult};
 use crate::launch::options::LwjglVersion;
@@ -119,6 +121,103 @@ impl AppRuntime {
         }
         let p = self.cacio_dir(java).join(CACIO_AGENT_JAR);
         p.is_file().then_some(p)
+    }
+
+    /// Unpack the per-ABI JNA native dispatch archive into the runtime dir.
+    ///
+    /// JNA loads its dispatcher (`libjnidispatch.so`) from
+    /// `jna.boot.library.path`. The copy bundled inside `jna.jar` is a
+    /// *desktop* build that cannot load on Android, which is why a JNA-using
+    /// mod dies with `Unable to load JNA library`. FCL ships
+    /// `app_runtime/jna/jna-<abi>.zip` with one `libjnidispatch.so` per JNA
+    /// release (`jna/<version>/libjnidispatch.so`); we unpack it next to the
+    /// archive (`app_runtime/jna/<abi>/`) and return that directory.
+    ///
+    /// The dispatcher from the *newest* bundled JNA release is also surfaced as
+    /// a bare `app_runtime/jna/<abi>/libjnidispatch.so` because JNA probes
+    /// `jna.boot.library.path` for the bare file name; the versioned originals
+    /// are kept for callers / future JNA builds that resolve by version.
+    ///
+    /// Idempotent: a `.rc-jna-extracted` marker skips re-extraction on every
+    /// launch, and the bare dispatcher's presence is the real readiness guard.
+    pub fn extract_jna(&self, abi: Abi) -> RcResult<PathBuf> {
+        let archive = self.jna_archive(abi).ok_or_else(|| {
+            RcError::MissingFile(format!(
+                "no JNA native dispatch archive for {} (expected app_runtime/jna/jna-{}.zip)",
+                abi.as_android_abi(),
+                abi.as_fcl_suffix()
+            ))
+        })?;
+        let out_dir = self.root.join("jna").join(abi.as_fcl_suffix());
+        let marker = out_dir.join(".rc-jna-extracted");
+        let bare = out_dir.join("libjnidispatch.so");
+        // Already extracted (and the dispatcher JNA probes for is present)?
+        if marker.is_file() && bare.is_file() {
+            return Ok(out_dir);
+        }
+
+        std::fs::create_dir_all(&out_dir).map_err(RcError::Io)?;
+        let file = std::fs::File::open(&archive).map_err(RcError::Io)?;
+        let mut zip = ZipArchive::new(file).map_err(|e| {
+            RcError::Other(format!(
+                "could not open JNA archive {}: {e}",
+                archive.display()
+            ))
+        })?;
+
+        // Track the newest bundled JNA dispatcher so we can expose a bare copy.
+        let mut newest: Option<(Vec<u64>, PathBuf)> = None;
+
+        for i in 0..zip.len() {
+            let mut entry = zip
+                .by_index(i)
+                .map_err(|e| RcError::Other(format!("reading JNA archive entry {i}: {e}")))?;
+            // Defend against path traversal in the (APK-supplied) archive.
+            let rel = entry.enclosed_name().ok_or_else(|| {
+                RcError::Other(format!("JNA archive entry {i} has an unsafe path"))
+            })?;
+            let target = jna_safe_join(&out_dir, &rel)?;
+            if entry.is_dir() {
+                std::fs::create_dir_all(&target).map_err(RcError::Io)?;
+                continue;
+            }
+            if !entry.name().ends_with("libjnidispatch.so") {
+                continue;
+            }
+            // `write` needs the (nested) parent directory to exist; the archive
+            // keeps each dispatcher under `jna/<version>/`, so create it first.
+            if let Some(parent) = target.parent() {
+                std::fs::create_dir_all(parent).map_err(RcError::Io)?;
+            }
+            let mut buf = Vec::with_capacity(entry.size() as usize);
+            entry.read_to_end(&mut buf).map_err(RcError::Io)?;
+            std::fs::write(&target, &buf).map_err(RcError::Io)?;
+            if let Some(ver) = jna_version_of(&rel) {
+                let better = match &newest {
+                    Some((best, _)) => version_gt(&ver, best),
+                    None => true,
+                };
+                if better {
+                    newest = Some((ver, target.clone()));
+                }
+            }
+        }
+
+        match &newest {
+            Some((_, src)) => {
+                std::fs::copy(src, &bare).map_err(RcError::Io)?;
+            }
+            None => {
+                return Err(RcError::MissingFile(format!(
+                    "JNA archive {} contains no libjnidispatch.so",
+                    archive.display()
+                )));
+            }
+        }
+
+        // Best-effort marker; the bare dispatcher above is the real guard.
+        let _ = std::fs::write(&marker, "1");
+        Ok(out_dir)
     }
 
     /// `app_runtime/jna/jna-<suffix>.zip` when present.
@@ -240,6 +339,71 @@ fn list_jars(dir: &Path) -> RcResult<Vec<PathBuf>> {
     Ok(out)
 }
 
+/// Join `rel` onto `base`, rejecting anything that would escape `base`.
+///
+/// `ZipFile::enclosed_name` already strips absolute / `..` components for us, but
+/// we re-check here (defence in depth) and return a precise error instead of an
+/// `fs` panic if a hostile archive slips through.
+fn jna_safe_join(base: &Path, rel: &Path) -> RcResult<PathBuf> {
+    if rel.is_absolute() {
+        return Err(RcError::Other(format!(
+            "JNA archive entry is an absolute path: {rel:?}"
+        )));
+    }
+    let mut out = base.to_path_buf();
+    for comp in rel.components() {
+        match comp {
+            std::path::Component::Normal(c) => out.push(c),
+            std::path::Component::CurDir => {}
+            _ => {
+                return Err(RcError::Other(format!(
+                    "JNA archive entry escapes root: {rel:?}"
+                )));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// `jna/<version>/libjnidispatch.so` -> `Some([version numbers])` (else `None`).
+fn jna_version_of(rel: &Path) -> Option<Vec<u64>> {
+    let comps: Vec<std::ffi::OsString> = rel
+        .components()
+        .map(|c| c.as_os_str().to_os_string())
+        .collect();
+    if comps.len() < 3 {
+        return None;
+    }
+    if comps[comps.len() - 1] != std::ffi::OsStr::new("libjnidispatch.so") {
+        return None;
+    }
+    if comps[0] != std::ffi::OsStr::new("jna") {
+        return None;
+    }
+    let ver = comps[comps.len() - 2].to_string_lossy();
+    let parts: Vec<u64> = ver
+        .split('.')
+        .filter_map(|p| p.parse::<u64>().ok())
+        .collect();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts)
+    }
+}
+
+/// `a > b` for dot-separated numeric version vectors (shorter is older).
+fn version_gt(a: &[u64], b: &[u64]) -> bool {
+    let n = a.len().max(b.len());
+    for i in 0..n {
+        let av = a.get(i).copied().unwrap_or(0);
+        let bv = b.get(i).copied().unwrap_or(0);
+        if av != bv {
+            return av > bv;
+        }
+    }
+    false
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -368,6 +532,46 @@ mod tests {
         let (_td, rt) = fake_runtime();
         assert!(rt.jna_archive(Abi::Arm64V8a).is_some());
         assert!(rt.jna_archive(Abi::X86).is_none());
+    }
+
+    #[test]
+    fn extract_jna_unpacks_and_exposes_a_bare_dispatcher() {
+        let td = tempfile::tempdir().unwrap();
+        let rt = AppRuntime::new(td.path());
+
+        // No archive yet -> precise error, not a panic on a missing file.
+        assert!(rt.extract_jna(Abi::Arm64V8a).is_err());
+
+        // Use FCL's real per-ABI JNA archive (one `libjnidispatch.so` per JNA
+        // release, under `jna/<version>/`) shipped as an app_runtime asset.
+        let asset = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../runtime/src/main/assets/app_runtime/jna/jna-arm64.zip");
+        assert!(asset.is_file(), "JNA asset missing at {asset:?}");
+        std::fs::create_dir_all(td.path().join("jna")).unwrap();
+        std::fs::copy(&asset, td.path().join("jna").join("jna-arm64.zip")).unwrap();
+
+        let out = rt.extract_jna(Abi::Arm64V8a).unwrap();
+        assert_eq!(out, td.path().join("jna").join("arm64"));
+        // The newest dispatcher is surfaced bare for JNA's boot-path probe.
+        assert!(out.join("libjnidispatch.so").is_file(), "bare dispatcher");
+        // Versioned originals are preserved for per-version resolution.
+        let mut versioned = 0;
+        if let Ok(entries) = std::fs::read_dir(out.join("jna")) {
+            for e in entries.flatten() {
+                if e.path().join("libjnidispatch.so").is_file() {
+                    versioned += 1;
+                }
+            }
+        }
+        assert!(versioned > 0, "versioned dispatcher dirs preserved");
+
+        // Idempotent: a second call reuses the already-extracted dir and does
+        // not re-extract / error.
+        let out2 = rt.extract_jna(Abi::Arm64V8a).unwrap();
+        assert_eq!(out, out2);
+
+        // An ABI with no archive is reported precisely.
+        assert!(rt.extract_jna(Abi::X86).is_err());
     }
 
     #[test]

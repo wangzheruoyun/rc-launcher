@@ -40,6 +40,12 @@ interface AccountRepository {
     /** Return a fresh account, transparently refreshing if expiring; null if absent. */
     suspend fun ensureFresh(uuid: String): Account?
 
+    /** Discover an external auth server's metadata by URL (task 10). */
+    suspend fun beginThirdParty(serverUrl: String): ThirdPartyServerInfo
+
+    /** Complete a third-party login (Authlib-Injector / token relay); returns the account. */
+    suspend fun completeThirdParty(login: ThirdPartyLogin): Account?
+
     /** The persisted active-account uuid (UI selection), or null. */
     fun getActiveId(): String?
 
@@ -108,6 +114,22 @@ class InMemoryAccountRepository(
     override suspend fun ensureFresh(uuid: String): Account? {
         val cur = store[uuid] ?: return null
         return if (cur is MicrosoftAccount && cur.tokenStatus != TokenStatus.VALID) refresh(uuid) else cur
+    }
+
+    override suspend fun beginThirdParty(serverUrl: String): ThirdPartyServerInfo =
+        ThirdPartyServerInfo(serverUrl = serverUrl, serverName = serverUrl, links = emptyList())
+
+    override suspend fun completeThirdParty(login: ThirdPartyLogin): Account? {
+        val uuid = offlineUuid(login.username.ifBlank { "thirdparty" })
+        val acc = ThirdPartyAccount(
+            uuid = uuid,
+            username = login.username.ifBlank { "Player" },
+            provider = login.provider,
+            serverUrl = login.serverUrl,
+            serverName = login.serverName,
+        )
+        store[uuid] = acc
+        return acc
     }
 
     override fun getActiveId(): String? = activeId
@@ -183,6 +205,18 @@ class RustAccountRepository(
             val json = RustBridge.authEnsureFresh(uuid)
             if (json.contains("\"error\"")) null else parseAccount(json)
         }.getOrNull()
+    }
+
+    override suspend fun beginThirdParty(serverUrl: String): ThirdPartyServerInfo = withContext(Dispatchers.IO) {
+        val json = runCatching { RustBridge.authBeginThirdParty(serverUrl) }
+            .getOrElse { e -> throw IllegalStateException(e.message ?: "beginThirdParty failed", e) }
+        parseThirdPartyServerInfo(json) ?: throw IllegalStateException("malformed server info from core: $json")
+    }
+
+    override suspend fun completeThirdParty(login: ThirdPartyLogin): Account? = withContext(Dispatchers.IO) {
+        val json = runCatching { RustBridge.authCompleteThirdParty(login.toJsonString()) }
+            .getOrElse { e -> throw IllegalStateException(e.message ?: "completeThirdParty failed", e) }
+        if (json.contains("\"error\"")) null else parseAccount(json)
     }
 
     override fun getActiveId(): String? = activeId

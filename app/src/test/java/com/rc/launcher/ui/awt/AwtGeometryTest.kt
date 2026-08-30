@@ -1,5 +1,6 @@
 package com.rc.launcher.ui.awt
 
+import com.rc.launcher.ui.ScreenOrientation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -121,5 +122,81 @@ class AwtGeometryTest {
         assertTrue(AwtRect(0, 0, 0, 4).isEmpty)
         assertEquals(8L, AwtRect(0, 0, 4, 2).area)
         assertEquals(AwtRect(0, 0, 4, 2), AwtRect.whole(4, 2))
+    }
+    // ---- Rotation (task 9) -------------------------------------------------
+
+    @Test
+    fun orientationOfTheSurfaceAndOfTheDesktop() {
+        val v = AwtViewport(640, 480, 1080, 2400)
+        assertEquals(ScreenOrientation.PORTRAIT, v.surfaceOrientation())
+        assertEquals(ScreenOrientation.LANDSCAPE, v.screenOrientation())
+        assertEquals(ScreenOrientation.SQUARE, AwtViewport(64, 64, 0, 0).surfaceOrientation())
+    }
+
+    @Test
+    fun rotatesToDetectsOnlyQuarterTurns() {
+        val portrait = AwtViewport(640, 480, 1080, 2400)
+        assertTrue(portrait.rotatesTo(2400, 1080))
+        // Soft keyboard / split screen inside one orientation.
+        assertFalse(portrait.rotatesTo(1080, 1400))
+        assertFalse(portrait.rotatesTo(1080, 2400))
+        // Not measured yet.
+        assertFalse(AwtViewport(640, 480, 0, 0).rotatesTo(1080, 2400))
+    }
+
+    @Test
+    fun rotatingTheSurfaceMovesTheLetterboxBarsNotThePixels() {
+        // The same tap position means a *different* desktop pixel after a
+        // rotation — which is exactly why an in-flight gesture has to be dropped
+        // instead of re-mapped (task 9).
+        val wide = AwtViewport(640, 480, 1200, 900)
+        val tall = wide.rotatedSurface()
+        assertEquals(AwtViewport(640, 480, 900, 1200), tall)
+        assertEquals(ScreenOrientation.LANDSCAPE, wide.surfaceOrientation())
+        assertEquals(ScreenOrientation.PORTRAIT, tall.surfaceOrientation())
+        assertTrue(wide.rotatesTo(tall.surfaceWidth, tall.surfaceHeight))
+        val before = wide.mapPointer(600f, 450f)
+        val after = tall.mapPointer(600f, 450f)
+        assertEquals(AwtPoint(320, 240), before)
+        assertEquals(AwtPoint(426, 133), after)
+        assertTrue("the same finger position is a different desktop pixel", before != after)
+        // Rotating twice is the identity.
+        assertEquals(wide, wide.rotatedSurface().rotatedSurface())
+    }
+
+    // ---- Physical mouse geometry (task 12) --------------------------------
+
+    @Test
+    fun theCentreIsWhereACapturedPointerStarts() {
+        val viewport = AwtViewport(320, 240, 640, 480)
+        assertEquals(AwtPoint(160, 120), viewport.centre())
+        // A 1x1 desktop still has a valid pixel to sit on.
+        assertEquals(AwtPoint(0, 0), AwtViewport(1, 1, 10, 10).centre())
+    }
+
+    @Test
+    fun relativeMotionIsClampedToTheDesktop() {
+        val viewport = AwtViewport(320, 240, 640, 480)
+        assertEquals(AwtPoint(110, 130), viewport.movePointer(AwtPoint(100, 120), 10, 10))
+        // A mouse cannot push the pointer out of the desktop, in either direction.
+        assertEquals(AwtPoint(319, 239), viewport.movePointer(AwtPoint(300, 200), 900, 900))
+        assertEquals(AwtPoint(0, 0), viewport.movePointer(AwtPoint(10, 10), -900, -900))
+        assertEquals(AwtPoint(5, 5), viewport.clampToScreen(5, 5))
+        assertEquals(AwtPoint(0, 239), viewport.clampToScreen(-1, 9_000))
+    }
+
+    @Test
+    fun deltasAreScaledByTheSensitivity() {
+        val viewport = AwtViewport(320, 240, 640, 480)
+        assertEquals(2 to 4, viewport.scaleDelta(AwtMouseSensitivity.DEFAULT, 2f, 4f))
+        assertEquals(4 to 8, viewport.scaleDelta(AwtMouseSensitivity.uniform(2f), 2f, 4f))
+        // Rounding, not truncation: a slow mouse must stay visible.
+        assertEquals(1 to 0, viewport.scaleDelta(AwtMouseSensitivity.uniform(0.5f), 1f, 0f))
+        assertEquals(
+            2 to -4,
+            viewport.scaleDelta(AwtMouseSensitivity.DEFAULT.copy(invertY = true), 2f, 4f),
+        )
+        // Garbage contributes nothing at all.
+        assertEquals(0 to 0, viewport.scaleDelta(AwtMouseSensitivity.DEFAULT, Float.NaN, 1f))
     }
 }

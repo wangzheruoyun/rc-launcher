@@ -73,6 +73,30 @@ impl VersionManifest {
     pub async fn fetch(client: &reqwest::Client, mirror: &MirrorProvider) -> RcResult<Self> {
         fetch_json_with_mirrors(client, mirror, VERSION_MANIFEST_URL).await
     }
+
+    /// Resolve a user-typed alias (e.g. `1.20`) to the canonical version id using
+    /// the compiled-in alias database (task 7, FCL parity). Returns `None` when
+    /// `id` is not a known alias, so callers can treat it as a literal id.
+    ///
+    /// This lets the version picker accept short major.minor input and map it to
+    /// the latest patch release of that line, just like HMCL/FCL.
+    pub fn resolve_alias(&self, id: &str) -> Option<String> {
+        crate::game::version_extra::resolve_version_alias(id).map(|s| s.to_string())
+    }
+
+    /// Return a clone of this manifest with the built-in unlisted versions
+    /// (task 7) merged in — every build not in Mojang's official manifest, such
+    /// as the April-Fools editions and Combat tests. The original manifest is
+    /// left untouched; callers present the augmented list while keeping the
+    /// network-fetched list authoritative for updates.
+    ///
+    /// Entries already present in `self` are never duplicated or shadowed, so a
+    /// real Mojang release always wins over a built-in stub.
+    pub fn with_builtin_unlisted(&self) -> Self {
+        let mut augmented = self.clone();
+        crate::game::version_extra::unlisted_db().merge_into(&mut augmented);
+        augmented
+    }
 }
 
 #[cfg(test)]

@@ -71,10 +71,16 @@ class SharedPreferencesSettingsRepository(
             resolutionScale = prefs.getFloat(KEY_RES_SCALE, s.resolutionScale),
             framerateLimit = int(KEY_FPS, s.framerateLimit),
             fullscreen = bool(KEY_FULLSCREEN, s.fullscreen),
+            orientationModeId = str(KEY_ORIENTATION, s.orientationModeId),
             controllerEnabled = bool(KEY_CTRL_ENABLED, s.controllerEnabled),
             controllerLayoutId = str(KEY_CTRL_LAYOUT, s.controllerLayoutId),
             controllerDeadzone = prefs.getFloat(KEY_CTRL_DEADZONE, s.controllerDeadzone),
             controllerVibration = bool(KEY_CTRL_VIB, s.controllerVibration),
+            controllerProfileId = str(KEY_CTRL_PROFILE, s.controllerProfileId),
+            controllerSensitivity = prefs.getFloat(KEY_CTRL_SENS, s.controllerSensitivity),
+            controllerInvertX = bool(KEY_CTRL_INVERT_X, s.controllerInvertX),
+            controllerInvertY = bool(KEY_CTRL_INVERT_Y, s.controllerInvertY),
+            controllerRemapJson = str(KEY_CTRL_REMAP, s.controllerRemapJson),
             gameFilesRoot = str(KEY_DIR_ROOT, s.gameFilesRoot),
             autoCleanLogs = bool(KEY_AUTO_CLEAN, s.autoCleanLogs),
             keepCrashReports = bool(KEY_KEEP_CRASH, s.keepCrashReports),
@@ -113,10 +119,16 @@ class SharedPreferencesSettingsRepository(
             putFloat(KEY_RES_SCALE, settings.resolutionScale)
             putInt(KEY_FPS, settings.framerateLimit)
             putBoolean(KEY_FULLSCREEN, settings.fullscreen)
+            putString(KEY_ORIENTATION, settings.orientationModeId)
             putBoolean(KEY_CTRL_ENABLED, settings.controllerEnabled)
             putString(KEY_CTRL_LAYOUT, settings.controllerLayoutId)
             putFloat(KEY_CTRL_DEADZONE, settings.controllerDeadzone)
             putBoolean(KEY_CTRL_VIB, settings.controllerVibration)
+            putString(KEY_CTRL_PROFILE, settings.controllerProfileId)
+            putFloat(KEY_CTRL_SENS, settings.controllerSensitivity)
+            putBoolean(KEY_CTRL_INVERT_X, settings.controllerInvertX)
+            putBoolean(KEY_CTRL_INVERT_Y, settings.controllerInvertY)
+            putString(KEY_CTRL_REMAP, settings.controllerRemapJson)
             putString(KEY_DIR_ROOT, settings.gameFilesRoot)
             putBoolean(KEY_AUTO_CLEAN, settings.autoCleanLogs)
             putBoolean(KEY_KEEP_CRASH, settings.keepCrashReports)
@@ -149,10 +161,16 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_RES_SCALE = "resolution_scale"
         private const val KEY_FPS = "framerate_limit"
         private const val KEY_FULLSCREEN = "fullscreen"
+        private const val KEY_ORIENTATION = "orientation_mode_id"
         private const val KEY_CTRL_ENABLED = "controller_enabled"
         private const val KEY_CTRL_LAYOUT = "controller_layout_id"
         private const val KEY_CTRL_DEADZONE = "controller_deadzone"
         private const val KEY_CTRL_VIB = "controller_vibration"
+        private const val KEY_CTRL_PROFILE = "controller_profile_id"
+        private const val KEY_CTRL_SENS = "controller_sensitivity"
+        private const val KEY_CTRL_INVERT_X = "controller_invert_x"
+        private const val KEY_CTRL_INVERT_Y = "controller_invert_y"
+        private const val KEY_CTRL_REMAP = "controller_remap_json"
         private const val KEY_DIR_ROOT = "game_files_root"
         private const val KEY_AUTO_CLEAN = "auto_clean_logs"
         private const val KEY_KEEP_CRASH = "keep_crash_reports"

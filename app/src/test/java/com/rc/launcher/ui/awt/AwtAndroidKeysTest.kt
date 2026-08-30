@@ -76,4 +76,66 @@ class AwtAndroidKeysTest {
         assertNull(awtKeyNameForAndroidKeyCode(24)) // KEYCODE_VOLUME_UP
         assertNull(awtKeyNameForAndroidKeyCode(-5))
     }
+
+    // ---- Physical keyboard & mouse (task 12) -------------------------------
+
+    @Test
+    fun scancodesAreTheEvdevNumbersTheGameExpects() {
+        // Android keycodes: A=29, W=51, Z=54, 0=7, 1=8, ESCAPE=111, SPACE=62,
+        // SHIFT_LEFT=59, SHIFT_RIGHT=60, F5=135, NUMPAD_0=144.
+        assertEquals(30, awtScancodeForAndroidKeyCode(29)) // evdev KEY_A
+        assertEquals(17, awtScancodeForAndroidKeyCode(51)) // KEY_W
+        assertEquals(44, awtScancodeForAndroidKeyCode(54)) // KEY_Z
+        assertEquals(11, awtScancodeForAndroidKeyCode(7)) // KEY_0 is 11, not 1
+        assertEquals(2, awtScancodeForAndroidKeyCode(8)) // KEY_1
+        assertEquals(1, awtScancodeForAndroidKeyCode(111)) // KEY_ESC
+        assertEquals(57, awtScancodeForAndroidKeyCode(62)) // KEY_SPACE
+        assertEquals(42, awtScancodeForAndroidKeyCode(59)) // KEY_LEFTSHIFT
+        assertEquals(54, awtScancodeForAndroidKeyCode(60)) // KEY_RIGHTSHIFT
+        assertEquals(63, awtScancodeForAndroidKeyCode(135)) // KEY_F5
+        assertEquals(82, awtScancodeForAndroidKeyCode(144)) // KEY_KP0
+        // Unknown means "no scancode": the core then fills one in.
+        assertEquals(0, awtScancodeForAndroidKeyCode(0))
+        assertEquals(0, awtScancodeForAndroidKeyCode(24)) // KEYCODE_VOLUME_UP
+    }
+
+    @Test
+    fun theGameKeyNameKeepsTheSideAwtThrowsAway() {
+        // AWT has one code for both shifts; GLFW (and Minecraft) do not.
+        assertEquals("left.shift", awtKeyNameForAndroidKeyCode(60))
+        assertEquals("right.shift", gameKeyNameForAndroidKeyCode(60))
+        assertEquals("left.shift", gameKeyNameForAndroidKeyCode(59))
+        assertEquals("right.control", gameKeyNameForAndroidKeyCode(114))
+        assertEquals("right.alt", gameKeyNameForAndroidKeyCode(58))
+        assertEquals("menu", gameKeyNameForAndroidKeyCode(82))
+        // Everything else is the AWT name, so one table stays authoritative.
+        assertEquals("w", gameKeyNameForAndroidKeyCode(51))
+        assertNull(gameKeyNameForAndroidKeyCode(24))
+    }
+
+    @Test
+    fun aButtonStateBitmaskBecomesAwtButtons() {
+        assertEquals(emptySet<AwtMouseButton>(), awtMouseButtonsForButtonState(0))
+        assertEquals(setOf(AwtMouseButton.LEFT), awtMouseButtonsForButtonState(1))
+        assertEquals(setOf(AwtMouseButton.RIGHT), awtMouseButtonsForButtonState(2))
+        assertEquals(setOf(AwtMouseButton.MIDDLE), awtMouseButtonsForButtonState(4))
+        assertEquals(
+            setOf(AwtMouseButton.LEFT, AwtMouseButton.RIGHT),
+            awtMouseButtonsForButtonState(1 or 2),
+        )
+        // Stylus buttons follow the pen convention; back / forward fold onto the
+        // middle button instead of being swallowed.
+        assertEquals(setOf(AwtMouseButton.LEFT), awtMouseButtonsForButtonState(32))
+        assertEquals(setOf(AwtMouseButton.RIGHT), awtMouseButtonsForButtonState(64))
+        assertEquals(setOf(AwtMouseButton.MIDDLE), awtMouseButtonsForButtonState(8))
+    }
+
+    @Test
+    fun theToolTypeTellsUsWhichDeviceItWas() {
+        assertEquals(AwtPointerSource.TOUCH, awtPointerSourceForToolType(1)) // FINGER
+        assertEquals(AwtPointerSource.STYLUS, awtPointerSourceForToolType(2)) // STYLUS
+        assertEquals(AwtPointerSource.MOUSE, awtPointerSourceForToolType(3)) // MOUSE
+        assertEquals(AwtPointerSource.STYLUS, awtPointerSourceForToolType(4)) // ERASER
+        assertEquals(AwtPointerSource.TOUCH, awtPointerSourceForToolType(0)) // UNKNOWN
+    }
 }

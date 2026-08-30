@@ -319,7 +319,9 @@ impl LaunchEngine {
                     if self.options.use_cacio {
                         let bridge = AwtBridge::discover(
                             self.options.java_version,
-                            self.options.window,
+                            // Task 9: preflight the geometry the session will
+                            // really use (orientation policy applied).
+                            self.options.effective_window(),
                             &rt,
                             &self.awt_native_search_dirs(),
                         )?;
@@ -332,6 +334,22 @@ impl LaunchEngine {
                  which cannot load on Android"
                     .to_string(),
             ),
+        }
+        // Task 5 (mod compatibility): `libdiscord-rpc.so` is shipped not only for
+        // the launcher's own Rich Presence but as a *compatibility shim* for game
+        // mods (Pokémon / Cobblemon-style mods that render a Discord Rich Presence
+        // from inside the game JVM). It lives in `nativeLibraryDir`, which is on the
+        // game JVM's `java.library.path` / `LD_LIBRARY_PATH`, so mods can
+        // `System.loadLibrary("discord-rpc")`. It is optional for launching
+        // Minecraft itself, so a missing file is a warning, never a hard error.
+        if let Some(nl) = &self.options.native_lib_dir {
+            for name in crate::plugins::native_lib::COMPAT_NATIVE_LIBS {
+                if !nl.join(name).exists() {
+                    warnings.push(format!(
+                        "compatibility native lib {name} is missing from nativeLibraryDir;                          mods that need it (e.g. Discord Rich Presence) will fail to load"
+                    ));
+                }
+            }
         }
         Ok(())
     }
@@ -454,6 +472,11 @@ impl LaunchEngine {
         F: FnMut(&LogLine),
     {
         let (prepared, mut process) = self.launch(version)?;
+        // Task 5: announce the session on Discord Rich Presence the moment the
+        // game JVM is spawned. `notify_game_launch` is a no-op when the bridge
+        // is disabled or the native `libdiscord-rpc.so` is unavailable, so this
+        // can never affect the launch itself.
+        let _ = crate::discord::notify_game_launch(&version.id);
         for line in prepared.describe().lines() {
             on_line(&LogLine::out(line));
         }
@@ -463,13 +486,29 @@ impl LaunchEngine {
             crate::robust::reporter::record_log(line.stream.as_str(), &line.text);
             on_line(line);
         };
-        let exit = process.wait_with(on_line).await?;
-        if exit.crash.crashed() {
-            // Best-effort: record + persist + emit the crash (task 19). A write
-            // failure must not turn a crash into a second failure.
-            let _ = self.report_crash(&exit);
+        // Task 5: clear the rich presence when the game process exits (the
+        // "now playing" card disappears). Done on every path below; it is a
+        // no-op when the bridge is disabled / not connected.
+        let clear_presence = || {
+            let _ = crate::discord::clear_presence();
+        };
+        let wait = process.wait_with(on_line).await;
+        match wait {
+            Ok(exit) => {
+                if exit.crash.crashed() {
+                    // Best-effort: record + persist + emit the crash (task 19).
+                    // A write failure must not turn a crash into a second
+                    // failure.
+                    let _ = self.report_crash(&exit);
+                }
+                clear_presence();
+                Ok(exit)
+            }
+            Err(e) => {
+                clear_presence();
+                Err(e)
+            }
         }
-        Ok(exit)
     }
 
     /// Persist + emit a crash report for a finished (crashed) game, using the
@@ -934,5 +973,29 @@ mod tests {
         let prepared = engine.prepare(&version()).unwrap();
         let err = engine.spawn(&prepared).unwrap_err();
         assert!(err.to_string().contains("failed to spawn"), "{err}");
+    }
+
+    #[test]
+    fn mod_compat_native_lib_warns_when_missing() {
+        // `libdiscord-rpc.so` is a compatibility shim for game mods (Pokémon /
+        // Cobblemon-style). When `nativeLibraryDir` is set but the file is absent,
+        // the launcher must surface a *warning* (never a launch error) so the
+        // mod-compat gap is visible without breaking the launch itself.
+        let (td, o) = install(OK_JAVA);
+        let nl = td.path().join("nativeLibraryDir");
+        std::fs::create_dir_all(&nl).unwrap();
+        let mut o = o;
+        o.native_lib_dir = Some(nl);
+        let mut engine = LaunchEngine::new(o);
+        // Isolate the compat check from the heavier app_runtime preflight.
+        engine.checks.verify_app_runtime = false;
+        let mut warnings = Vec::new();
+        engine.preflight_app_runtime(&mut warnings).unwrap();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("compatibility native lib")),
+            "expected a mod-compat warning, got: {warnings:?}"
+        );
     }
 }

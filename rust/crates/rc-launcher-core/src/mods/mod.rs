@@ -30,6 +30,7 @@
 //! (FCL/HMCL convention). Toggling renames the file on disk, so the state is
 //! durable and survives a launcher restart with zero extra bookkeeping.
 
+pub mod catalog;
 pub mod conflict;
 pub mod constraint;
 pub mod loader;
@@ -37,6 +38,10 @@ pub mod metadata;
 pub mod resource_pack;
 pub mod shader;
 
+pub use catalog::{
+    Catalog, CatalogFilter, CatalogMod, CatalogSource, DependencyResolution, ModCategory,
+    ModDictionary, ModEnvironment, ModrinthCatalogClient, ProjectKind,
+};
 pub use conflict::{resolve_issues, ModIssue, ModIssueKind, ModView};
 pub use constraint::VersionConstraint;
 pub use loader::ModLoader;

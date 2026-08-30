@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::display::{OrientationPolicy, ScreenOrientation};
 use crate::error::{RcError, RcResult};
 use crate::game::platform::{Features, Platform};
 use crate::launch::render::PerfProfile;
@@ -34,6 +35,10 @@ pub enum UserType {
     Mojang,
     /// Offline / cracked account (reported as `legacy`, like vanilla does).
     Offline,
+    /// Third-party (Authlib-Injector / external auth server) account. Reported
+    /// to the game as `authlibInjector` so the agent can broker the session.
+    #[serde(rename = "authlibInjector")]
+    ThirdParty,
 }
 
 impl UserType {
@@ -44,6 +49,8 @@ impl UserType {
             UserType::Mojang => "mojang",
             // Vanilla reports offline sessions as `legacy`.
             UserType::Offline => "legacy",
+            // authlib-injector launches the game with `--userType authlibInjector`.
+            UserType::ThirdParty => "authlibInjector",
         }
     }
 }
@@ -62,6 +69,11 @@ pub struct AccountProfile {
     /// OAuth client id (`${clientid}`), Microsoft accounts only.
     #[serde(default)]
     pub client_id: Option<String>,
+    /// Auth server base URL for third-party (authlib-injector) accounts. When
+    /// `Some`, the launch engine injects `-javaagent:authlib-injector.jar=<url>`
+    /// and reports user type `authlibInjector` (task 10).
+    #[serde(default)]
+    pub auth_server_url: Option<String>,
     /// Legacy `${user_properties}` blob (twitch/legacy profiles).
     #[serde(default = "empty_json_object")]
     pub user_properties: String,
@@ -83,6 +95,7 @@ impl AccountProfile {
             user_type: UserType::Offline,
             xuid: None,
             client_id: None,
+            auth_server_url: None,
             user_properties: empty_json_object(),
         }
     }
@@ -100,6 +113,7 @@ impl AccountProfile {
             user_type: UserType::Msa,
             xuid: None,
             client_id: None,
+            auth_server_url: None,
             user_properties: empty_json_object(),
         }
     }
@@ -114,11 +128,22 @@ impl AccountProfile {
                 user_type: UserType::Msa,
                 xuid: m.xuid.clone(),
                 client_id: Some(m.client_id.clone()),
+                auth_server_url: None,
                 user_properties: empty_json_object(),
             },
             crate::auth::model::Account::Offline(o) => {
                 Self::offline(o.username.clone(), o.uuid.clone())
             }
+            crate::auth::model::Account::ThirdParty(tp) => Self {
+                username: tp.username.clone(),
+                uuid: tp.uuid.clone(),
+                access_token: tp.access_token.clone(),
+                user_type: UserType::ThirdParty,
+                xuid: None,
+                client_id: None,
+                auth_server_url: Some(tp.server_url.clone()),
+                user_properties: empty_json_object(),
+            },
         }
     }
 
@@ -305,6 +330,8 @@ pub enum Renderer {
     Angle,
     /// SDL2 — LWJGL 3.4.1's SDL windowing backend (task 9: "SDL 渲染插件").
     Sdl,
+    /// Mobile Glues — GLES-over-Vulkan OpenGL(ES) translation stack (task 8).
+    MobileGlues,
 }
 
 impl Renderer {
@@ -317,6 +344,7 @@ impl Renderer {
             Renderer::Zink => "opengles3_desktopgl_zink_kopper",
             Renderer::Angle => "opengles3_angle",
             Renderer::Sdl => "sdl2",
+            Renderer::MobileGlues => "mobile_glues",
         }
     }
 
@@ -329,6 +357,7 @@ impl Renderer {
             Renderer::Zink => "libOSMesa_8.so",
             Renderer::Angle => "libGLESv2_angle.so",
             Renderer::Sdl => "liblwjgl_sdl.so",
+            Renderer::MobileGlues => "libmobileglues.so",
         }
     }
 
@@ -341,6 +370,7 @@ impl Renderer {
             "opengles3_desktopgl_zink_kopper" | "zink" => Some(Renderer::Zink),
             "opengles3_angle" | "angle" => Some(Renderer::Angle),
             "sdl2" | "sdl" => Some(Renderer::Sdl),
+            "mobile_glues" | "mobileglues" => Some(Renderer::MobileGlues),
             _ => None,
         }
     }
@@ -381,6 +411,14 @@ impl Renderer {
             Renderer::Sdl => vec![
                 ("SDL_VIDEO_RENDERER", "1".into()),
                 ("SDL_AUDIODRIVER", "android".into()),
+            ],
+            Renderer::MobileGlues => vec![
+                // Mobile Glues is a GLES-over-Vulkan translation of desktop GL; it
+                // uses the same GL compat knobs GL4ES does for Minecraft colour /
+                // extension compatibility.
+                ("LIBGL_ES", "2".into()),
+                ("LIBGL_USE_MC_COLOR", "1".into()),
+                ("LIBGL_NOERROR", "1".into()),
             ],
         }
     }
@@ -467,6 +505,15 @@ pub struct LaunchOptions {
     pub memory: MemoryOptions,
     #[serde(default)]
     pub window: WindowSize,
+    /// Screen-orientation strategy (task 9).
+    ///
+    /// Purely a *geometry* input for the launch: the Activity-side request is made
+    /// by Kotlin (`MainActivity.applyOrientation`), while the core uses the
+    /// policy to orient [`Self::window`] through [`Self::effective_window`], so
+    /// forcing portrait launches the game with a portrait window instead of a
+    /// letterboxed landscape one.
+    #[serde(default)]
+    pub orientation: OrientationPolicy,
     pub account: AccountProfile,
     #[serde(default)]
     pub renderer: Renderer,
@@ -566,6 +613,7 @@ impl LaunchOptions {
             natives_dir: None,
             memory: MemoryOptions::default(),
             window: WindowSize::default(),
+            orientation: OrientationPolicy::default(),
             account,
             renderer: Renderer::default(),
             perf_profile: PerfProfile::Balanced,
@@ -591,6 +639,21 @@ impl LaunchOptions {
         self.java_home.join("bin").join("java")
     }
 
+    /// The game window size **after** the orientation policy is applied (task 9).
+    ///
+    /// Everything that hands a geometry to the JVM (`--width/--height`,
+    /// `${resolution_width}`, the cacio managed screen size) goes through here,
+    /// so a forced portrait launch gets a portrait window instead of a landscape
+    /// one squeezed into two black bars.
+    pub fn effective_window(&self) -> WindowSize {
+        self.orientation.orient(self.window)
+    }
+
+    /// Orientation the game window will actually have.
+    pub fn window_orientation(&self) -> ScreenOrientation {
+        ScreenOrientation::of_window(self.effective_window())
+    }
+
     /// The platform used for rule evaluation (Android presents as Linux/arm64).
     pub fn platform(&self) -> Platform {
         let mut p = Platform::android();
@@ -610,7 +673,7 @@ impl LaunchOptions {
         f.insert("is_demo_user".to_string(), self.demo);
         f.insert(
             "has_custom_resolution".to_string(),
-            self.window != WindowSize::default() || self.fullscreen,
+            self.effective_window() != WindowSize::default() || self.fullscreen,
         );
         let quick = !matches!(self.quick_play, QuickPlay::None);
         f.insert("has_quick_plays_support".to_string(), quick);
@@ -794,6 +857,56 @@ mod tests {
     }
 
     #[test]
+    fn orientation_policy_orients_the_game_window() {
+        use crate::display::{OrientationPolicy, ScreenOrientation};
+
+        let mut o = opts();
+        // Default: follow the system, window untouched.
+        assert_eq!(o.orientation, OrientationPolicy::FollowSystem);
+        assert_eq!(o.effective_window(), o.window);
+
+        o.orientation = OrientationPolicy::Portrait;
+        assert_eq!(
+            o.effective_window(),
+            WindowSize {
+                width: 720,
+                height: 1280
+            }
+        );
+        assert_eq!(o.window_orientation(), ScreenOrientation::Portrait);
+        // A forced portrait window is a "custom resolution" for the rule engine,
+        // so the version.json argument branch guarded by that feature applies.
+        assert!(o.features()["has_custom_resolution"]);
+
+        o.orientation = OrientationPolicy::Landscape;
+        assert_eq!(o.effective_window(), WindowSize::default());
+        assert_eq!(o.window_orientation(), ScreenOrientation::Landscape);
+        assert!(!o.features()["has_custom_resolution"]);
+    }
+
+    #[test]
+    fn orientation_defaults_when_absent_from_json() {
+        use crate::display::OrientationPolicy;
+        // Old settings blobs (written before task 9) have no `orientation` key:
+        // they must deserialise to "follow system" instead of failing.
+        let json = serde_json::to_value(opts()).unwrap();
+        let mut map = json.as_object().unwrap().clone();
+        // The wire form is the *settings id* ("system"), see
+        // `display::tests::policy_json_matches_the_settings_id`.
+        assert_eq!(map.remove("orientation"), Some(serde_json::json!("system")));
+        let restored: LaunchOptions =
+            serde_json::from_value(serde_json::Value::Object(map)).unwrap();
+        assert_eq!(restored.orientation, OrientationPolicy::FollowSystem);
+
+        // ... and a known id round-trips.
+        let mut o = opts();
+        o.orientation = OrientationPolicy::Portrait;
+        let restored: LaunchOptions =
+            serde_json::from_str(&serde_json::to_string(&o).unwrap()).unwrap();
+        assert_eq!(restored.orientation, OrientationPolicy::Portrait);
+    }
+
+    #[test]
     fn derived_paths_match_download_plan_layout() {
         let o = opts();
         assert_eq!(
@@ -837,6 +950,7 @@ mod tests {
             Renderer::Zink,
             Renderer::Angle,
             Renderer::Sdl,
+            Renderer::MobileGlues,
         ] {
             assert_eq!(Renderer::from_id(r.id()), Some(r));
             assert!(r.gl_libname().starts_with("lib"));
@@ -844,6 +958,14 @@ mod tests {
         }
         assert_eq!(Renderer::from_id("sdl2"), Some(Renderer::Sdl));
         assert_eq!(Renderer::from_id("sdl"), Some(Renderer::Sdl));
+        assert_eq!(
+            Renderer::from_id("mobile_glues"),
+            Some(Renderer::MobileGlues)
+        );
+        assert_eq!(
+            Renderer::from_id("mobileglues"),
+            Some(Renderer::MobileGlues)
+        );
         assert!(Renderer::Sdl
             .env()
             .contains(&("SDL_VIDEO_RENDERER", "1".to_string())));

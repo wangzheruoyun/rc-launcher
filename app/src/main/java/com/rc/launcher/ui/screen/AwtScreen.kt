@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rc.launcher.ui.awt.AwtControlWire
 import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtMouseButton
+import com.rc.launcher.ui.awt.AwtMouseSensitivity
 import com.rc.launcher.ui.awt.AwtScaleMode
 import com.rc.launcher.ui.component.AwtCanvasSurface
 import com.rc.launcher.ui.i18n.rcFps
@@ -155,6 +157,121 @@ fun AwtScreen(
             Switch(checked = rightClickMode, onCheckedChange = { rightClickMode = it })
             Spacer(Modifier.width(12.dp))
             Text("右键模式（触摸映射为 BUTTON3）", style = MaterialTheme.typography.bodyMedium)
+        }
+
+        HorizontalDivider()
+
+        // ---- Physical keyboard & mouse (task 12) -----------------------------
+        Text("键鼠操作", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "接入物理鼠标与键盘：捕获指针后鼠标改用相对位移（可无限转动视角），" +
+                "左/右/中键与滚轮直接转发，按键连同物理扮描码一起交给游戏（GLFW 需要它来" +
+                "识别非美式键盘）。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = state.captured,
+                onCheckedChange = { viewModel.setPointerCapture(it) },
+                enabled = state.open,
+            )
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text("指针捕获", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (state.captured) "游戏接管光标，鼠标可无限转动视角" else "指针模式：光标可见、绝对坐标",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = state.inputSettings.hybridTouch,
+                onCheckedChange = { viewModel.setHybridTouch(it) },
+                enabled = state.open,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "触摸-鼠标混合（关闭后捕获时忽略手指，避免手掌误触转动视角）",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = state.sensitivity.invertY,
+                onCheckedChange = { viewModel.setInvertY(it) },
+                enabled = state.open,
+            )
+            Spacer(Modifier.width(12.dp))
+            Text("反转竖直方向", style = MaterialTheme.typography.bodyMedium)
+        }
+        Text(
+            "鼠标灵敏度：${state.sensitivity.label()}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Slider(
+            value = state.sensitivity.x.coerceIn(MIN_SENSITIVITY, MAX_SENSITIVITY),
+            onValueChange = { viewModel.setSensitivity(it) },
+            valueRange = MIN_SENSITIVITY..MAX_SENSITIVITY,
+            enabled = state.open,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (preset in SENSITIVITY_PRESETS) {
+                FilterChip(
+                    selected = state.sensitivity.isUniform &&
+                        state.sensitivity.xPermille == AwtMouseSensitivity.quantise(preset),
+                    onClick = { viewModel.setSensitivity(preset) },
+                    enabled = state.open,
+                    label = { Text(AwtMouseSensitivity.uniform(preset).label()) },
+                )
+            }
+        }
+        Text(
+            "按键映射：" + if (state.inputSettings.bindings.isEmpty) {
+                "未设置"
+            } else {
+                state.inputSettings.bindings.keys.entries
+                    .joinToString("、") { "${it.key} → ${it.value}" }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for ((from, to, label) in KEY_REMAP_PRESETS) {
+                FilterChip(
+                    selected = state.inputSettings.bindings.resolveKey(from) == to,
+                    onClick = {
+                        if (state.inputSettings.bindings.resolveKey(from) == to) {
+                            viewModel.unbindKey(from)
+                        } else {
+                            viewModel.bindKey(from, to)
+                        }
+                    },
+                    enabled = state.open,
+                    label = { Text(label) },
+                )
+            }
+            OutlinedButton(
+                onClick = { viewModel.clearBindings() },
+                enabled = state.open && !state.inputSettings.bindings.isEmpty,
+            ) { Text("清空映射") }
+        }
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                InfoRow("指针模式", state.inputSettings.pointerMode.label)
+                InfoRow(
+                    "游戏光标",
+                    "(${state.gameCursor.x}, ${state.gameCursor.y})" +
+                        if (state.captured) " · 自由移动" else "",
+                )
+                InfoRow("游戏输入通道", if (state.inputSettings.nativeInput) "已开启" else "已关闭")
+                InfoRow("滚轮倍率", "${state.inputSettings.scrollPermille / 1000f}×")
+            }
         }
 
         // ---- Fitting policy --------------------------------------------------
@@ -277,4 +394,24 @@ private val DESKTOP_PRESETS = listOf(
     854 to 480,
     1280 to 720,
     1920 to 1080,
+)
+
+/** Slider bounds for the mouse sensitivity — the range the core accepts. */
+private const val MIN_SENSITIVITY = AwtMouseSensitivity.MIN_PERMILLE / 1000f
+private const val MAX_SENSITIVITY = 5f
+
+/** One-tap sensitivity presets (the slider covers everything in between). */
+private val SENSITIVITY_PRESETS = listOf(0.5f, 1f, 1.5f, 2f, 3f)
+
+/**
+ * Ready-made key remaps for the cases players actually ask for (task 12).
+ *
+ * Each is `from → to` in the same vocabulary the control layouts use, so a remap
+ * set here also applies to an on-screen button bound to that key.
+ */
+private val KEY_REMAP_PRESETS = listOf(
+    Triple("key.keyboard.e", "key.keyboard.escape", "E → Esc"),
+    Triple("key.keyboard.caps.lock", "key.keyboard.left.shift", "Caps → Shift"),
+    Triple("key.keyboard.left.alt", "key.keyboard.left.control", "Alt → Ctrl"),
+    Triple("key.keyboard.f5", "key.keyboard.f3", "F5 → F3"),
 )

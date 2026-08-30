@@ -16,10 +16,26 @@
         android:supportsRtl="true"
         android:localeConfig="@xml/locales_config"
         android:theme="@style/Theme.RCLauncher">
+        <!--
+            Task 9 (screen-orientation adaptation):
+              * screenOrientation="user"   - rotation is allowed and the device
+                rotation lock is honoured; the launcher overrides this at runtime
+                with sensorLandscape / sensorPortrait when the user forces an
+                orientation (see MainActivity.applyOrientation).
+              * configChanges=...          - the Activity handles every geometry
+                change itself, so a rotation re-measures the Compose tree instead
+                of recreating the Activity: no screen state is lost and the
+                game / AWT surface keeps its coordinate space (which is what
+                prevents touch coordinates from drifting after a rotation).
+              * resizeableActivity="true"  - split screen / freeform windows are
+                measured the same way as a rotation (WindowSizeClass driven).
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden|keyboard|smallestScreenSize|locale|layoutDirection"
+            android:screenOrientation="user"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|uiMode|keyboardHidden|keyboard|navigation|touchscreen|fontScale|locale|layoutDirection"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

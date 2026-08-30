@@ -247,6 +247,34 @@ impl RcError {
             _ => None,
         }
     }
+
+    /// Mainland-China login fallback hint.
+    ///
+    /// Returns the i18n-resolved proxy / mirror suggestion when this error is a
+    /// network-level failure that could be caused by blocked / throttled access
+    /// to Microsoft / Xbox / Mojang (or the configured third-party auth server).
+    /// Returns `None` for non-network failures (e.g. a denied consent) so the UI
+    /// only shows the hint where it is actually actionable (task 10).
+    pub fn cn_login_fallback_hint(&self) -> Option<String> {
+        let key = crate::auth::CN_FALLBACK_HINT_KEY;
+        match self {
+            RcError::Network(_)
+            | RcError::Timeout(_)
+            | RcError::Connection(_)
+            | RcError::Offline(_)
+            | RcError::RateLimited { .. } => Some(crate::i18n::t(key)),
+            RcError::Auth(s) => {
+                // An auth error originally raised from a network failure keeps a
+                // "network error:" / "HTTP " marker in its message.
+                if s.contains("network error:") || s.starts_with("HTTP ") {
+                    Some(crate::i18n::t(key))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Map an `io::ErrorKind` to a [`ErrorSeverity`].
@@ -289,6 +317,37 @@ impl From<reqwest::Error> for RcError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cn_login_fallback_hint_network() {
+        // Network-level errors must surface the mainland-China proxy / mirror hint.
+        let rc = RcError::Network("connection refused".into());
+        let hint = rc.cn_login_fallback_hint();
+        assert!(hint.is_some());
+        let h = hint.unwrap();
+        assert!(h.contains("镜像") || h.contains("代理"));
+
+        // The same for timeout / connection / offline / rate-limited.
+        for rc in [
+            RcError::Timeout("t".into()),
+            RcError::Connection("c".into()),
+            RcError::Offline("o".into()),
+            RcError::RateLimited { retry_after: None },
+        ] {
+            assert!(rc.cn_login_fallback_hint().is_some(), "{rc:?}");
+        }
+    }
+
+    #[test]
+    fn cn_login_fallback_hint_not_for_auth_errors() {
+        // A normal auth error (bad credentials) must NOT show the network hint.
+        let rc = RcError::Auth("invalid_grant: bad credentials".into());
+        assert!(rc.cn_login_fallback_hint().is_none());
+
+        // But an auth error that wraps a network failure keeps the marker.
+        let rc2 = RcError::Auth("network error: dns timeout".into());
+        assert!(rc2.cn_login_fallback_hint().is_some());
+    }
 
     #[test]
     fn displays_io_error() {

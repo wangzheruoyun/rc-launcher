@@ -13,6 +13,7 @@ use crate::auth::microsoft::{self, DeviceCodeChallenge, DEFAULT_CLIENT_ID, DEFAU
 use crate::auth::model::{now_secs, Account};
 use crate::auth::offline::offline_account_model;
 use crate::auth::store::TokenStorage;
+use crate::auth::third_party::{self, ThirdPartyLogin, ThirdPartyServerInfo};
 use crate::auth::transport::{AuthTransport, ReqwestTransport};
 use crate::error::RcResult;
 
@@ -134,6 +135,26 @@ impl AccountManager {
         Ok(account)
     }
 
+    /// Step 1 of third-party login: discover the external auth server's metadata
+    /// (name, register links) so the UI can present it before the user types
+    /// credentials. Mirrors `begin_microsoft` but for an Authlib-Injector /
+    /// token-relay server the user provides.
+    pub async fn begin_third_party(&self, server_url: &str) -> RcResult<ThirdPartyServerInfo> {
+        let info = third_party::discover_server(self.transport.as_ref(), server_url).await?;
+        Ok(info)
+    }
+
+    /// Complete a third-party login: authenticate against the external auth
+    /// server / token relay and store the resulting account. `login` carries the
+    /// provider, server URL, username/password (or relay code).
+    pub async fn complete_third_party(&mut self, login: &ThirdPartyLogin) -> RcResult<Account> {
+        let acc = third_party::authenticate(self.transport.as_ref(), login).await?;
+        let account = Account::ThirdParty(acc);
+        self.accounts.push(account.clone());
+        self.persist()?;
+        Ok(account)
+    }
+
     /// Refresh a stored Microsoft account from its refresh token.
     pub async fn refresh(&mut self, uuid: &str) -> RcResult<Account> {
         let idx = self
@@ -141,16 +162,23 @@ impl AccountManager {
             .iter()
             .position(|a| a.uuid() == uuid)
             .ok_or_else(|| crate::error::RcError::Auth(format!("no account with uuid {uuid}")))?;
-        let ms = match &self.accounts[idx] {
-            Account::Microsoft(m) => m.clone(),
+        let acct = self.accounts[idx].clone();
+        let account = match acct {
+            Account::Microsoft(m) => {
+                let refreshed = microsoft::refresh_account(self.transport.as_ref(), &m).await?;
+                Account::Microsoft(refreshed)
+            }
+            Account::ThirdParty(tp) => {
+                let refreshed =
+                    third_party::refresh_third_party(self.transport.as_ref(), &tp).await?;
+                Account::ThirdParty(refreshed)
+            }
             Account::Offline(_) => {
                 return Err(crate::error::RcError::Auth(
                     "cannot refresh an offline account".into(),
                 ));
             }
         };
-        let refreshed = microsoft::refresh_account(self.transport.as_ref(), &ms).await?;
-        let account = Account::Microsoft(refreshed);
         self.accounts[idx] = account.clone();
         self.persist()?;
         Ok(account)
@@ -163,6 +191,7 @@ impl AccountManager {
         let needs = match self.find(uuid) {
             Some(Account::Microsoft(m)) => m.needs_refresh(now_secs(), REFRESH_THRESHOLD_SECS),
             Some(Account::Offline(_)) => false,
+            Some(Account::ThirdParty(tp)) => tp.is_expired(now_secs()),
             None => {
                 return Err(crate::error::RcError::Auth(format!(
                     "no account with uuid {uuid}"
@@ -181,6 +210,7 @@ impl AccountManager {
     pub fn is_expired(&self, uuid: &str) -> bool {
         match self.find(uuid) {
             Some(Account::Microsoft(m)) => m.is_expired(now_secs()),
+            Some(Account::ThirdParty(tp)) => tp.is_expired(now_secs()),
             _ => false,
         }
     }
@@ -326,6 +356,63 @@ mod tests {
         // Token is fresh (expires_in ~3600s) -> no refresh, name unchanged.
         let kept = mg.ensure_fresh(acc.uuid()).await.unwrap();
         assert_eq!(kept.username(), "Player");
+    }
+
+    #[tokio::test]
+    async fn third_party_add_and_list() {
+        let m = MockTransport::new();
+        m.script_ok(
+            microsoft::DEVICE_CODE_URL,
+            serde_json::json!({ "user_code": "X", "device_code": "dc", "verification_uri": "https://x", "expires_in": 1, "interval": 1, "message": "go" }),
+        );
+        m.script_ok(
+            "https://auth.example.com/authserver/authenticate",
+            serde_json::json!({
+                "accessToken": "AT",
+                "clientToken": "CT",
+                "selectedProfile": { "id": "b50ad385829d3141a2167e7d7539ba7f", "name": "Notch" }
+            }),
+        );
+        let mut mg = AccountManager::new(
+            Box::new(MemoryTokenStorage::new()),
+            Arc::new(m),
+            DEFAULT_CLIENT_ID,
+        )
+        .unwrap();
+        let login = ThirdPartyLogin::authlib_injector("https://auth.example.com", "Notch", "pw");
+        let acc = mg.complete_third_party(&login).await.unwrap();
+        assert_eq!(acc.uuid(), "b50ad385-829d-3141-a216-7e7d7539ba7f");
+        assert_eq!(acc.username(), "Notch");
+        assert_eq!(mg.accounts().len(), 1);
+        assert!(matches!(mg.accounts()[0], Account::ThirdParty(_)));
+        // summaries must redact the access token.
+        if let Account::ThirdParty(tp) = &mg.summaries()[0] {
+            assert_eq!(tp.access_token, "");
+        } else {
+            panic!("expected a third-party account in summaries");
+        }
+    }
+
+    #[tokio::test]
+    async fn third_party_begin_discovers_metadata() {
+        let m = MockTransport::new();
+        m.script_ok(
+            "https://auth.example.com",
+            serde_json::json!({ "name": "Example Auth", "meta": { "links": { "register": "https://auth.example.com/reg" } } }),
+        );
+        let mg = AccountManager::new(
+            Box::new(MemoryTokenStorage::new()),
+            Arc::new(m),
+            DEFAULT_CLIENT_ID,
+        )
+        .unwrap();
+        let info = mg
+            .begin_third_party("https://auth.example.com")
+            .await
+            .unwrap();
+        assert_eq!(info.server_name, "Example Auth");
+        assert_eq!(info.links.len(), 1);
+        assert_eq!(info.links[0].label, "register");
     }
 
     #[test]

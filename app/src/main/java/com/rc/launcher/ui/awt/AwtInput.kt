@@ -23,6 +23,32 @@ enum class AwtPointerPhase(val id: String) {
     UP("up"),
 }
 
+/**
+ * Which device produced a pointer sample (task 12).
+ *
+ * The core needs it for two decisions: a finger is filtered out while the pointer
+ * is captured unless the player asked for the mixed touch+mouse mode, and only a
+ * non-captured sample may place the game's cursor absolutely.
+ *
+ * Mirrors `launch::input::PointerSource`; ids must stay identical
+ * (`scripts/check_awt_wire.py` compares them).
+ */
+enum class AwtPointerSource(val id: String) {
+    TOUCH("touch"),
+    MOUSE("mouse"),
+    STYLUS("stylus"),
+    ;
+
+    /** Whether the device has a hover position (so relative motion applies). */
+    val isMouseLike: Boolean get() = this != TOUCH
+
+    companion object {
+        /** Parse an id; anything unknown degrades to [TOUCH], as the core does. */
+        fun fromId(id: String?): AwtPointerSource =
+            AwtPointerSource.entries.firstOrNull { it.id == id } ?: TOUCH
+    }
+}
+
 /** Mouse buttons in `java.awt.event.MouseEvent.BUTTON*` numbering. */
 enum class AwtMouseButton(val id: String, val number: Int) {
     /** Left click / a single-finger tap. */
@@ -52,6 +78,8 @@ data class AwtPointerEvent(
     val x: Float,
     val y: Float,
     val button: AwtMouseButton = AwtMouseButton.LEFT,
+    /** Which device produced it (task 12); the core filters on this. */
+    val source: AwtPointerSource = AwtPointerSource.TOUCH,
 ) : AwtInputEvent {
     override fun toJson(): JsonValue = JsonValue.Obj(
         linkedMapOf(
@@ -60,11 +88,94 @@ data class AwtPointerEvent(
             "x" to num(x),
             "y" to num(y),
             "button" to JsonValue.Str(button.id),
+            "source" to JsonValue.Str(source.id),
         ),
     )
 }
 
-/** A scroll gesture in surface pixels (`ticks > 0` scrolls away from the user). */
+/**
+ * *Relative* motion from a physical mouse (task 12).
+ *
+ * Once Android captures the pointer (`View.requestPointerCapture`) it reports how
+ * far the mouse moved, not where it is — there is no "where" any more, which is
+ * exactly what lets the view keep turning past the edge of the screen. The core
+ * scales the delta by the player's sensitivity, remembers the sub-pixel
+ * remainder, and drives both the AWT pointer and the game's own cursor with it.
+ */
+data class AwtRelativePointerEvent(
+    val dx: Float,
+    val dy: Float,
+    val source: AwtPointerSource = AwtPointerSource.MOUSE,
+) : AwtInputEvent {
+    override fun toJson(): JsonValue = JsonValue.Obj(
+        linkedMapOf(
+            "type" to JsonValue.Str("pointer_relative"),
+            "dx" to num(dx),
+            "dy" to num(dy),
+            "source" to JsonValue.Str(source.id),
+        ),
+    )
+}
+
+/**
+ * A mouse button press / release **at the current pointer position** (task 12).
+ *
+ * A captured mouse has no surface position to report — that is what capturing
+ * means — so its clicks have to land wherever the virtual pointer is. The core
+ * owns that position, which is why this event carries no coordinates at all.
+ */
+data class AwtButtonEvent(
+    val button: AwtMouseButton,
+    val down: Boolean,
+) : AwtInputEvent {
+    override fun toJson(): JsonValue = JsonValue.Obj(
+        linkedMapOf(
+            "type" to JsonValue.Str("button"),
+            "button" to JsonValue.Str(button.id),
+            "down" to JsonValue.Bool(down),
+        ),
+    )
+}
+
+/**
+ * A wheel scroll at the current pointer position (task 12).
+ *
+ * The captured-pointer sibling of [AwtScrollEvent]: same sign convention, no
+ * coordinates.
+ */
+data class AwtScrollAtPointerEvent(val ticks: Int) : AwtInputEvent {
+    override fun toJson(): JsonValue = JsonValue.Obj(
+        linkedMapOf(
+            "type" to JsonValue.Str("scroll"),
+            "ticks" to JsonValue.Num(ticks.toDouble()),
+        ),
+    )
+}
+
+/**
+ * The pointer was captured or released (task 12).
+ *
+ * Capturing tells the game it owns the cursor (`ANDROID_TYPE_GRAB_STATE`), which
+ * is what makes Minecraft hide the crosshair-less system pointer and start
+ * treating motion as "look around".
+ */
+data class AwtCaptureEvent(val captured: Boolean) : AwtInputEvent {
+    override fun toJson(): JsonValue = JsonValue.Obj(
+        linkedMapOf(
+            "type" to JsonValue.Str("capture"),
+            "captured" to JsonValue.Bool(captured),
+        ),
+    )
+}
+
+/**
+ * A scroll gesture in surface pixels.
+ *
+ * `ticks > 0` is *toward* the user ("scroll down"), the sign
+ * `java.awt.event.MouseWheelEvent.getWheelRotation()` and Compose's
+ * `scrollDelta.y` both use. GLFW is the odd one out and the core negates it
+ * there, so the UI never has to think about it.
+ */
 data class AwtScrollEvent(val x: Float, val y: Float, val ticks: Int) : AwtInputEvent {
     override fun toJson(): JsonValue = JsonValue.Obj(
         linkedMapOf(
@@ -86,6 +197,15 @@ data class AwtKeyEvent(
     val down: Boolean,
     val code: Int? = null,
     val name: String? = null,
+    /**
+     * The **physical** scancode, when Android reported one (task 12).
+     *
+     * `KeyEvent.getScanCode()` is the Linux evdev code, which is exactly what
+     * `GLFWKeyCallback` takes — Minecraft falls back to it for every key its own
+     * enumeration does not cover, so forwarding it verbatim is what makes a
+     * non-US layout usable. `null` / `0` lets the core fill it in from its table.
+     */
+    val scancode: Int? = null,
 ) : AwtInputEvent {
     init {
         require(code != null || !name.isNullOrBlank()) { "a key event needs a code or a name" }
@@ -100,6 +220,7 @@ data class AwtKeyEvent(
         } else {
             entries["name"] = JsonValue.Str(name.orEmpty())
         }
+        scancode?.takeIf { it > 0 }?.let { entries["scancode"] = JsonValue.Num(it.toDouble()) }
         return JsonValue.Obj(entries)
     }
 }

@@ -12,6 +12,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum AccountKind {
     Microsoft,
     Offline,
+    /// A third-party account (external Yggdrasil auth server / token relay).
+    ThirdParty,
 }
 
 impl AccountKind {
@@ -19,6 +21,7 @@ impl AccountKind {
         match self {
             AccountKind::Microsoft => "microsoft",
             AccountKind::Offline => "offline",
+            AccountKind::ThirdParty => "thirdparty",
         }
     }
 }
@@ -86,6 +89,75 @@ pub struct OfflineAccount {
     pub username: String,
 }
 
+/// Which kind of third-party authentication backs a [`ThirdPartyAccount`].
+///
+/// External Yggdrasil auth servers (Authlib-Injector compatible) and
+/// third-party Microsoft-OAuth token relays are the two flavours used by
+/// mainland-China players when Microsoft / Xbox services are unreachable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThirdPartyProvider {
+    /// An external Yggdrasil auth server (Authlib-Injector compatible).
+    AuthlibInjector,
+    /// A third-party Microsoft-OAuth token relay (brokers a Minecraft token
+    /// from a third-party identity).
+    TokenRelay,
+}
+
+/// A third-party (external auth server / token relay) account.
+///
+/// The access token is what the game receives (through the authlib-injector
+/// agent at launch for Authlib-Injector, or directly for a token relay). The
+/// `server_url` is the auth server base handed to authlib-injector; `relay_payload`
+/// holds the opaque third-party code for a [`ThirdPartyProvider::TokenRelay`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ThirdPartyAccount {
+    /// Game profile UUID (the game login identity). Normalised to dashed form.
+    pub uuid: String,
+    /// Game profile name (the in-game username).
+    pub username: String,
+    /// Which kind of provider backs this account.
+    pub provider: ThirdPartyProvider,
+    /// Auth server base URL (handed to authlib-injector at launch).
+    pub server_url: String,
+    /// Human-friendly server name (from metadata, or the host).
+    pub server_name: String,
+    /// Yggdrasil / relay access token used by the game to log in.
+    pub access_token: String,
+    /// Yggdrasil client token (stable across refreshes; empty for token relays).
+    pub client_token: String,
+    /// Unix epoch seconds when `access_token` expires (0 = unknown / no expiry
+    /// reported by the server).
+    pub expires_at: u64,
+    /// Opaque third-party code for a token relay (so a relay refresh is possible).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_payload: Option<String>,
+}
+
+impl ThirdPartyAccount {
+    /// True when the access token is missing or (when the server reports one)
+    /// past its expiry.
+    pub fn is_expired(&self, now: u64) -> bool {
+        self.access_token.is_empty() || (self.expires_at > 0 && now >= self.expires_at)
+    }
+
+    /// Build a redacted clone that never hits disk / crosses the FFI boundary
+    /// with live secrets.
+    pub fn summary(&self) -> ThirdPartyAccount {
+        ThirdPartyAccount {
+            uuid: self.uuid.clone(),
+            username: self.username.clone(),
+            provider: self.provider,
+            server_url: self.server_url.clone(),
+            server_name: self.server_name.clone(),
+            access_token: String::new(),
+            client_token: String::new(),
+            expires_at: self.expires_at,
+            relay_payload: None,
+        }
+    }
+}
+
 /// A unified account: either Microsoft-authenticated or offline.
 ///
 /// Serialised with a `type` tag (`"microsoft"` / `"offline"`) so the stored
@@ -95,6 +167,8 @@ pub struct OfflineAccount {
 pub enum Account {
     Microsoft(MicrosoftAccount),
     Offline(OfflineAccount),
+    /// A third-party (external auth server / token relay) account.
+    ThirdParty(ThirdPartyAccount),
 }
 
 impl Account {
@@ -102,6 +176,7 @@ impl Account {
         match self {
             Account::Microsoft(_) => AccountKind::Microsoft,
             Account::Offline(_) => AccountKind::Offline,
+            Account::ThirdParty(_) => AccountKind::ThirdParty,
         }
     }
 
@@ -109,6 +184,7 @@ impl Account {
         match self {
             Account::Microsoft(a) => &a.uuid,
             Account::Offline(a) => &a.uuid,
+            Account::ThirdParty(a) => &a.uuid,
         }
     }
 
@@ -116,6 +192,7 @@ impl Account {
         match self {
             Account::Microsoft(a) => &a.username,
             Account::Offline(a) => &a.username,
+            Account::ThirdParty(a) => &a.username,
         }
     }
 
@@ -124,6 +201,7 @@ impl Account {
         match self {
             Account::Microsoft(a) => Account::Microsoft(a.summary()),
             Account::Offline(a) => Account::Offline(a.clone()),
+            Account::ThirdParty(a) => Account::ThirdParty(a.summary()),
         }
     }
 }

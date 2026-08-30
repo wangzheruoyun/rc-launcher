@@ -42,12 +42,17 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+use crate::display::{rotation_flips, ScreenOrientation};
 use crate::error::{RcError, RcResult};
 use crate::launch::awt::{
     encode_control_reply, event_id, now_millis, AwtBackend, AwtCanvas, AwtControl, AwtControlKind,
     AwtEvent, AwtEventRecord, AwtFrame, AwtInputTranslator, AwtReplyKind, CursorKind, MouseButton,
     PointerPhase, Rect, ScaleMode, Viewport, CONTROL_MAGIC, EVENT_RECORD_LEN, FRAME_HEADER_LEN,
     MAX_CANVAS_DIM, MAX_CONTROL_TEXT, OPAQUE_BLACK,
+};
+use crate::launch::input::{
+    self, glfw_key_for_vk, GameInputEvent, GameInputStats, GameInputTranslator, InputSettings,
+    MouseMotion, MouseSensitivity, PointerMode, PointerSource,
 };
 use crate::launch::options::WindowSize;
 use crate::runtime::JavaVersion;
@@ -187,6 +192,9 @@ pub struct SessionStats {
     pub screen_resizes: u64,
     /// How often the Compose surface changed size.
     pub surface_resizes: u64,
+    /// How many of those resizes were a real rotation (landscape ⇄ portrait),
+    /// each of which dropped the in-flight gesture (task 9).
+    pub surface_rotations: u64,
     /// Control messages accepted from the JVM.
     pub controls_accepted: u64,
     /// Control messages rejected (unknown / inconsistent arguments).
@@ -197,6 +205,11 @@ pub struct SessionStats {
     pub screens_adopted: u64,
     /// Clipboard answers handed back to the JVM.
     pub clipboard_answers: u64,
+    /// Pointer samples refused because the device is filtered out right now
+    /// (a palm on the screen while the mouse owns the pointer, task 12).
+    pub input_filtered: u64,
+    /// Native (`CallbackBridge`) records queued for the game (task 12).
+    pub native_events_queued: u64,
 }
 
 // ===========================================================================
@@ -323,6 +336,15 @@ pub struct AwtSession {
     /// Recycled RGBA framebuffers for the render hot path (task 25 — object
     /// pool so the Compose blit does not allocate a fresh `Vec<u8>` per frame).
     frame_pool: BufPool,
+    /// Physical keyboard / mouse settings: pointer mode, sensitivity, hybrid
+    /// touch, key + button remapping (task 12).
+    input: InputSettings,
+    /// Sub-pixel accumulator for relative (captured) pointer motion (task 12).
+    motion: MouseMotion,
+    /// The game's *own* input path: GLFW / `CallbackBridge` events, so a physical
+    /// keyboard and mouse reach Minecraft itself and not only its Swing dialogs
+    /// (task 12).
+    game: GameInputTranslator,
 }
 
 /// A pooled RGBA framebuffer handed to the renderer (task 25).
@@ -375,7 +397,12 @@ impl AwtSession {
         let config = config.sanitized();
         let canvas = AwtCanvas::new(config.screen.width, config.screen.height)?;
         Ok(Self {
-            translator: AwtInputTranslator::new().with_click_slop(config.click_slop),
+            translator: AwtInputTranslator::new()
+                .with_click_slop(config.click_slop)
+                .with_bounds(config.screen.width, config.screen.height),
+            input: InputSettings::new(),
+            motion: MouseMotion::default(),
+            game: GameInputTranslator::new(config.screen.width, config.screen.height),
             canvas,
             outbox: VecDeque::new(),
             stats: SessionStats::default(),
@@ -434,14 +461,44 @@ impl AwtSession {
     ///
     /// This never touches the desktop: AWT keeps painting at its own resolution
     /// and only the letterboxing changes, so no frame is lost on a rotation.
+    ///
+    /// A **rotation** (landscape ⇄ portrait, task 9) additionally invalidates
+    /// every in-flight gesture: the pointer coordinates the UI already sent were
+    /// sampled against the *old* viewport, the letterbox bars have moved, and the
+    /// finger is physically somewhere else. Silently continuing the drag with the
+    /// new mapping is exactly the "input lands in the wrong place after
+    /// rotating" bug, so the held buttons/modifiers are released instead — the
+    /// same policy [`Self::resize_screen`] already applies to a desktop resize.
+    /// Growing or shrinking *inside* one orientation (soft keyboard, split
+    /// screen, foldable hinge) keeps the gesture alive.
     pub fn set_surface_size(&mut self, width: u32, height: u32) -> RcResult<()> {
         let next = clamp_size(WindowSize { width, height });
         if next == self.config.surface {
             return Ok(());
         }
+        let rotated = rotation_flips(
+            (self.config.surface.width, self.config.surface.height),
+            (next.width, next.height),
+        );
         self.config.surface = next;
         self.stats.surface_resizes += 1;
+        if rotated {
+            self.stats.surface_rotations += 1;
+            let releases = self.translator.release_all();
+            self.enqueue(releases);
+        }
         Ok(())
+    }
+
+    /// Orientation of the Compose surface (task 9 diagnostics).
+    pub fn surface_orientation(&self) -> ScreenOrientation {
+        ScreenOrientation::of(self.config.surface.width, self.config.surface.height)
+    }
+
+    /// Orientation of the virtual AWT desktop.
+    pub fn screen_orientation(&self) -> ScreenOrientation {
+        let (w, h) = self.canvas.size();
+        ScreenOrientation::of(w, h)
     }
 
     /// Change the fitting policy (stretch / fit / crop / 1:1).
@@ -469,6 +526,12 @@ impl AwtSession {
             height: next.height,
         });
         self.enqueue(resize);
+        // Task 12: the pointer bound and the game's framebuffer follow the
+        // desktop, or a captured mouse would keep hitting an invisible wall (and
+        // the game would keep rendering for the old size).
+        self.translator.set_bounds(next.width, next.height);
+        let native = self.game.set_framebuffer(next.width, next.height);
+        self.enqueue_game(native);
         Ok(())
     }
 
@@ -623,33 +686,154 @@ impl AwtSession {
         surface_y: f32,
         button: MouseButton,
     ) -> usize {
+        self.pointer_from(phase, surface_x, surface_y, button, PointerSource::Touch)
+    }
+
+    /// A pointer event that knows which *device* produced it (task 12).
+    ///
+    /// The device matters twice: a touch is filtered out while the pointer is
+    /// captured unless the user asked for the mixed mode
+    /// ([`InputSettings::hybrid_touch`]), and only a non-captured sample may place
+    /// the game's cursor absolutely — while captured, the game owns it and an
+    /// absolute jump would snap the view.
+    pub fn pointer_from(
+        &mut self,
+        phase: PointerPhase,
+        surface_x: f32,
+        surface_y: f32,
+        button: MouseButton,
+        source: PointerSource,
+    ) -> usize {
+        if !self.input.accepts(source) {
+            self.stats.input_filtered += 1;
+            return 0;
+        }
+        let button = self.input.bindings.resolve_button(button);
         let viewport = self.viewport();
         let records = self
             .translator
             .pointer_from_surface(&viewport, surface_x, surface_y, phase, button);
-        self.enqueue(records)
+        if records.is_empty() {
+            return 0;
+        }
+        let queued = self.enqueue(records);
+        let (px, py) = self.translator.pointer();
+        let mut native = Vec::new();
+        if !self.game.is_grabbed() {
+            native.extend(self.game.move_to(px, py));
+        }
+        match phase {
+            PointerPhase::Down => native.extend(self.game.button(button, true)),
+            PointerPhase::Up => native.extend(self.game.button(button, false)),
+            PointerPhase::Move => {}
+        }
+        queued + self.enqueue_game(native)
     }
 
-    /// A scroll gesture in surface coordinates (`ticks > 0` scrolls away).
+    /// Relative pointer motion from a *physical* mouse (task 12).
+    ///
+    /// This is the captured-pointer path: Android reports how far the mouse
+    /// moved, not where it is. The delta is scaled by the user's sensitivity,
+    /// sub-pixel remainders are remembered, and the result drives *both* the AWT
+    /// pointer (so a Swing dialog stays usable) and the game's own cursor (so
+    /// looking around works).
+    pub fn pointer_relative(&mut self, dx: f32, dy: f32, source: PointerSource) -> usize {
+        if !self.input.accepts(source) {
+            self.stats.input_filtered += 1;
+            return 0;
+        }
+        let sensitivity = self.input.sensitivity;
+        let (step_x, step_y) = self.motion.step(&sensitivity, dx, dy);
+        if step_x == 0 && step_y == 0 {
+            return 0;
+        }
+        let records = self.translator.move_pointer_by(step_x, step_y);
+        let queued = self.enqueue(records);
+        let native = if self.game.is_grabbed() {
+            self.game.move_by(step_x, step_y)
+        } else {
+            let (px, py) = self.translator.pointer();
+            self.game.move_to(px, py)
+        };
+        queued + self.enqueue_game(native)
+    }
+
+    /// A button press / release **at the current pointer position** (task 12).
+    ///
+    /// A captured mouse has no surface position to report — that is the whole
+    /// point of capturing it — so a click has to happen wherever the virtual
+    /// pointer currently is.
+    pub fn button(&mut self, button: MouseButton, down: bool) -> usize {
+        let button = self.input.bindings.resolve_button(button);
+        let (x, y) = self.translator.pointer();
+        let (x, y) = (x.max(0) as u32, y.max(0) as u32);
+        let records = self.translator.translate(if down {
+            AwtEvent::PointerDown { x, y, button }
+        } else {
+            AwtEvent::PointerUp { x, y, button }
+        });
+        let queued = self.enqueue(records);
+        let native = self.game.button(button, down);
+        queued + self.enqueue_game(native)
+    }
+
+    /// A wheel scroll at the current pointer position (task 12).
+    pub fn scroll_at_pointer(&mut self, ticks: i32) -> usize {
+        let ticks = self.input.scale_scroll(ticks);
+        if ticks == 0 {
+            return 0;
+        }
+        let (x, y) = self.translator.pointer();
+        let records = self.translator.translate(AwtEvent::Scroll {
+            x: x.max(0) as u32,
+            y: y.max(0) as u32,
+            ticks,
+        });
+        let queued = self.enqueue(records);
+        let native = self.game.scroll(0, ticks.saturating_mul(-1000));
+        queued + self.enqueue_game(native)
+    }
+
+    /// A scroll gesture in surface coordinates.
+    ///
+    /// `ticks > 0` is "toward the user" — the sign `java.awt.event.MouseWheelEvent`
+    /// and Compose both use. GLFW is the odd one out (its `yoffset` is positive
+    /// *away* from the user), so the native record carries the negated value.
     pub fn scroll(&mut self, surface_x: f32, surface_y: f32, ticks: i32) -> usize {
         let viewport = self.viewport();
         let Some((x, y)) = viewport.map_pointer(surface_x, surface_y) else {
             return 0;
         };
+        let ticks = self.input.scale_scroll(ticks);
+        if ticks == 0 {
+            return 0;
+        }
         let records = self.translator.translate(AwtEvent::Scroll { x, y, ticks });
-        self.enqueue(records)
+        let queued = self.enqueue(records);
+        let native = self.game.scroll(0, ticks.saturating_mul(-1000));
+        queued + self.enqueue_game(native)
     }
 
     /// Press a key by `VK_*` code.
     pub fn key_down(&mut self, code: i32) -> usize {
         let records = self.translator.translate(AwtEvent::KeyDown { code });
-        self.enqueue(records)
+        let queued = self.enqueue(records);
+        let native = match glfw_key_for_vk(code) {
+            Some(key) => self.game.key(key, 0, true),
+            None => Vec::new(),
+        };
+        queued + self.enqueue_game(native)
     }
 
     /// Release a key by `VK_*` code.
     pub fn key_up(&mut self, code: i32) -> usize {
         let records = self.translator.translate(AwtEvent::KeyUp { code });
-        self.enqueue(records)
+        let queued = self.enqueue(records);
+        let native = match glfw_key_for_vk(code) {
+            Some(key) => self.game.key(key, 0, false),
+            None => Vec::new(),
+        };
+        queued + self.enqueue_game(native)
     }
 
     /// Press a key by *name* (`"escape"`, `"key.keyboard.left.shift"`, …).
@@ -657,31 +841,73 @@ impl AwtSession {
     /// Unknown names degrade to typed text when they are a single character, so
     /// a control layout with an exotic binding still reaches the game.
     pub fn key_down_named(&mut self, name: &str) -> usize {
-        match self.translator.press_named(name) {
-            Some(records) => self.enqueue(records),
-            None => self.type_fallback(name),
-        }
+        self.key_named(name, None, true)
     }
 
     /// Release a key by name (unknown names are a no-op: nothing was pressed).
     pub fn key_up_named(&mut self, name: &str) -> usize {
-        match self.translator.release_named(name) {
-            Some(records) => self.enqueue(records),
-            None => 0,
+        self.key_named(name, None, false)
+    }
+
+    /// Press / release a named key, forwarding the **physical scancode** (task 12).
+    ///
+    /// `KeyEvent.getScanCode()` on Android is the Linux evdev code — exactly what
+    /// `GLFWKeyCallback` wants — so the UI passes it straight through and the core
+    /// only fills in the blanks for synthetic presses ([`scancode_for_glfw_key`]).
+    /// User remapping ([`InputBindings`]) is applied here, once, for both the AWT
+    /// and the native path.
+    ///
+    /// [`scancode_for_glfw_key`]: crate::launch::input::scancode_for_glfw_key
+    pub fn key_named(&mut self, name: &str, scancode: Option<i32>, down: bool) -> usize {
+        let resolved = self.input.bindings.resolve_key(name);
+        let awt = if down {
+            self.translator.press_named(&resolved)
+        } else {
+            self.translator.release_named(&resolved)
+        };
+        let native = self.game.key_named(&resolved, scancode, down);
+        match (awt, native) {
+            (None, None) => {
+                // Neither AWT nor GLFW knows this name: a single character can
+                // still be typed, anything else is simply refused.
+                if down {
+                    self.type_fallback(&resolved)
+                } else {
+                    0
+                }
+            }
+            (awt, native) => {
+                let queued = awt.map(|records| self.enqueue(records)).unwrap_or(0);
+                queued + native.map(|e| self.enqueue_game(e)).unwrap_or(0)
+            }
         }
     }
 
     /// Commit text from the soft keyboard / IME as `KEY_TYPED` records.
     pub fn type_text(&mut self, text: &str) -> usize {
         let records = self.translator.type_str(text);
-        self.enqueue(records)
+        let queued = self.enqueue(records);
+        let mut native = Vec::new();
+        for ch in text.chars() {
+            native.extend(self.game.character(ch));
+        }
+        queued + self.enqueue_game(native)
     }
 
     /// The canvas gained or lost focus. Losing focus releases everything held.
     pub fn set_focus(&mut self, gained: bool) -> usize {
         self.focused = gained;
         let records = self.translator.translate(AwtEvent::Focus { gained });
-        self.enqueue(records)
+        let queued = self.enqueue(records);
+        let mut native = Vec::new();
+        if !gained {
+            // The single most reported "the game is possessed" bug: the app goes
+            // to the background with W held and Steve keeps walking.
+            native.extend(self.game.release_all());
+            self.motion.reset();
+        }
+        native.extend(self.game.set_inside(gained));
+        queued + self.enqueue_game(native)
     }
 
     /// Whether the canvas currently has focus.
@@ -692,6 +918,128 @@ impl AwtSession {
     /// Release every held button / modifier (app went to the background).
     pub fn release_all(&mut self) -> usize {
         let records = self.translator.release_all();
+        let queued = self.enqueue(records);
+        let native = self.game.release_all();
+        self.motion.reset();
+        queued + self.enqueue_game(native)
+    }
+
+    // ---- Physical keyboard & mouse (task 12) --------------------------------
+
+    /// The physical-input settings in force (sensitivity, capture, remapping).
+    pub fn input_settings(&self) -> &InputSettings {
+        &self.input
+    }
+
+    /// Replace the physical-input settings, applying a capture change.
+    pub fn set_input_settings(&mut self, settings: InputSettings) -> usize {
+        let settings = settings.sanitized();
+        let mode_changed = settings.pointer_mode != self.input.pointer_mode;
+        self.input = settings;
+        if mode_changed {
+            let mode = self.input.pointer_mode;
+            self.apply_pointer_mode(mode)
+        } else {
+            0
+        }
+    }
+
+    /// Apply a *partial* JSON settings update (`awtConfigure`).
+    ///
+    /// Returns the records queued plus a note per member that was ignored, so the
+    /// UI can say "this binding is stale" instead of silently dropping it.
+    pub fn apply_input_json(&mut self, value: &serde_json::Value) -> (usize, Vec<String>) {
+        let before = self.input.pointer_mode;
+        let notes = self.input.apply_json(value);
+        let queued = if self.input.pointer_mode != before {
+            let mode = self.input.pointer_mode;
+            self.apply_pointer_mode(mode)
+        } else {
+            0
+        };
+        (queued, notes)
+    }
+
+    /// Capture or release the pointer (`GLFW_CURSOR_DISABLED` ⇄ normal).
+    pub fn set_capture(&mut self, captured: bool) -> usize {
+        self.set_pointer_mode(if captured {
+            PointerMode::Captured
+        } else {
+            PointerMode::Absolute
+        })
+    }
+
+    /// Switch pointer mode; a no-op (and no records) when it already holds.
+    pub fn set_pointer_mode(&mut self, mode: PointerMode) -> usize {
+        if self.input.pointer_mode == mode {
+            return 0;
+        }
+        self.input.pointer_mode = mode;
+        self.apply_pointer_mode(mode)
+    }
+
+    /// Whether the pointer is currently captured.
+    pub fn is_captured(&self) -> bool {
+        self.input.pointer_mode.is_captured()
+    }
+
+    /// Pointer sensitivity (per-mille, integer, `Eq`-comparable).
+    pub fn sensitivity(&self) -> MouseSensitivity {
+        self.input.sensitivity
+    }
+
+    /// Set the pointer sensitivity, clamped into its legal range.
+    pub fn set_sensitivity(&mut self, sensitivity: MouseSensitivity) {
+        self.input.sensitivity = sensitivity.sanitized();
+        // A changed factor invalidates the remembered sub-pixel remainder.
+        self.motion.reset();
+    }
+
+    /// Remap one key onto another (both in the task-15 key vocabulary).
+    pub fn bind_key(&mut self, from: &str, to: &str) -> RcResult<()> {
+        self.input.bindings.bind_key(from, to)
+    }
+
+    /// Remap one mouse button onto another (left-handed use).
+    pub fn bind_button(&mut self, from: MouseButton, to: MouseButton) {
+        self.input.bindings.bind_button(from, to);
+    }
+
+    /// Drop every remap.
+    pub fn clear_bindings(&mut self) {
+        self.input.bindings.clear();
+    }
+
+    /// Cursor position the *game* sees, in window pixels (free-running while the
+    /// pointer is captured — see [`GameInputTranslator`]).
+    pub fn game_cursor(&self) -> (i32, i32) {
+        self.game.cursor()
+    }
+
+    /// Counters of the native input path.
+    pub fn game_input_stats(&self) -> GameInputStats {
+        self.game.stats()
+    }
+
+    fn apply_pointer_mode(&mut self, mode: PointerMode) -> usize {
+        self.motion.reset();
+        // Switching modes must not leave a button held from the other one: the
+        // gesture that was in flight cannot be continued with a different pointer
+        // model (and a stuck button would keep mining).
+        let releases = self.translator.release_all();
+        let mut queued = self.enqueue(releases);
+        let mut native = self.game.release_all();
+        native.extend(self.game.set_grab(mode.is_captured()));
+        queued += self.enqueue_game(native);
+        queued
+    }
+
+    fn enqueue_game(&mut self, events: Vec<GameInputEvent>) -> usize {
+        if events.is_empty() || !self.input.native_input {
+            return 0;
+        }
+        self.stats.native_events_queued += events.len() as u64;
+        let records = input::to_records(&events);
         self.enqueue(records)
     }
 
@@ -726,6 +1074,10 @@ impl AwtSession {
     /// pixels so the UI does not flash.
     pub fn reset_input(&mut self) {
         self.translator.reset();
+        self.translator
+            .set_bounds(self.canvas.width(), self.canvas.height());
+        self.game.reset();
+        self.motion.reset();
         self.outbox.clear();
     }
 
@@ -880,6 +1232,7 @@ impl AwtSession {
             "backend": self.config.backend.id(),
             "screen": { "width": self.canvas.width(), "height": self.canvas.height() },
             "surface": { "width": sw, "height": sh },
+            "orientation": self.surface_orientation().id(),
             "scale_mode": self.config.scale_mode,
             "placement": { "x": p.x, "y": p.y, "width": p.width, "height": p.height },
             "focused": self.focused,
@@ -890,6 +1243,8 @@ impl AwtSession {
             "canvas": self.canvas.stats_json(),
             "control": self.control.to_json(),
             "pending_controls": self.control_inbox.len(),
+            "input": self.input.to_json(),
+            "game_input": self.game.to_json(),
             "session": {
                 "frames_accepted": self.stats.frames_accepted,
                 "frames_rejected": self.stats.frames_rejected,
@@ -898,11 +1253,14 @@ impl AwtSession {
                 "events_dropped": self.stats.events_dropped,
                 "screen_resizes": self.stats.screen_resizes,
                 "surface_resizes": self.stats.surface_resizes,
+                "surface_rotations": self.stats.surface_rotations,
                 "controls_accepted": self.stats.controls_accepted,
                 "controls_rejected": self.stats.controls_rejected,
                 "controls_dropped": self.stats.controls_dropped,
                 "screens_adopted": self.stats.screens_adopted,
                 "clipboard_answers": self.stats.clipboard_answers,
+                "input_filtered": self.stats.input_filtered,
+                "native_events_queued": self.stats.native_events_queued,
             },
         })
     }
@@ -1098,7 +1456,7 @@ impl AwtSession {
             matches!(
                 r.id,
                 event_id::MOUSE_MOVED | event_id::MOUSE_DRAGGED | event_id::MOUSE_WHEEL
-            )
+            ) || GameInputEvent::from_record(r).is_some_and(|e| e.is_motion())
         });
         // Control records (a chunked clipboard answer) are only meaningful as a
         // whole run, and a JVM thread may be *blocked* waiting for them: shed
@@ -1401,8 +1759,9 @@ impl<W: Write> AwtEventWriter<W> {
 mod tests {
     use super::*;
     use crate::launch::awt::{
-        cursor_type, decode_control_reply, mask, vk, AwtReplyKind, PixelFormat,
+        cursor_type, decode_control_reply, mask, vk, vk_for_key, AwtReplyKind, PixelFormat,
     };
+    use crate::launch::input::{game_event, glfw};
     use std::io::Cursor;
 
     fn size(width: u32, height: u32) -> WindowSize {
@@ -1414,8 +1773,455 @@ mod tests {
         AwtSession::open(AwtSessionConfig::new(size(320, 240), size(640, 480))).unwrap()
     }
 
+    /// A 320×240 desktop shown on a 1080×2400 **portrait** phone surface
+    /// (the starting point of every rotation test, task 9).
+    fn portrait_session() -> AwtSession {
+        AwtSession::open(AwtSessionConfig::new(size(320, 240), size(1080, 2400))).unwrap()
+    }
+
+    /// The same session with the *native* (task 12) input path switched off.
+    ///
+    /// Every test that asserts on the exact AWT record stream uses this one: with
+    /// the native path on, one gesture legitimately produces two records (one for
+    /// `EventQueue.postEvent`, one for `CallbackBridge`), and mixing both
+    /// contracts into one assertion would only make the failure harder to read.
+    fn awt_session() -> AwtSession {
+        awt_only(session())
+    }
+
+    fn awt_only(mut session: AwtSession) -> AwtSession {
+        let mut settings = session.input_settings().clone();
+        settings.native_input = false;
+        session.set_input_settings(settings);
+        session
+    }
+
     fn full_frame(seq: u32, w: u32, h: u32, argb: u32) -> AwtFrame {
         AwtFrame::full(seq, w, h, vec![argb; (w * h) as usize]).unwrap()
+    }
+
+    // ---- Physical keyboard & mouse (task 12) -------------------------------
+
+    /// Every native (`CallbackBridge`) event the session queued, in order.
+    fn native(session: &mut AwtSession) -> Vec<GameInputEvent> {
+        session
+            .drain_events()
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .collect()
+    }
+
+    #[test]
+    fn a_physical_mouse_moves_both_the_awt_pointer_and_the_game_cursor() {
+        let mut s = session();
+        s.set_focus(true);
+        s.drain_events();
+        // 10 desktop pixels to the right, 1:1 sensitivity.
+        assert!(s.pointer_relative(10.0, 4.0, PointerSource::Mouse) > 0);
+        let (x, y) = s.pointer_position();
+        assert_eq!((x, y), (10, 4));
+        assert_eq!(s.game_cursor(), (10, 4));
+        let events = native(&mut s);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, game_event::CURSOR_POS);
+        assert_eq!((events[0].p0, events[0].p1), (10, 4));
+    }
+
+    #[test]
+    fn a_sub_pixel_mouse_sample_queues_nothing_at_all() {
+        let mut s = session();
+        s.set_sensitivity(MouseSensitivity::uniform(0.2));
+        s.drain_events();
+        assert_eq!(s.pointer_relative(1.0, 0.0, PointerSource::Mouse), 0);
+        assert_eq!(s.pending_events(), 0, "an idle mouse must cost nothing");
+        // Five samples of 1 px at 0.2x finally add up to one pixel.
+        for _ in 0..4 {
+            s.pointer_relative(1.0, 0.0, PointerSource::Mouse);
+        }
+        assert_eq!(s.pointer_position().0, 1);
+    }
+
+    #[test]
+    fn sensitivity_scales_and_can_invert_the_vertical_axis() {
+        let mut s = session();
+        s.set_sensitivity(MouseSensitivity::uniform(2.0).with_invert_y(true));
+        s.pointer_relative(3.0, 5.0, PointerSource::Mouse);
+        assert_eq!(s.pointer_position(), (6, 0), "inverted y clamps at the top");
+        assert_eq!(s.sensitivity().x(), 2.0);
+        // Out-of-range values are clamped, never accepted.
+        s.set_sensitivity(MouseSensitivity::uniform(1e9));
+        assert_eq!(s.sensitivity().x_permille, MouseSensitivity::MAX_PERMILLE);
+    }
+
+    #[test]
+    fn a_captured_pointer_lets_you_keep_turning_past_the_desktop_edge() {
+        let mut s = session();
+        assert!(!s.is_captured());
+        s.set_capture(true);
+        assert!(s.is_captured());
+        s.drain_events();
+        for _ in 0..4 {
+            s.pointer_relative(200.0, 0.0, PointerSource::Mouse);
+        }
+        // The AWT pointer stops at the desktop edge (Swing has no pixel 320)…
+        assert_eq!(s.pointer_position().0, 319);
+        // …while the game's own cursor keeps going, which is what makes a 360°
+        // turn possible with a mouse.
+        assert_eq!(s.game_cursor().0, 160 + 800);
+        let events = native(&mut s);
+        assert!(events.iter().all(|e| e.kind == game_event::CURSOR_POS));
+    }
+
+    #[test]
+    fn capturing_the_pointer_announces_the_grab_state_to_the_game() {
+        let mut s = session();
+        s.drain_events();
+        assert!(s.set_capture(true) > 0);
+        let events = native(&mut s);
+        let grab = events
+            .iter()
+            .find(|e| e.kind == game_event::GRAB_STATE)
+            .expect("the game must be told it owns the cursor");
+        assert_eq!(grab.p0, 1);
+        assert!(s.set_capture(true) == 0, "no change, no event");
+        s.set_capture(false);
+        let events = native(&mut s);
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::GRAB_STATE && e.p0 == 0));
+    }
+
+    #[test]
+    fn a_captured_pointer_ignores_a_stray_touch_unless_hybrid_mode_is_on() {
+        let mut s = session();
+        let mut settings = s.input_settings().clone();
+        settings.pointer_mode = PointerMode::Captured;
+        settings.hybrid_touch = false;
+        s.set_input_settings(settings);
+        s.drain_events();
+        // A palm on the screen must not move the crosshair…
+        assert_eq!(
+            s.pointer(PointerPhase::Down, 100.0, 100.0, MouseButton::Left),
+            0
+        );
+        assert_eq!(s.stats().input_filtered, 1);
+        // …but the mouse always gets through.
+        assert!(s.pointer_relative(5.0, 0.0, PointerSource::Mouse) > 0);
+        // With the mixed mode on, a deliberate tap works again.
+        let mut settings = s.input_settings().clone();
+        settings.hybrid_touch = true;
+        s.set_input_settings(settings);
+        assert!(
+            s.pointer_from(
+                PointerPhase::Down,
+                100.0,
+                100.0,
+                MouseButton::Left,
+                PointerSource::Touch
+            ) > 0
+        );
+    }
+
+    #[test]
+    fn a_tap_becomes_a_glfw_mouse_button_for_the_game_too() {
+        let mut s = session();
+        s.drain_events();
+        s.pointer_from(
+            PointerPhase::Down,
+            64.0,
+            48.0,
+            MouseButton::Right,
+            PointerSource::Mouse,
+        );
+        s.pointer_from(
+            PointerPhase::Up,
+            64.0,
+            48.0,
+            MouseButton::Right,
+            PointerSource::Mouse,
+        );
+        let events = native(&mut s);
+        let buttons: Vec<(i32, i32)> = events
+            .iter()
+            .filter(|e| e.kind == game_event::MOUSE_BUTTON)
+            .map(|e| (e.p0, e.p1))
+            .collect();
+        assert_eq!(
+            buttons,
+            vec![
+                (glfw::MOUSE_BUTTON_RIGHT, glfw::PRESS),
+                (glfw::MOUSE_BUTTON_RIGHT, glfw::RELEASE)
+            ]
+        );
+        // The cursor was placed before the click, or the game would click at the
+        // previous position.
+        assert_eq!(events[0].kind, game_event::CURSOR_POS);
+    }
+
+    #[test]
+    fn a_named_key_reaches_the_game_with_its_physical_scancode() {
+        let mut s = session();
+        s.drain_events();
+        s.key_named("key.keyboard.w", Some(17), true);
+        let events = native(&mut s);
+        let key = events
+            .iter()
+            .find(|e| e.kind == game_event::KEY)
+            .expect("a key press must reach the game");
+        assert_eq!(key.p0, 'W' as i32);
+        assert_eq!(key.p1, 17);
+        assert_eq!(key.p2, glfw::PRESS);
+        // And the same press is still a proper AWT event for Swing dialogs.
+        s.key_named("key.keyboard.w", Some(17), false);
+        let records = s.drain_events();
+        assert!(records.iter().any(|r| r.id == event_id::KEY_RELEASED));
+    }
+
+    #[test]
+    fn a_synthetic_press_gets_a_scancode_from_the_table() {
+        let mut s = session();
+        s.drain_events();
+        s.key_down_named("key.keyboard.escape");
+        let events = native(&mut s);
+        assert_eq!(events[0].p0, glfw::KEY_ESCAPE);
+        assert_eq!(events[0].p1, 1, "evdev KEY_ESC");
+    }
+
+    #[test]
+    fn a_vk_press_still_reaches_the_game() {
+        let mut s = session();
+        s.drain_events();
+        s.key_down(vk::ESCAPE);
+        let events = native(&mut s);
+        assert_eq!(events[0].p0, glfw::KEY_ESCAPE);
+        assert_eq!(events[0].p2, glfw::PRESS);
+    }
+
+    #[test]
+    fn remapping_a_key_changes_what_both_layers_see() {
+        let mut s = session();
+        s.bind_key("key.keyboard.e", "key.keyboard.f").unwrap();
+        s.drain_events();
+        s.key_down_named("key.keyboard.e");
+        let records = s.drain_events();
+        let awt: Vec<i32> = records
+            .iter()
+            .filter(|r| r.id == event_id::KEY_PRESSED)
+            .map(|r| r.key_code)
+            .collect();
+        assert_eq!(awt, vec![vk_for_key("f").unwrap()]);
+        let native: Vec<i32> = records
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .filter(|e| e.kind == game_event::KEY)
+            .map(|e| e.p0)
+            .collect();
+        assert_eq!(native, vec!['F' as i32]);
+        assert!(s.bind_key("key.keyboard.e", "banana").is_err());
+        s.clear_bindings();
+        s.key_down_named("key.keyboard.e");
+        assert!(s
+            .drain_events()
+            .iter()
+            .any(|r| r.key_code == vk_for_key("e").unwrap()));
+    }
+
+    #[test]
+    fn remapping_a_button_swaps_it_for_the_game_as_well() {
+        let mut s = session();
+        s.bind_button(MouseButton::Left, MouseButton::Right);
+        s.drain_events();
+        s.pointer(PointerPhase::Down, 64.0, 48.0, MouseButton::Left);
+        let records = s.drain_events();
+        assert!(records
+            .iter()
+            .any(|r| r.id == event_id::MOUSE_PRESSED && r.button == MouseButton::Right.number()));
+        assert!(records
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .any(|e| e.kind == game_event::MOUSE_BUTTON && e.p0 == glfw::MOUSE_BUTTON_RIGHT));
+    }
+
+    #[test]
+    fn the_wheel_keeps_the_awt_sign_and_flips_it_for_glfw() {
+        let mut s = session();
+        s.drain_events();
+        s.scroll(64.0, 48.0, 2);
+        let records = s.drain_events();
+        let wheel = records
+            .iter()
+            .find(|r| r.id == event_id::MOUSE_WHEEL)
+            .unwrap();
+        assert_eq!(wheel.wheel, 2, "AWT: positive is toward the user");
+        let scroll = records
+            .iter()
+            .filter_map(GameInputEvent::from_record)
+            .find(|e| e.kind == game_event::SCROLL)
+            .unwrap();
+        assert_eq!(scroll.p1, -2000, "GLFW: positive is away from the user");
+    }
+
+    #[test]
+    fn wheel_scaling_never_swallows_a_notch() {
+        let mut s = session();
+        let mut settings = s.input_settings().clone();
+        settings.scroll_permille = InputSettings::MIN_SCROLL_PERMILLE;
+        s.set_input_settings(settings);
+        s.drain_events();
+        s.scroll(64.0, 48.0, 1);
+        assert!(s
+            .drain_events()
+            .iter()
+            .any(|r| r.id == event_id::MOUSE_WHEEL && r.wheel == 1));
+    }
+
+    #[test]
+    fn losing_focus_releases_the_keys_the_game_thinks_are_held() {
+        let mut s = session();
+        s.key_down_named("key.keyboard.w");
+        s.pointer(PointerPhase::Down, 64.0, 48.0, MouseButton::Left);
+        s.drain_events();
+        s.set_focus(false);
+        let events = native(&mut s);
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::KEY && e.p2 == glfw::RELEASE));
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::MOUSE_BUTTON && e.p1 == glfw::RELEASE));
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::CURSOR_ENTER && e.p0 == 0));
+        assert_eq!(s.game_input_stats().key_events, 2);
+    }
+
+    #[test]
+    fn typed_text_reaches_the_game_as_char_events() {
+        let mut s = session();
+        s.drain_events();
+        s.type_text("hi 好");
+        let events = native(&mut s);
+        let chars: String = events
+            .iter()
+            .filter(|e| e.kind == game_event::CHAR)
+            .filter_map(|e| char::from_u32(e.ch))
+            .collect();
+        assert_eq!(chars, "hi 好");
+    }
+
+    #[test]
+    fn the_native_path_can_be_switched_off_entirely() {
+        let mut s = session();
+        let mut settings = s.input_settings().clone();
+        settings.native_input = false;
+        s.set_input_settings(settings);
+        s.drain_events();
+        s.key_down_named("key.keyboard.w");
+        s.pointer_relative(10.0, 0.0, PointerSource::Mouse);
+        let records = s.drain_events();
+        assert!(!records.is_empty(), "AWT events must still flow");
+        assert!(
+            records
+                .iter()
+                .all(|r| GameInputEvent::from_record(r).is_none()),
+            "no native record may be queued when the feature is off"
+        );
+    }
+
+    #[test]
+    fn resizing_the_desktop_retunes_the_pointer_bound_and_the_game_window() {
+        let mut s = session();
+        s.set_capture(true);
+        s.drain_events();
+        s.resize_screen(160, 120).unwrap();
+        let events = native(&mut s);
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::FRAMEBUFFER_SIZE && e.p0 == 160));
+        assert!(events
+            .iter()
+            .any(|e| e.kind == game_event::WINDOW_SIZE && e.p1 == 120));
+        // The AWT pointer is confined to the new desktop.
+        s.pointer_relative(1000.0, 1000.0, PointerSource::Mouse);
+        assert_eq!(s.pointer_position(), (159, 119));
+    }
+
+    #[test]
+    fn a_json_settings_update_applies_and_reports_what_it_skipped() {
+        let mut s = session();
+        s.drain_events();
+        let (queued, notes) = s.apply_input_json(&serde_json::json!({
+            "pointer_mode": "captured",
+            "sensitivity": { "x": 3.0, "y": 3.0 },
+            "bindings": { "keys": { "e": "banana" } },
+        }));
+        assert!(queued > 0, "switching to captured must tell the game");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(s.is_captured());
+        assert_eq!(s.sensitivity().x_permille, 3000);
+        assert!(native(&mut s)
+            .iter()
+            .any(|e| e.kind == game_event::GRAB_STATE && e.p0 == 1));
+    }
+
+    #[test]
+    fn resetting_input_forgets_the_capture_and_the_sub_pixel_remainder() {
+        let mut s = session();
+        s.set_capture(true);
+        s.pointer_relative(500.0, 0.0, PointerSource::Mouse);
+        s.reset_input();
+        assert_eq!(s.pending_events(), 0);
+        assert_eq!(s.game_cursor(), (160, 120));
+        assert!(s.game_input_stats().cursor_events > 0);
+        // The desktop bound survives the reset (a captured mouse must still stop
+        // at the edge of the *current* desktop).
+        s.pointer_relative(10_000.0, 0.0, PointerSource::Mouse);
+        assert_eq!(s.pointer_position().0, 319);
+    }
+
+    #[test]
+    fn the_snapshot_carries_the_input_state_the_ui_renders() {
+        let mut s = session();
+        s.set_capture(true);
+        s.set_sensitivity(MouseSensitivity::uniform(1.5));
+        let json = s.to_json();
+        assert_eq!(json["input"]["captured"], serde_json::json!(true));
+        assert_eq!(json["input"]["pointer_mode"], serde_json::json!("captured"));
+        assert_eq!(json["input"]["sensitivity"]["x"], serde_json::json!(1.5));
+        assert_eq!(json["game_input"]["grabbed"], serde_json::json!(true));
+        assert!(json["session"].get("input_filtered").is_some());
+        assert!(json["session"].get("native_events_queued").is_some());
+    }
+
+    #[test]
+    fn load_shedding_drops_a_stale_game_cursor_before_a_key_press() {
+        // The queue floor is 64 records (`AwtSessionConfig::sanitized`), so flood
+        // it well past that and check *what* survived, not how much.
+        let mut config = AwtSessionConfig::new(size(320, 240), size(640, 480));
+        config.max_pending_events = 64;
+        let mut s = AwtSession::open(config).unwrap();
+        s.set_capture(true);
+        s.drain_events();
+        for _ in 0..200 {
+            s.pointer_relative(3.0, 0.0, PointerSource::Mouse);
+        }
+        s.key_down_named("key.keyboard.escape");
+        let records = s.drain_events();
+        assert_eq!(records.len(), 64, "the queue must stay bounded");
+        assert!(s.stats().events_dropped > 0);
+        // Both spellings of the press survived the flood: the AWT one for a Swing
+        // dialog and the native one for the game.
+        assert!(
+            records.iter().any(|r| r.id == event_id::KEY_PRESSED),
+            "an AWT key press must never be shed before a cursor move"
+        );
+        assert!(
+            records
+                .iter()
+                .filter_map(GameInputEvent::from_record)
+                .any(|e| e.kind == game_event::KEY && e.p0 == glfw::KEY_ESCAPE),
+            "a native key press must never be shed before a cursor move"
+        );
     }
 
     // ---- Configuration ----------------------------------------------------
@@ -1588,7 +2394,7 @@ mod tests {
 
     #[test]
     fn resize_screen_releases_gestures_and_announces_the_new_size() {
-        let mut s = session();
+        let mut s = awt_session();
         s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Left);
         s.key_down(vk::SHIFT);
         s.drain_events();
@@ -1631,6 +2437,84 @@ mod tests {
         assert_eq!(s.stats().surface_resizes, 1);
         s.set_surface_size(1080, 2400).unwrap();
         assert_eq!(s.stats().surface_resizes, 1, "idempotent");
+    }
+
+    #[test]
+    fn rotating_the_surface_drops_the_in_flight_gesture() {
+        // Task 9: the finger is somewhere else after a quarter turn and the
+        // letterbox bars moved, so continuing the drag with the new mapping
+        // would deliver the click at the wrong desktop pixel.
+        let mut s = portrait_session();
+        s.pointer(PointerPhase::Down, 540.0, 1200.0, MouseButton::Left);
+        s.key_down(vk::SHIFT);
+        s.drain_events();
+        assert_ne!(s.modifiers(), 0, "something is held before the rotation");
+
+        s.set_surface_size(2400, 1080).unwrap();
+
+        assert_eq!(s.surface_orientation(), ScreenOrientation::Landscape);
+        assert_eq!(s.stats().surface_rotations, 1);
+        assert_eq!(s.stats().surface_resizes, 1);
+        let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
+        assert!(
+            ids.contains(&event_id::MOUSE_RELEASED),
+            "held button released on rotation"
+        );
+        assert!(
+            ids.contains(&event_id::KEY_RELEASED),
+            "held modifier released on rotation"
+        );
+        assert_eq!(s.modifiers(), 0, "nothing stays stuck across a rotation");
+        // The desktop is untouched: AWT keeps painting at its own resolution.
+        assert_eq!(s.screen_size(), (320, 240));
+        assert_eq!(s.screen_orientation(), ScreenOrientation::Landscape);
+    }
+
+    #[test]
+    fn resizing_inside_one_orientation_keeps_the_gesture() {
+        // The soft keyboard / split screen shrinks the surface without rotating
+        // it: a drag on a Swing scrollbar must survive that.
+        let mut s = portrait_session();
+        s.pointer(PointerPhase::Down, 540.0, 1200.0, MouseButton::Left);
+        s.drain_events();
+
+        s.set_surface_size(1080, 1400).unwrap();
+
+        assert_eq!(s.stats().surface_rotations, 0);
+        assert_eq!(s.surface_orientation(), ScreenOrientation::Portrait);
+        assert!(
+            s.drain_events().is_empty(),
+            "no synthetic release for a plain resize"
+        );
+        assert_ne!(s.modifiers(), 0, "the button is still held");
+    }
+
+    #[test]
+    fn a_first_measurement_is_not_a_rotation() {
+        // The very first `onSizeChanged` arrives from the default (square-ish)
+        // config; treating it as a rotation would release a gesture that the
+        // user never started.
+        let mut s = AwtSession::open(AwtSessionConfig {
+            screen: size(320, 240),
+            surface: size(1, 1),
+            ..AwtSessionConfig::default()
+        })
+        .unwrap();
+        s.pointer(PointerPhase::Down, 0.0, 0.0, MouseButton::Left);
+        s.drain_events();
+        s.set_surface_size(1080, 2400).unwrap();
+        assert_eq!(s.stats().surface_rotations, 0);
+        assert!(s.drain_events().is_empty());
+    }
+
+    #[test]
+    fn diagnostics_report_the_surface_orientation_and_rotations() {
+        let mut s = portrait_session();
+        s.set_surface_size(2400, 1080).unwrap();
+        let j = s.to_json();
+        assert_eq!(j["orientation"], "landscape");
+        assert_eq!(j["session"]["surface_rotations"], 1);
+        assert_eq!(j["session"]["surface_resizes"], 1);
     }
 
     #[test]
@@ -1711,7 +2595,7 @@ mod tests {
 
     #[test]
     fn tap_in_the_middle_maps_to_the_desktop_centre() {
-        let mut s = session();
+        let mut s = awt_session();
         assert_eq!(
             s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Left),
             1
@@ -1736,7 +2620,7 @@ mod tests {
 
     #[test]
     fn drag_off_the_picture_keeps_dragging_and_releases_inside() {
-        let mut s = session();
+        let mut s = awt_session();
         s.set_surface_size(1080, 2400).unwrap();
         s.pointer(PointerPhase::Down, 540.0, 1200.0, MouseButton::Left);
         // Finger wanders onto the black bar: Swing must still receive the drag.
@@ -1755,7 +2639,7 @@ mod tests {
 
     #[test]
     fn a_steady_tap_also_synthesises_mouse_clicked() {
-        let mut s = session();
+        let mut s = awt_session();
         s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Left);
         s.pointer(PointerPhase::Up, 321.0, 241.0, MouseButton::Left);
         let ids: Vec<i32> = s.drain_events().iter().map(|r| r.id).collect();
@@ -1771,7 +2655,7 @@ mod tests {
 
     #[test]
     fn scroll_maps_and_ignores_the_bars() {
-        let mut s = session();
+        let mut s = awt_session();
         assert_eq!(s.scroll(320.0, 240.0, -3), 1);
         let r = s.drain_events();
         assert_eq!(r[0].id, event_id::MOUSE_WHEEL);
@@ -1793,7 +2677,7 @@ mod tests {
 
     #[test]
     fn named_keys_track_modifier_state() {
-        let mut s = session();
+        let mut s = awt_session();
         assert_eq!(s.key_down_named("key.keyboard.left.shift"), 1);
         assert_eq!(s.modifiers() & mask::SHIFT_DOWN, mask::SHIFT_DOWN);
         assert_eq!(s.key_down_named("w"), 1);
@@ -1817,7 +2701,7 @@ mod tests {
 
     #[test]
     fn type_text_emits_one_key_typed_per_char() {
-        let mut s = session();
+        let mut s = awt_session();
         assert_eq!(s.type_text("hi 中"), 4);
         let r = s.drain_events();
         assert!(r.iter().all(|x| x.id == event_id::KEY_TYPED));
@@ -1826,7 +2710,7 @@ mod tests {
 
     #[test]
     fn losing_focus_releases_everything_held() {
-        let mut s = session();
+        let mut s = awt_session();
         s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Right);
         s.key_down(vk::CONTROL);
         s.drain_events();
@@ -1843,7 +2727,7 @@ mod tests {
 
     #[test]
     fn release_all_is_idempotent_when_nothing_is_held() {
-        let mut s = session();
+        let mut s = awt_session();
         assert_eq!(s.release_all(), 0);
         s.key_down(vk::ALT);
         s.drain_events();
@@ -1911,13 +2795,15 @@ mod tests {
 
     #[test]
     fn when_only_state_records_remain_the_oldest_is_dropped() {
-        let mut s = AwtSession::open(AwtSessionConfig {
-            screen: size(64, 64),
-            surface: size(64, 64),
-            max_pending_events: 64,
-            ..Default::default()
-        })
-        .unwrap();
+        let mut s = awt_only(
+            AwtSession::open(AwtSessionConfig {
+                screen: size(64, 64),
+                surface: size(64, 64),
+                max_pending_events: 64,
+                ..Default::default()
+            })
+            .unwrap(),
+        );
         for _ in 0..100 {
             s.type_text("x");
         }
@@ -1928,7 +2814,7 @@ mod tests {
 
     #[test]
     fn drain_encoded_roundtrips_through_the_wire_format() {
-        let mut s = session();
+        let mut s = awt_session();
         s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Middle);
         s.type_text("ok");
         let bytes = s.drain_encoded();
@@ -2390,10 +3276,13 @@ mod tests {
 
     #[test]
     fn json_snapshot_carries_geometry_and_counters() {
-        let mut s = AwtSession::open(
-            AwtSessionConfig::new(size(320, 240), size(1080, 2400)).for_java(JavaVersion::Java17),
-        )
-        .unwrap();
+        let mut s = awt_only(
+            AwtSession::open(
+                AwtSessionConfig::new(size(320, 240), size(1080, 2400))
+                    .for_java(JavaVersion::Java17),
+            )
+            .unwrap(),
+        );
         s.submit_frame(&full_frame(1, 320, 240, 0xFF00_0000))
             .unwrap();
         s.pointer(PointerPhase::Down, 540.0, 1200.0, MouseButton::Left);
@@ -2545,7 +3434,7 @@ mod tests {
 
     #[test]
     fn event_writer_flushes_a_session_queue() {
-        let mut s = session();
+        let mut s = awt_session();
         s.pointer(PointerPhase::Down, 320.0, 240.0, MouseButton::Left);
         s.type_text("a");
         let mut w = AwtEventWriter::new(Vec::new());
@@ -2584,7 +3473,9 @@ mod tests {
         );
 
         // 2) the launcher pumps them into the session
-        let mut s = AwtSession::open(AwtSessionConfig::new(size(64, 48), size(640, 480))).unwrap();
+        let mut s = awt_only(
+            AwtSession::open(AwtSessionConfig::new(size(64, 48), size(640, 480))).unwrap(),
+        );
         let mut stream = AwtFrameStream::new(Cursor::new(wire));
         assert_eq!(stream.pump_into(&mut s).unwrap(), (2, 0));
 

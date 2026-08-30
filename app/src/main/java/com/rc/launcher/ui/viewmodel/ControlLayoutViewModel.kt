@@ -8,7 +8,13 @@ import com.rc.launcher.ui.model.ControlLayoutMeta
 import com.rc.launcher.ui.model.ControlLayoutRepositories
 import com.rc.launcher.ui.model.ControlLayoutRepository
 import com.rc.launcher.ui.model.ControlLayout.Companion.DEFAULT_ID
+import com.rc.launcher.ui.model.ControllerProfile
+import com.rc.launcher.ui.model.ControllerRemap
+import com.rc.launcher.ui.model.GamepadDatabase
 import com.rc.launcher.ui.model.GamepadAxis
+import com.rc.launcher.ui.model.InputCalibration
+import com.rc.launcher.ui.model.LauncherSettings
+import com.rc.launcher.ui.model.StandardButton
 import com.rc.launcher.ui.model.JoystickKind
 import com.rc.launcher.ui.model.LayoutIssue
 import com.rc.launcher.ui.model.LayoutSummary
@@ -59,6 +65,143 @@ class ControlLayoutViewModel(
 
     /** Built-in layouts shipped with the app (not persisted, not deletable). */
     val builtInLayouts: List<ControlLayoutMeta> = ControlLayoutCatalog.allMetas()
+
+    // ---- Controller device mapping (task 4) --------------------------------
+
+    /** The active built-in controller profile id (plug-and-play result or manual). */
+    private val _controllerProfileId = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerProfileId }.getOrNull()
+            ?: ControllerProfile.GENERIC_ID,
+    )
+    val controllerProfileId: StateFlow<String> = _controllerProfileId.asStateFlow()
+
+    /** A device detected via plug-and-play, or null when none reported. */
+    private val _detectedProfile = MutableStateFlow<ControllerProfile?>(null)
+    val detectedProfile: StateFlow<ControllerProfile?> = _detectedProfile.asStateFlow()
+
+    /** Stick/trigger dead-zone (mirrors [LauncherSettings.controllerDeadzone]). */
+    private val _deadzone = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerDeadzone }.getOrNull()
+            ?: InputCalibration.DEFAULT_DEADZONE,
+    )
+    val deadzone: StateFlow<Float> = _deadzone.asStateFlow()
+
+    /** Stick/trigger sensitivity (mirrors [LauncherSettings.controllerSensitivity]). */
+    private val _sensitivity = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerSensitivity }.getOrNull() ?: 1.0f,
+    )
+    val sensitivity: StateFlow<Float> = _sensitivity.asStateFlow()
+
+    /** Horizontal axis inversion. */
+    private val _invertX = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerInvertX }.getOrNull() ?: false,
+    )
+    val invertX: StateFlow<Boolean> = _invertX.asStateFlow()
+
+    /** Vertical axis inversion. */
+    private val _invertY = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerInvertY }.getOrNull() ?: false,
+    )
+    val invertY: StateFlow<Boolean> = _invertY.asStateFlow()
+
+    /** Custom button/axis remap overrides (task 4). */
+    private val _remap = MutableStateFlow(
+        runCatching { settingsRepository.load().controllerRemap() }.getOrNull() ?: ControllerRemap(),
+    )
+    val remap: StateFlow<ControllerRemap> = _remap.asStateFlow()
+
+    /** All selectable built-in controller profiles (task 4). */
+    val controllerProfiles: List<ControllerProfile> = GamepadDatabase.all
+
+    /** The currently active [ControllerProfile]. */
+    fun activeProfile(): ControllerProfile = GamepadDatabase.byId(_controllerProfileId.value)
+
+    /** Resolved [InputCalibration] for the active profile + user tweaks. */
+    fun calibration(): InputCalibration = InputCalibration(
+        deadzone = _deadzone.value,
+        sensitivity = _sensitivity.value,
+        invertX = _invertX.value,
+        invertY = _invertY.value,
+    )
+
+    /**
+     * Report a physically connected device by USB vendor/product id. Resolves it
+     * via [GamepadDatabase.identify] and surfaces it as the detected profile; the
+     * UI can then apply it with [applyDetectedProfile] (plug-and-play).
+     */
+    fun onDeviceDetected(vendorId: Int, productId: Int) {
+        _detectedProfile.value = GamepadDatabase.identify(vendorId, productId)
+    }
+
+    /** Clear any detected-device hint. */
+    fun clearDetected() { _detectedProfile.value = null }
+
+    /** Apply the [detectedProfile] as the active profile (plug-and-play). */
+    fun applyDetectedProfile() {
+        val p = _detectedProfile.value ?: return
+        selectProfile(p.id)
+    }
+
+    /** Select a built-in controller profile and persist it. */
+    fun selectProfile(id: String) {
+        val profile = GamepadDatabase.byId(id)
+        _controllerProfileId.value = profile.id
+        patchSettings { it.copy(controllerProfileId = profile.id) }
+    }
+
+    /** Set the stick/trigger dead-zone and persist it. */
+    fun setDeadzone(value: Float) {
+        val v = value.coerceIn(0f, 1f)
+        _deadzone.value = v
+        patchSettings { it.copy(controllerDeadzone = v) }
+    }
+
+    /** Set the stick/trigger sensitivity and persist it. */
+    fun setSensitivity(value: Float) {
+        val v = value.coerceIn(InputCalibration.MIN_SENSITIVITY, InputCalibration.MAX_SENSITIVITY)
+        _sensitivity.value = v
+        patchSettings { it.copy(controllerSensitivity = v) }
+    }
+
+    /** Toggle horizontal axis inversion. */
+    fun setInvertX(enabled: Boolean) {
+        _invertX.value = enabled
+        patchSettings { it.copy(controllerInvertX = enabled) }
+    }
+
+    /** Toggle vertical axis inversion. */
+    fun setInvertY(enabled: Boolean) {
+        _invertY.value = enabled
+        patchSettings { it.copy(controllerInvertY = enabled) }
+    }
+
+    /** Override the standard button a physical key code maps to (task 4). */
+    fun setButtonOverride(nativeCode: Int, button: StandardButton) {
+        val next = _remap.value.copy(buttons = _remap.value.buttons + (nativeCode to button))
+        _remap.value = next
+        patchSettings { it.copy(controllerRemapJson = next.toJsonString()) }
+    }
+
+    /** Remove a single button override. */
+    fun clearButtonOverride(nativeCode: Int) {
+        val next = _remap.value.copy(buttons = _remap.value.buttons - nativeCode)
+        _remap.value = next
+        patchSettings { it.copy(controllerRemapJson = next.toJsonString()) }
+    }
+
+    /** Reset all custom remap overrides. */
+    fun resetRemap() {
+        _remap.value = ControllerRemap()
+        patchSettings { it.copy(controllerRemapJson = "") }
+    }
+
+    /** Load [LauncherSettings], apply [block], sanitize and persist. */
+    private fun patchSettings(block: (LauncherSettings) -> LauncherSettings) {
+        runCatching {
+            val current = settingsRepository.load()
+            settingsRepository.save(block(current).sanitized())
+        }
+    }
 
     private fun initialLayout(): ControlLayout {
         val activeId = runCatching { settingsRepository.load().controllerLayoutId }.getOrNull()

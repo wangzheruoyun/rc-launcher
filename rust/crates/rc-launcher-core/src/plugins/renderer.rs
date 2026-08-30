@@ -372,6 +372,33 @@ pub fn renderer_plugin(r: Renderer) -> RendererPlugin {
             signature: None,
             author: None,
         },
+        Renderer::MobileGlues => {
+            let mut p = RendererPlugin {
+                id: "mobile_glues".into(),
+                display_name: "Mobile Glues 2.0.0".into(),
+                gl_libname: "libmobileglues.so".into(),
+                backend: WindowingBackend::GlSurface,
+                env: vec![
+                    ("LIBGL_ES".into(), "2".into()),
+                    ("LIBGL_USE_MC_COLOR".into(), "1".into()),
+                    ("LIBGL_NOERROR".into(), "1".into()),
+                ],
+                supported_abis: Vec::new(),
+                native_libs: vec![
+                    NativeLib::in_native_lib_dir("libmobileglues.so"),
+                    NativeLib::in_native_lib_dir("libmobileglues_info_getter.so").optional(true),
+                    NativeLib::in_native_lib_dir("libandroidx.graphics.path.so").optional(true),
+                ],
+                requires_validation: false,
+                trust: TrustLevel::System,
+                signature: None,
+                author: Some("mobile_gules".into()),
+            };
+            // Attach the APK integrity metadata (sizes + SHA-1/SHA-256) so the
+            // safe-loading pipeline can verify the shipped libs (task 8).
+            crate::plugins::mobile_glues::apply_mobileglues_integrity(&mut p);
+            p
+        }
     };
     // task 1: fold the LWJGL core native libraries into every built-in
     // renderer's dependency graph so safe loading / preflight treats them as
@@ -388,7 +415,8 @@ pub fn renderer_plugin(r: Renderer) -> RendererPlugin {
 
 /// The set of renderer plugins available to the launcher.
 ///
-/// Starts from the 5 built-ins ([`RendererRegistry::builtin`]); additional
+/// Starts from the built-ins ([`RendererRegistry::builtin`]: 5 FCL stacks + the LWJGL SDL
+/// backend + Mobile Glues); additional
 /// (user / third-party) plugins are registered at runtime via
 /// [`RendererRegistry::register`]. Mirrors the FCL / Zalith plugin managers,
 /// which keep a discoverable, mutable catalogue of renderers.
@@ -403,8 +431,8 @@ impl RendererRegistry {
         Self::from_builtins()
     }
 
-    /// Build the built-in registry (the 5 FCL renderers plus the LWJGL SDL
-    /// backend, all `System`-trusted).
+    /// Build the built-in registry (the 5 FCL renderers plus the LWJGL SDL backend and
+    /// Mobile Glues, all `System`-trusted).
     pub fn from_builtins() -> Self {
         let mut r = RendererRegistry::default();
         for variant in [
@@ -414,6 +442,7 @@ impl RendererRegistry {
             Renderer::Zink,
             Renderer::Angle,
             Renderer::Sdl,
+            Renderer::MobileGlues,
         ] {
             r.register(renderer_plugin(variant));
         }
@@ -520,7 +549,7 @@ mod tests {
     #[test]
     fn builtin_registry_has_all_renderers() {
         let reg = RendererRegistry::builtin();
-        assert_eq!(reg.ids().len(), 6);
+        assert_eq!(reg.ids().len(), 7);
         for id in [
             "opengles2",
             "opengles2_ng",
@@ -528,6 +557,7 @@ mod tests {
             "opengles3_desktopgl_zink_kopper",
             "opengles3_angle",
             "sdl2",
+            "mobile_glues",
         ] {
             assert!(reg.get(id).is_some(), "missing builtin {id}");
         }
@@ -538,6 +568,17 @@ mod tests {
         assert_eq!(sdl.gl_libname, "liblwjgl_sdl.so");
         assert_eq!(sdl.native_libs[0].source, NativeLibSource::LwjglNatives);
         assert_eq!(sdl.trust, TrustLevel::System);
+        // Mobile Glues (task 8) is a GLES-over-Vulkan translation stack: it must
+        // drive the GL surface backend, resolve its primary lib from the app
+        // native-lib dir, and be system-trusted.
+        let mg = reg.get("mobile_glues").unwrap();
+        assert_eq!(mg.backend, WindowingBackend::GlSurface);
+        assert_eq!(mg.gl_libname, "libmobileglues.so");
+        assert_eq!(mg.trust, TrustLevel::System);
+        assert!(mg
+            .native_libs
+            .iter()
+            .any(|l| l.file_name == "libmobileglues.so" && !l.optional));
     }
 
     #[test]
@@ -551,6 +592,7 @@ mod tests {
             Renderer::Zink,
             Renderer::Angle,
             Renderer::Sdl,
+            Renderer::MobileGlues,
         ] {
             let p = renderer_plugin(r);
             assert_eq!(p.id, r.id());
@@ -570,9 +612,9 @@ mod tests {
             .author("alice")
             .build();
         reg.register(custom);
-        // `builtin()` now has 6 entries (the 5 FCL stacks + the LWJGL SDL
-        // backend); replacing `opengles2` keeps the count at 6.
-        assert_eq!(reg.ids().len(), 6);
+        // `builtin()` now has 7 entries (the 5 FCL stacks + the LWJGL SDL backend +
+        // Mobile Glues); replacing `opengles2` keeps the count at 7.
+        assert_eq!(reg.ids().len(), 7);
         assert_eq!(reg.get("opengles2").unwrap().display_name, "Custom GL4ES");
     }
 

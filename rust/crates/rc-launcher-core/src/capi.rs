@@ -342,6 +342,88 @@ pub unsafe extern "C" fn rc_i18n_overlay(request_json: *const c_char) -> *mut c_
 /// # Safety
 /// `s` must be a pointer returned by [`rc_run_async`] (or null).
 #[no_mangle]
+// === Discord Rich Presence C-ABI (task 5) ====================================
+//
+// Portable mirrors of the JNI `discord*` entry points (consumed by cbindgen and
+// any non-JNI native caller). Each returns a NUL-terminated JSON
+// [`DiscordStateInfo`] string that the caller must free with [`rc_string_free`].
+// `spec_json` must be a NUL-terminated UTF-8 string.
+
+/// Serialise a [`crate::discord::DiscordStateInfo`] into an owned C string.
+fn discord_json_out(info: &crate::discord::DiscordStateInfo) -> *mut c_char {
+    CString::new(info.to_json()).unwrap_or_default().into_raw()
+}
+
+/// Configure the Discord Rich Presence bridge from a JSON spec
+/// (`{ "enabled": bool, "application_id"?: string, "library_path"?: string }`).
+/// Returns a JSON snapshot; free it with [`rc_string_free`].
+///
+/// # Safety
+/// `spec_json` must be a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn rc_discord_configure(spec_json: *const c_char) -> *mut c_char {
+    let empty = || {
+        CString::new("{\"enabled\":false,\"connected\":false,\"application_id\":\"\",\"status\":\"error\",\"detail\":\"null spec\"}").unwrap_or_default()
+    };
+    if spec_json.is_null() {
+        return empty().into_raw();
+    }
+    let cstr = match CStr::from_ptr(spec_json).to_str() {
+        Ok(s) => s,
+        Err(_) => return empty().into_raw(),
+    };
+    let cfg: crate::discord::DiscordConfig = match serde_json::from_str(cstr) {
+        Ok(c) => c,
+        Err(_) => return empty().into_raw(),
+    };
+    discord_json_out(&crate::discord::configure(&cfg))
+}
+
+/// Update the rich presence from a JSON [`crate::discord::RichPresence`] object.
+/// Returns a JSON snapshot; free it with [`rc_string_free`].
+///
+/// # Safety
+/// `presence_json` must be a NUL-terminated UTF-8 string.
+#[no_mangle]
+pub unsafe extern "C" fn rc_discord_update(presence_json: *const c_char) -> *mut c_char {
+    let empty = || {
+        CString::new("{\"enabled\":false,\"connected\":false,\"application_id\":\"\",\"status\":\"error\",\"detail\":\"null presence\"}").unwrap_or_default()
+    };
+    if presence_json.is_null() {
+        return empty().into_raw();
+    }
+    let cstr = match CStr::from_ptr(presence_json).to_str() {
+        Ok(s) => s,
+        Err(_) => return empty().into_raw(),
+    };
+    let p: crate::discord::RichPresence = match serde_json::from_str(cstr) {
+        Ok(p) => p,
+        Err(_) => return empty().into_raw(),
+    };
+    discord_json_out(&crate::discord::update_presence(&p))
+}
+
+/// Clear the rich presence ("now playing" card) without disconnecting. Returns a
+/// JSON snapshot; free it with [`rc_string_free`].
+#[no_mangle]
+pub extern "C" fn rc_discord_clear() -> *mut c_char {
+    discord_json_out(&crate::discord::clear_presence())
+}
+
+/// Return the current bridge state as a JSON snapshot; free it with
+/// [`rc_string_free`].
+#[no_mangle]
+pub extern "C" fn rc_discord_status() -> *mut c_char {
+    discord_json_out(&crate::discord::status())
+}
+
+/// Fully disconnect from Discord and release the native library. Returns a JSON
+/// snapshot; free it with [`rc_string_free`].
+#[no_mangle]
+pub extern "C" fn rc_discord_shutdown() -> *mut c_char {
+    discord_json_out(&crate::discord::shutdown())
+}
+
 pub unsafe extern "C" fn rc_string_free(s: *mut c_char) {
     if !s.is_null() {
         drop(CString::from_raw(s));

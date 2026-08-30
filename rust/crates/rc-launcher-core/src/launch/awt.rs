@@ -2236,6 +2236,12 @@ pub struct AwtInputTranslator {
     pointer: (i32, i32),
     press_origin: Option<(i32, i32, MouseButton)>,
     click_slop: u32,
+    /// Desktop the pointer is confined to, for *relative* motion
+    /// ([`AwtInputTranslator::move_pointer_by`]). `(0, 0)` means "unknown", in
+    /// which case relative motion is not clamped at all — an absolute sample
+    /// mapped through a [`Viewport`] is already inside the desktop by
+    /// construction, so the bound only matters for a physical mouse (task 12).
+    bounds: (u32, u32),
 }
 
 impl Default for AwtInputTranslator {
@@ -2253,6 +2259,7 @@ impl AwtInputTranslator {
             pointer: (0, 0),
             press_origin: None,
             click_slop: 12,
+            bounds: (0, 0),
         }
     }
 
@@ -2260,6 +2267,61 @@ impl AwtInputTranslator {
     pub fn with_click_slop(mut self, slop: u32) -> Self {
         self.click_slop = slop;
         self
+    }
+
+    /// Confine relative motion to a `width x height` desktop (task 12).
+    pub fn with_bounds(mut self, width: u32, height: u32) -> Self {
+        self.set_bounds(width, height);
+        self
+    }
+
+    /// Update the desktop the pointer is confined to, clamping the pointer into
+    /// it — a desktop that shrank must not leave the cursor outside.
+    pub fn set_bounds(&mut self, width: u32, height: u32) {
+        self.bounds = (width, height);
+        let clamped = self.clamp_point(self.pointer);
+        self.pointer = clamped;
+    }
+
+    /// The desktop relative motion is confined to (`(0, 0)` = unknown).
+    pub fn bounds(&self) -> (u32, u32) {
+        self.bounds
+    }
+
+    /// Place the pointer without emitting anything (a resize / a re-centre).
+    pub fn set_pointer(&mut self, x: i32, y: i32) {
+        self.pointer = self.clamp_point((x, y));
+    }
+
+    /// Move the pointer by a *relative* step, in desktop pixels (task 12).
+    ///
+    /// This is the physical-mouse path: Android reports motion, not a position,
+    /// once the pointer is captured. The step is already scaled by the user's
+    /// sensitivity ([`super::input::MouseMotion`]); here it only has to become an
+    /// AWT event — `MOUSE_DRAGGED` while a button is held (so a Swing scrollbar
+    /// keeps following the mouse), `MOUSE_MOVED` otherwise, and *nothing at all*
+    /// when the pointer did not actually change pixel (the sub-pixel case), which
+    /// is what keeps a slow mouse from flooding the event queue.
+    pub fn move_pointer_by(&mut self, dx: i32, dy: i32) -> Vec<AwtEventRecord> {
+        let next = self.clamp_point((
+            self.pointer.0.saturating_add(dx),
+            self.pointer.1.saturating_add(dy),
+        ));
+        if next == self.pointer {
+            return Vec::new();
+        }
+        self.translate(AwtEvent::PointerMove {
+            x: next.0.max(0) as u32,
+            y: next.1.max(0) as u32,
+        })
+    }
+
+    fn clamp_point(&self, at: (i32, i32)) -> (i32, i32) {
+        let (w, h) = self.bounds;
+        if w == 0 || h == 0 {
+            return at;
+        }
+        (at.0.clamp(0, w as i32 - 1), at.1.clamp(0, h as i32 - 1))
     }
 
     /// Current click tolerance.

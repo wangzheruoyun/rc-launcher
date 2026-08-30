@@ -9,6 +9,8 @@ import com.rc.launcher.ui.model.AccountRepositories
 import com.rc.launcher.ui.model.AccountRepository
 import com.rc.launcher.ui.model.DeviceCodeChallenge
 import com.rc.launcher.ui.model.MicrosoftAccount
+import com.rc.launcher.ui.model.ThirdPartyLogin
+import com.rc.launcher.ui.model.ThirdPartyServerInfo
 import com.rc.launcher.ui.model.TokenStatus
 
 /**
@@ -123,6 +125,34 @@ class AccountViewModel(
         }
     }
 
+    /** Step 1 of third-party login: discover the external auth server's metadata. */
+    suspend fun beginThirdPartyDiscovery(serverUrl: String) {
+        _loginState.value = LoginState.ThirdPartySigningIn
+        try {
+            val info = repository.beginThirdParty(serverUrl)
+            _loginState.value = LoginState.ThirdPartyServer(info)
+        } catch (e: Throwable) {
+            _loginState.value = LoginState.Error(e.message ?: "获取第三方验证服务器信息失败")
+        }
+    }
+
+    /** Step 2 of third-party login: authenticate against the external server. */
+    suspend fun completeThirdPartyLogin(login: ThirdPartyLogin) {
+        _loginState.value = LoginState.ThirdPartySigningIn
+        try {
+            val account = repository.completeThirdParty(login)
+            if (account != null) {
+                _loginState.value = LoginState.Idle
+                selectAccount(account.uuid)
+                loadAccounts()
+            } else {
+                _loginState.value = LoginState.Error("第三方登录失败")
+            }
+        } catch (e: Throwable) {
+            _loginState.value = LoginState.Error(e.message ?: "第三方登录失败")
+        }
+    }
+
     /** Dismiss the login flow and return to the idle state. */
     fun cancelLogin() {
         _loginState.value = LoginState.Idle
@@ -190,4 +220,10 @@ sealed interface LoginState {
 
     /** The flow failed; [message] is shown to the user. */
     data class Error(val message: String) : LoginState
+
+    /** Discovering a third-party auth server (network call in flight). */
+    data object ThirdPartySigningIn : LoginState
+
+    /** A third-party auth server was discovered; show its name + register link. */
+    data class ThirdPartyServer(val info: ThirdPartyServerInfo) : LoginState
 }

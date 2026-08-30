@@ -13,6 +13,25 @@
     <string name="app_name">RC 啟動器</string>
     <string name="app_tagline">高效能 Minecraft Java 版啟動器</string>
 
+    <!-- auth -->
+    <string name="auth_login_cnFallback">登入失敗：可能是大陸網路無法直連 Microsoft / Xbox / Mojang 服務。建議在「設定」中開啟鏡像源或設定代理（HTTP / SOCKS5），或改用第三方驗證服務（Authlib-Injector）登入。</string>
+
+    <!-- background -->
+    <string name="background_blur">模糊強度</string>
+    <string name="background_darken">暗化強度</string>
+    <string name="background_effect">效果</string>
+    <string name="background_effect_blur">模糊</string>
+    <string name="background_effect_blur_darken">模糊 + 暗化</string>
+    <string name="background_effect_darken">暗化</string>
+    <string name="background_effect_none">無</string>
+    <string name="background_enable">啟用自訂背景</string>
+    <string name="background_follow_theme">隨主題切換</string>
+    <string name="background_follow_theme_summary">根據深色 / 淺色主題自動調整暗化強度</string>
+    <string name="background_invalid">無效的背景圖片</string>
+    <string name="background_none_selected">尚未選擇圖片</string>
+    <string name="background_pick">選擇圖片</string>
+    <string name="background_title">背景</string>
+
     <!-- common -->
     <string name="common_add">新增</string>
     <string name="common_apply">套用</string>

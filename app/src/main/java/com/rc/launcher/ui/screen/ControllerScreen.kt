@@ -37,6 +37,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +55,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rc.launcher.ui.model.ControlElement
 import com.rc.launcher.ui.model.GamepadAxis
+import com.rc.launcher.ui.model.InputCalibration
+import com.rc.launcher.ui.model.StandardButton
 import com.rc.launcher.ui.model.IssueSeverity
 import com.rc.launcher.ui.model.JoystickKind
 import com.rc.launcher.ui.model.LayoutIssue
@@ -108,6 +111,9 @@ fun ControllerScreen(
                 style = MaterialTheme.typography.titleLarge,
             )
         }
+
+        // ---- Controller device mapping (task 4) ----------------------------
+        DeviceMappingSection(viewModel = viewModel)
 
         // ---- Validation + summary -----------------------------------------
         LayoutValidationBanner(issues = issues, summary = viewModel.summary())
@@ -459,6 +465,140 @@ private fun LayoutValidationBanner(issues: List<LayoutIssue>, summary: LayoutSum
             if (errors.isEmpty() && warnings.isEmpty()) {
                 Text("✅ 布局校验通过", color = Color(0xFF1B7A34), style = MaterialTheme.typography.bodySmall)
             }
+        }
+    }
+}
+
+/**
+ * Controller device-mapping panel (task 4).
+ *
+ * Surfaces the built-in gamepad database: shows any plug-and-play detected
+ * device, lets the user pick a controller profile (Xbox / PlayStation / 8BitDo /
+ * Flydigi / Generic), tunes the dead-zone + sensitivity + axis inversion used by
+ * the input layer, and edits custom button remaps. All state lives in
+ * [ControlLayoutViewModel]; every change is persisted through [LauncherSettings]
+ * so the launch engine reads a consistent mapping.
+ */
+@Composable
+private fun DeviceMappingSection(viewModel: ControlLayoutViewModel) {
+    val activeId by viewModel.controllerProfileId.collectAsStateWithLifecycle()
+    val detected by viewModel.detectedProfile.collectAsStateWithLifecycle()
+    val deadzone by viewModel.deadzone.collectAsStateWithLifecycle()
+    val sensitivity by viewModel.sensitivity.collectAsStateWithLifecycle()
+    val invertX by viewModel.invertX.collectAsStateWithLifecycle()
+    val invertY by viewModel.invertY.collectAsStateWithLifecycle()
+    val remap by viewModel.remap.collectAsStateWithLifecycle()
+    val profiles = viewModel.controllerProfiles
+
+    Surface(
+        tonalElevation = 1.dp,
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("手柄设备映射（即插即用）", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "内置 Xbox / PlayStation / 8BitDo / 飞智 等主流手柄，按 VID/PID 识别，支持自定义重映射与死区/灵敏度校准。",
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            // Plug-and-play detected device.
+            detected?.let { dev ->
+                if (dev.id != activeId) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("检测到：${dev.name}", style = MaterialTheme.typography.bodyMedium)
+                        Button(onClick = viewModel::applyDetectedProfile) { Text("应用") }
+                    }
+                } else {
+                    Text("已识别并应用：${dev.name}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+
+            // Profile picker.
+            Text("手柄类型", style = MaterialTheme.typography.bodyMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (p in profiles) {
+                    FilterChip(
+                        selected = p.id == activeId,
+                        onClick = { viewModel.selectProfile(p.id) },
+                        label = { Text(p.name) },
+                    )
+                }
+            }
+            Text(viewModel.activeProfile().description, style = MaterialTheme.typography.bodySmall)
+
+            // Dead-zone slider.
+            Column {
+                Text("死区：${"%.2f".format(deadzone)}", style = MaterialTheme.typography.bodyMedium)
+                Slider(value = deadzone, onValueChange = viewModel::setDeadzone, valueRange = 0f..1f)
+            }
+
+            // Sensitivity slider.
+            Column {
+                Text(
+                    "灵敏度：${"%.2f".format(sensitivity)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Slider(
+                    value = sensitivity,
+                    onValueChange = viewModel::setSensitivity,
+                    valueRange = InputCalibration.MIN_SENSITIVITY..InputCalibration.MAX_SENSITIVITY,
+                )
+            }
+
+            // Axis inversion toggles.
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("反转 X")
+                    Switch(checked = invertX, onCheckedChange = viewModel::setInvertX)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("反转 Y")
+                    Switch(checked = invertY, onCheckedChange = viewModel::setInvertY)
+                }
+            }
+
+            // Custom remapping.
+            HorizontalDivider()
+            Text("自定义按键重映射", style = MaterialTheme.typography.bodyMedium)
+            if (remap.buttons.isEmpty()) {
+                Text("无自定义映射", style = MaterialTheme.typography.bodySmall)
+            } else {
+                remap.buttons.forEach { (code, btn) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("按键 #$code → ${btn.label}", style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(onClick = { viewModel.clearButtonOverride(code) }) {
+                            Text("清除")
+                        }
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    viewModel.setButtonOverride(96, StandardButton.EAST)
+                    viewModel.setButtonOverride(97, StandardButton.SOUTH)
+                }) { Text("示例：交换 A/B") }
+                OutlinedButton(onClick = viewModel::resetRemap) { Text("重置映射") }
+            }
+
+            // Live calibration preview (sanity check of the input-layer math).
+            val (cx, cy) = viewModel.calibration().calibrateStick(0.3f, 0.4f)
+            Text(
+                "摇杆校准预览 (0.3, 0.4) → (${"%.2f".format(cx)}, ${"%.2f".format(cy)})",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

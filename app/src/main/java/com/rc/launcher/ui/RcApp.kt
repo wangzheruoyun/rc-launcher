@@ -12,11 +12,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rc.launcher.ui.theme.RcTheme
 import com.rc.launcher.ui.i18n.RcLocalizationProvider
 import com.rc.launcher.ui.theme.ThemeViewModel
+import com.rc.launcher.ui.theme.RcBackground
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 
 /**
  * Root composable of the launcher UI. It binds the [ThemeViewModel] to the
- * [RcTheme] and mounts the [MainScreen] navigation shell. This is the single
- * entry point referenced from [com.rc.launcher.MainActivity].
+ * [RcTheme], publishes the adaptive [RcWindowInfo] (task 9) and mounts the
+ * [MainScreen] navigation shell. This is the single entry point referenced from
+ * [com.rc.launcher.MainActivity].
  */
 @Composable
 fun RcApp() {
@@ -28,7 +32,18 @@ fun RcApp() {
     // and `stringResource(...)` both follow the in-app language choice.
     RcLocalizationProvider {
         RcTheme(theme = theme, nightMode = nightMode) {
-            MainScreen()
+            // Task 9: measure the window once, at the root, and publish it as
+            // `LocalRcWindowInfo`. Every screen below re-lays itself out from that
+            // single measurement, so a rotation (which does *not* recreate the
+            // Activity) simply re-measures and recomposes.
+            ProvideRcWindowInfo {
+                // Task 11: the custom launcher background (home + launch) is the
+                // backmost layer; the scaffold above draws on top of it.
+                Box(modifier = Modifier.fillMaxSize()) {
+                    RcBackground(modifier = Modifier.fillMaxSize())
+                    MainScreen()
+                }
+            }
         }
     }
 }

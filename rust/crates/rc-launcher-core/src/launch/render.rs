@@ -292,6 +292,23 @@ pub fn renderer_native_manifest(renderer: Renderer) -> &'static [RendererNativeL
             file_name: "liblwjgl_sdl.so",
             required: true,
         }],
+        // Mobile Glues (task 8): the primary `libmobileglues.so` is the GLES
+        // driver LWJGL dlopen's; the info-getter + androidx graphics-path helpers
+        // are optional runtime support libs.
+        Renderer::MobileGlues => &[
+            RendererNativeLib {
+                file_name: "libmobileglues.so",
+                required: true,
+            },
+            RendererNativeLib {
+                file_name: "libmobileglues_info_getter.so",
+                required: false,
+            },
+            RendererNativeLib {
+                file_name: "libandroidx.graphics.path.so",
+                required: false,
+            },
+        ],
     }
 }
 
@@ -603,6 +620,13 @@ pub fn gl_translation_env(
             // SDL2 backend (LWJGL 3.4.1) renders to an Android surface; the
             // engine already wires `java.library.path` to the LWJGL natives dir
             // where `liblwjgl_sdl.so` lives, so no extra GL/Gallium env is needed.
+            Vec::new()
+        }
+        Renderer::MobileGlues => {
+            // Mobile Glues is a self-contained GLES-over-Vulkan driver: it provides
+            // its own EGL/GLES implementation (configured via `mobileglues.conf`),
+            // so no extra LIBGL_*/Gallium env is needed beyond the base renderer
+            // variables the launch engine already applies.
             Vec::new()
         }
     }

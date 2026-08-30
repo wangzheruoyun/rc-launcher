@@ -12,6 +12,7 @@
 //! | [`awt`]          | AWT/Swing compatibility (caciocavallo) + the Canvas Compose draws (task 18) |
 //! | [`fakefx`]       | the live AWT session: frame/event transport + the surface Compose polls (task 18) |
 //! | [`awt_host`]     | the session owner: named-pipe channels + the pump threads that feed it (task 18) |
+//! | [`input`]        | physical keyboard & mouse: GLFW/`CallbackBridge` events, sensitivity, capture, remapping (task 12) |
 //! | [`classpath`]    | rule-filtered classpath + LWJGL substitution + duplicate collapsing |
 //! | [`args`]         | `${...}` templating, rule-gated argument lists, pruning |
 //! | [`env`]          | `LD_LIBRARY_PATH` / `java.library.path` / renderer environment |
@@ -51,6 +52,7 @@ pub mod crash;
 pub mod engine;
 pub mod env;
 pub mod fakefx;
+pub mod input;
 pub mod options;
 pub mod process;
 pub mod render;
@@ -85,6 +87,12 @@ pub use fakefx::{
     FrameRead, ImeCaret, SessionStats, DEFAULT_CLICK_SLOP, DEFAULT_MAX_PENDING_CONTROLS,
     DEFAULT_MAX_PENDING_EVENTS, MAX_FRAME_BYTES, MAX_PENDING_CLIPBOARD_REQUESTS,
     MAX_TRACKED_WINDOWS,
+};
+pub use input::{
+    game_event, glfw, glfw_button, glfw_key_for_key, glfw_mod_for_key, mouse_button_for_name,
+    normalise_key_name, scancode_for_glfw_key, scancode_for_key, GameInputEvent, GameInputStats,
+    GameInputTranslator, InputBindings, InputSettings, MouseMotion, MouseSensitivity, PointerMode,
+    PointerSource, GAME_INPUT_EVENT_ID,
 };
 pub use options::{
     AccountProfile, LaunchOptions, LwjglVersion, MemoryOptions, QuickPlay, Renderer, ServerAddress,

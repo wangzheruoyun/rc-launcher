@@ -22,6 +22,11 @@ network (mirror sources, DNS optimisation, resumable downloads).
   performance profile for weak GPUs.
 - **AWT/Swing compatibility (fakefx)** — renders Forge/OptiFine installers and crash
   dialogs into a touchable, zero-copy Compose canvas via caciocavallo.
+- **Orientation adaptation** — follow-system / forced-landscape / forced-portrait, with the
+  Compose UI re-laying itself out per window size class (navigation rail vs. bottom bar, grid
+  columns, padding). Rotating never recreates the Activity, and an in-flight gesture is released
+  on a quarter turn so touches cannot land in the wrong place. See
+  [docs/orientation.md](docs/orientation.md).
 - **Internationalisation** — Chinese-first `*.properties` catalogues; untranslated strings
   fall back to zh-CN. See [docs/i18n.md](docs/i18n.md).
 
@@ -54,7 +59,7 @@ cd rust && cargo test --workspace   # Rust core tests
 - Module interfaces — [docs/MODULES.md](docs/MODULES.md)
 - Build & release — [docs/BUILD.md](docs/BUILD.md)
 - Contributing — [CONTRIBUTING.md](CONTRIBUTING.md)
-- Subsystem docs — `docs/{auth,launch,rendering,awt,i18n,ffi_event_bus,health_audit}.md`
+- Subsystem docs — `docs/{auth,launch,rendering,awt,orientation,i18n,ffi_event_bus,health_audit}.md`
 
 Code style is enforced by
 [`.github/workflows/stylecheck.yml`](.github/workflows/stylecheck.yml)

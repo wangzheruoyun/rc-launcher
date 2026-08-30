@@ -226,6 +226,110 @@ Compose 手势 → `AwtInputEvent`（Kotlin，`toBatchJson()`）→ `awtInput` �
 * 硬件键盘/软键盘：`awtKeyNameForAndroidKeyCode` 把 Android keycode 翻成核心认识的
   键名（与 task 15 控制布局同一套命名），认不出的键退化成 `KEY_TYPED` 文本（IME 同理）。
 
+## 6.5 物理键鼠（task 12）
+
+玩家最直接的一条反馈是「希望支持键鼠操作」。在 Android 上这不是一个功能，而是四个
+互相独立的问题，`launch::input`（Rust）+ `ui/awt/AwtMouse.kt`（Kotlin）就是这四个
+问题的答案：
+
+| 问题 | 解法 | 位置 |
+|---|---|---|
+| 鼠标被捕获后只上报**位移**，没有位置 | 相对位移 → 虚拟指针 | `MouseMotion` / `AwtInputTranslator::move_pointer_by` |
+| 左/右/中键必须区分 | `MotionEvent.getButtonState()` 位掩码差分 | `awtMouseButtonsForButtonState` / `AwtMouseTracker` |
+| 想要更快/更慢/反转 | 整数千分比灵敏度 + 亚像素余量 | `MouseSensitivity` / `MouseMotion` |
+| 想换按键 | 单跳按键/按钮重映射 | `InputBindings` / `AwtKeyBindings` |
+
+### 两个消费者，一次手势
+
+**AWT 事件队列**（Swing 对话框、Forge 安装器）与**游戏自己的输入队列**（Minecraft 的
+GLFW 回调）必须由同一次物理输入驱动，否则就会出现「安装器里鼠标能用、游戏里不能用」
+（或者反过来）：
+
+```text
+ 物理设备              AwtSession                     两个队列
+ ────────              ──────────                     ────────
+ 鼠标移动 12px  ─▶  MouseMotion（灵敏度/余量）  ─▶  AWT  MOUSE_MOVED        → Swing
+ 右键按下       ─▶  InputBindings（重映射）     ─▶  GLFW MOUSE_BUTTON(1,1)  → Minecraft
+ W + 扫描码 17  ─▶  key + scancode 转发         ─▶  GLFW KEY(87,17,PRESS)   → Minecraft
+ 指针捕获       ─▶  自由移动的光标              ─▶  ANDROID_TYPE_GRAB_STATE
+```
+
+### 游戏侧契约：`CallbackBridge`
+
+task 1 打包进来的 `lwjgl-*-merged-modules.jar` 里含 FCL 的
+`org.lwjgl.glfw.CallbackBridge`，它的全部职责就是把 Android 侧的输入交给游戏链接的
+GLFW stub。`launch::input::game_event` **逐字镜像**该类的 `public static final int`：
+
+| `CallbackBridge` | 到达游戏的形式 | 参数 |
+|---|---|---|
+| `EVENT_TYPE_KEY` (1005) | `GLFWKeyCallback` | key, **scancode**, action, mods |
+| `EVENT_TYPE_CHAR` (1000) | `GLFWCharCallback` | codepoint |
+| `EVENT_TYPE_CURSOR_POS` (1003) | `GLFWCursorPosCallback` | x, y |
+| `EVENT_TYPE_MOUSE_BUTTON` (1006) | `GLFWMouseButtonCallback` | button, action, mods |
+| `EVENT_TYPE_SCROLL` (1007) | `GLFWScrollCallback` | xoffset, yoffset |
+| `EVENT_TYPE_FRAMEBUFFER_SIZE` (1004) / `WINDOW_SIZE` (1008) | 尺寸回调 | width, height |
+| `ANDROID_TYPE_GRAB_STATE` (0) | `onGrabStateChanged` | grabbing |
+
+FCL 把游戏 JVM 跑在**同一进程**里，因此可以直接调静态方法；我们的游戏 JVM 是**子进程**，
+所以这些事件复用既有事件通道，作为 id 为 `GAME_INPUT_EVENT_ID`（`0x7263_0002`，紧邻
+`CONTROL_EVENT_ID`）的普通 32 字节记录传输 —— 与控制面复用同一条流是同一套办法。
+JVM 侧桥按 id 分派：AWT id 进 `EventQueue.postEvent`，`GAME_INPUT_EVENT_ID` 进
+`CallbackBridge`。参数排布见 `GameInputEvent` 的文档表格；滚轮用**千分之一格**传递，
+因为记录是整数而 `GLFWScrollCallback` 收 double。
+
+### 为什么必须转发扫描码
+
+`GLFWKeyCallback` 同时要 key **和** scancode：Minecraft 用 key 匹配键位绑定，但一切
+键枚举覆盖不到的东西都回落到 scancode（`InputConstants.getKey(key, scancode)`、
+`glfwGetKeyName`），这正是非美式键盘与手机键盘上的额外键能用的原因。Android 恰好给了
+我们真东西 —— `KeyEvent.getScanCode()` **就是** Linux evdev 码 —— 所以 UI 原样转发，
+`scancode_for_glfw_key` 只负责补全合成按键（屏幕按钮、映射到按键的手柄、上报 0 的输入法）。
+
+### 几个关键决定
+
+* **被捕获的光标是自由移动的。** 抓取期间游戏用相邻两次位置算 delta，把光标夹在窗口内
+  就等于给「能转多远」加了上限。所以虚拟位置会离开窗口（桌面鼠标在
+  `GLFW_CURSOR_DISABLED` 下同理），并在远早于 `i32` 溢出前 rebase 一次（`CURSOR_REBASE_PX`，
+  带计数器）。AWT 指针**照旧**夹在桌面内 —— Swing 没有第 320 号像素。
+* **亚像素位移会被记住。** 0.4× 灵敏度下，1px 采样若直接取整就永远是 0，鼠标看着就是坏的；
+  余量以**毫像素**保留，既平滑又逐位可复现（无浮点状态，可 `Eq` 比较）。
+* **按住的键会 repeat。** 再次按下已按住的键发 `GLFW_REPEAT` 而不是第二个 `GLFW_PRESS`，
+  聊天框/文本框的连续退格依赖它。
+* **重映射是单跳的。** `a → b` 与 `b → c` 永远不会把 `a` 变成 `c`，因此不可能成环。
+* **混合模式。** 插了鼠标时，屏幕上的手掌不该把镜头甩走；捕获期间触摸默认被过滤，
+  除非玩家开启「触摸-鼠标混合」（`hybrid_touch`）。被过滤计入 `input_filtered`，**不是错误**。
+* **失焦即松手。** 切后台时释放所有按住的键与按钮 —— 「切出去以后 Steve 一直往前走」
+  是最常见的一类「游戏被附身」报告。
+* **文本框会自动交还指针。** JVM 说某个 Swing 文本组件要键盘（或光标变成 I 形）时，
+  UI 主动解除捕获：指针被抓住时既没有光标也没有软键盘，根本没法打字
+  （`AwtControlState.wantsPointerReleased`）。
+
+### 接口
+
+* 输入事件（`awtInput`，一帧一批）：`pointer`（带 `source`）、`pointer_relative`、
+  `capture`、`button`、`scroll`（带 `x`/`y` 或不带 = 在指针处）、`key_down`/`key_up`
+  （带 `scancode`）、`text`、`focus`、`release_all`、`reset_input`。
+* 设置（`awtOpen` / `awtConfigure` 的 `input` 成员，部分更新）：`pointer_mode`、
+  `captured`、`hybrid_touch`、`native_input`、`sensitivity{x,y,invert_y}`、
+  `scroll_permille`、`bindings{keys,buttons}`；被忽略的成员经 `input_notes` 回报，
+  **一条过期映射不会连坐整次更新**。
+* 快照（`awtInfo`）：`input`（当前设置）与 `game_input`（游戏光标/抓取/按住计数），
+  UI 的诊断卡与设置页直接读它，不另存一份真值。
+
+### 测试
+
+```bash
+cd rust && cargo test --lib launch::input      # 37 项：键表/扫描码/灵敏度/重映射/翻译器
+cd rust && cargo run --example input_demo      # 端到端：每行输出都是一条断言
+python3 scripts/check_awt_wire.py              # 跨语言门禁（含 task 12 第 10 组检查）
+```
+
+`examples/input_demo.rs` 在没有 Android、没有 JVM 的情况下跑完整链路，并**断言**那些
+让这个功能存在的性质：被捕获的鼠标能转出桌面边界（AWT 指针同时留在桌面内）、0.4× 的
+慢速鼠标仍会移动、按键带着 Android 给的物理扫描码、捕获时手掌不会转动视角、失焦会松手。
+Kotlin 侧对应 `AwtMouseTest`（22 项）、`AwtAndroidKeysTest`、`AwtGeometryTest` 与
+`AwtSurfaceViewModelTest` 的 task-12 段。
+
 ## 7. 健壮性（task 19）
 
 | 风险 | 处理 |

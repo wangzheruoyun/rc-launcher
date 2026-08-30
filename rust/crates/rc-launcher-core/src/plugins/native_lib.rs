@@ -216,6 +216,19 @@ impl NativeLib {
     }
 }
 
+/// File names of the *compatibility* native libraries the launcher ships for the
+/// benefit of **game mods** rather than the launcher itself.
+///
+/// `libdiscord-rpc.so` is the prime example: it is a compatibility shim used by
+/// Pokémon / Cobblemon-style mods that render a Discord Rich Presence from inside
+/// the game JVM. It is bundled in `lib/arm64-v8a/` like any other app native
+/// lib, so it lands in the app's `nativeLibraryDir` and is reachable from the
+/// game JVM via `java.library.path` / `LD_LIBRARY_PATH` — mods simply call
+/// `System.loadLibrary("discord-rpc")`. It is *optional* for launching Minecraft
+/// itself, so a missing file is surfaced as a warning (never a hard launch
+/// error). See task 5.
+pub const COMPAT_NATIVE_LIBS: &[&str] = &["libdiscord-rpc.so"];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,6 +306,16 @@ mod tests {
             lib.verify_on_disk(Path::new("/no/such/libnope.so"))
                 .unwrap(),
             LibVerify::Missing
+        );
+    }
+
+    #[test]
+    fn compat_native_libs_are_known() {
+        // The Discord RPC compatibility shim must be advertised so the launch
+        // engine can warn when it is missing from nativeLibraryDir.
+        assert!(
+            crate::plugins::native_lib::COMPAT_NATIVE_LIBS.contains(&"libdiscord-rpc.so"),
+            "libdiscord-rpc.so must be listed as a compatibility native lib"
         );
     }
 }

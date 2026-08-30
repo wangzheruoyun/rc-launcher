@@ -12,15 +12,90 @@ class AwtInputTest {
         val json = listOf<AwtInputEvent>(
             AwtPointerEvent(AwtPointerPhase.DOWN, 10f, 20f),
             AwtPointerEvent(AwtPointerPhase.MOVE, 10.5f, 20f, AwtMouseButton.RIGHT),
-            AwtPointerEvent(AwtPointerPhase.UP, 11f, 21f, AwtMouseButton.MIDDLE),
+            AwtPointerEvent(
+                AwtPointerPhase.UP,
+                11f,
+                21f,
+                AwtMouseButton.MIDDLE,
+                AwtPointerSource.MOUSE,
+            ),
         ).toBatchJson()
         assertEquals(
             "{\"events\":[" +
-                "{\"type\":\"pointer\",\"phase\":\"down\",\"x\":10,\"y\":20,\"button\":\"left\"}," +
-                "{\"type\":\"pointer\",\"phase\":\"move\",\"x\":10.5,\"y\":20,\"button\":\"right\"}," +
-                "{\"type\":\"pointer\",\"phase\":\"up\",\"x\":11,\"y\":21,\"button\":\"middle\"}]}",
+                "{\"type\":\"pointer\",\"phase\":\"down\",\"x\":10,\"y\":20," +
+                "\"button\":\"left\",\"source\":\"touch\"}," +
+                "{\"type\":\"pointer\",\"phase\":\"move\",\"x\":10.5,\"y\":20," +
+                "\"button\":\"right\",\"source\":\"touch\"}," +
+                "{\"type\":\"pointer\",\"phase\":\"up\",\"x\":11,\"y\":21," +
+                "\"button\":\"middle\",\"source\":\"mouse\"}]}",
             json,
         )
+    }
+
+    // ---- Physical keyboard & mouse (task 12) -------------------------------
+
+    @Test
+    fun relativeMotionIsEncodedWithoutAPosition() {
+        assertEquals(
+            "{\"events\":[{\"type\":\"pointer_relative\",\"dx\":-3.5,\"dy\":2," +
+                "\"source\":\"mouse\"}]}",
+            AwtRelativePointerEvent(-3.5f, 2f).toBatchJson(),
+        )
+        // A non-finite delta cannot reach the core as `NaN` (the core would drop
+        // it, but the JSON would not even parse in a strict reader).
+        assertEquals(
+            "{\"events\":[{\"type\":\"pointer_relative\",\"dx\":0,\"dy\":0," +
+                "\"source\":\"stylus\"}]}",
+            AwtRelativePointerEvent(Float.NaN, Float.POSITIVE_INFINITY, AwtPointerSource.STYLUS)
+                .toBatchJson(),
+        )
+    }
+
+    @Test
+    fun captureButtonAndScrollAtPointerAreEncoded() {
+        assertEquals(
+            "{\"events\":[{\"type\":\"capture\",\"captured\":true}]}",
+            AwtCaptureEvent(true).toBatchJson(),
+        )
+        assertEquals(
+            "{\"events\":[{\"type\":\"button\",\"button\":\"right\",\"down\":false}]}",
+            AwtButtonEvent(AwtMouseButton.RIGHT, down = false).toBatchJson(),
+        )
+        // No coordinates at all: the core scrolls wherever the pointer is.
+        assertEquals(
+            "{\"events\":[{\"type\":\"scroll\",\"ticks\":-2}]}",
+            AwtScrollAtPointerEvent(-2).toBatchJson(),
+        )
+    }
+
+    @Test
+    fun aKeyCarriesThePhysicalScancodeWhenThereIsOne() {
+        assertEquals(
+            "{\"events\":[{\"type\":\"key_down\",\"name\":\"w\",\"scancode\":17}]}",
+            AwtKeyEvent(down = true, name = "w", scancode = 17).toBatchJson(),
+        )
+        // 0 / negative means "Android did not tell us": omit it so the core fills
+        // it in from its own table instead of forwarding a bogus 0.
+        assertEquals(
+            "{\"events\":[{\"type\":\"key_down\",\"name\":\"w\"}]}",
+            AwtKeyEvent(down = true, name = "w", scancode = 0).toBatchJson(),
+        )
+        assertEquals(
+            "{\"events\":[{\"type\":\"key_up\",\"name\":\"w\",\"scancode\":17}]}",
+            AwtKeyEvent(down = false, name = "w", scancode = 17).toBatchJson(),
+        )
+    }
+
+    @Test
+    fun pointerSourcesMirrorTheCore() {
+        assertEquals(AwtPointerSource.MOUSE, AwtPointerSource.fromId("mouse"))
+        assertEquals(AwtPointerSource.STYLUS, AwtPointerSource.fromId("stylus"))
+        // Unknown degrades to touch, exactly as `PointerSource::from_id` does.
+        assertEquals(AwtPointerSource.TOUCH, AwtPointerSource.fromId("nonsense"))
+        assertEquals(AwtPointerSource.TOUCH, AwtPointerSource.fromId(null))
+        assertTrue(AwtPointerSource.MOUSE.isMouseLike)
+        assertTrue(AwtPointerSource.STYLUS.isMouseLike)
+        assertTrue(!AwtPointerSource.TOUCH.isMouseLike)
     }
 
     @Test

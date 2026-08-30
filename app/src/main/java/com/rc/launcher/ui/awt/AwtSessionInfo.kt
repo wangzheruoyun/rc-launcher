@@ -43,6 +43,10 @@ data class AwtSessionInfo(
     val eventsDropped: Long = 0,
     /** State of the link to the game JVM. */
     val link: AwtLinkInfo = AwtLinkInfo(),
+    /** Physical keyboard / mouse settings in force (task 12). */
+    val input: AwtInputSettings = AwtInputSettings.DEFAULT,
+    /** What the game's own input queue believes (task 12 diagnostics). */
+    val gameInput: AwtGameInputState = AwtGameInputState.EMPTY,
     /** Frame channel path, when a named-pipe transport is attached. */
     val framesChannel: String? = null,
     /** Event channel path, when a named-pipe transport is attached. */
@@ -56,6 +60,9 @@ data class AwtSessionInfo(
 
     /** `true` when a transport is attached (the JVM can reach us). */
     val hasTransport: Boolean get() = framesChannel != null
+
+    /** Whether the pointer is captured (task 12): the overlay hides, the mouse looks around. */
+    val captured: Boolean get() = open && input.captured
 
     /** One-line summary for the diagnostics card. */
     fun describe(): String = when {
@@ -112,6 +119,8 @@ data class AwtSessionInfo(
                 framesAccepted = session?.long("frames_accepted") ?: 0,
                 framesRejected = session?.long("frames_rejected") ?: 0,
                 eventsDropped = session?.long("events_dropped") ?: 0,
+                input = AwtInputSettings.parse(root.obj("input")),
+                gameInput = AwtGameInputState.parse(root.obj("game_input")),
                 link = AwtLinkInfo.parse(root.obj("link")),
                 framesChannel = root.obj("transport")?.str("frames"),
                 eventsChannel = root.obj("transport")?.str("events"),
@@ -199,6 +208,18 @@ data class AwtInputResult(
     val modifiers: Int = 0,
     val focused: Boolean = true,
     val pointer: AwtPoint = AwtPoint(0, 0),
+    /** Whether the pointer is captured after this batch (task 12). */
+    val captured: Boolean = false,
+    /** `absolute` / `captured` (task 12). */
+    val pointerMode: AwtPointerMode = AwtPointerMode.ABSOLUTE,
+    /**
+     * Where the *game's* cursor is, in game-window pixels (task 12).
+     *
+     * Not the same as [pointer]: while the pointer is captured the game's cursor
+     * is free-running (that is what lets the view keep turning), so it may be far
+     * outside the desktop. Shown in the diagnostics panel.
+     */
+    val gameCursor: AwtPoint = AwtPoint(0, 0),
     /** Events the core could not understand (never fatal for the batch). */
     val rejected: List<String> = emptyList(),
     val error: String? = null,
@@ -217,6 +238,11 @@ data class AwtInputResult(
                 modifiers = root.int("modifiers") ?: 0,
                 focused = root.bool("focused") ?: true,
                 pointer = AwtPoint(pointer?.int("x") ?: 0, pointer?.int("y") ?: 0),
+                captured = root.bool("captured") ?: false,
+                pointerMode = AwtPointerMode.fromId(root.str("pointer_mode")),
+                gameCursor = root.obj("game_cursor")
+                    ?.let { AwtPoint(it.int("x") ?: 0, it.int("y") ?: 0) }
+                    ?: AwtPoint(0, 0),
                 rejected = (root.entries["rejected"] as? JsonValue.Arr)
                     ?.items
                     ?.mapNotNull { (it as? JsonValue.Str)?.value }

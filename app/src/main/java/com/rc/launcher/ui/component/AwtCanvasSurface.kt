@@ -1,6 +1,9 @@
 package com.rc.launcher.ui.component
 
 import android.graphics.Bitmap
+import android.os.Build
+import android.view.MotionEvent
+import android.view.View
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
@@ -43,6 +46,8 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
@@ -50,8 +55,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.rc.launcher.ui.awt.AwtCursorKind
 import com.rc.launcher.ui.awt.AwtMouseButton
+import com.rc.launcher.ui.awt.AwtMouseTracker
 import com.rc.launcher.ui.awt.AwtPointerPhase
-import com.rc.launcher.ui.awt.awtKeyNameForAndroidKeyCode
+import com.rc.launcher.ui.awt.AwtPointerSource
+import com.rc.launcher.ui.awt.awtScancodeForAndroidKeyCode
+import com.rc.launcher.ui.awt.gameKeyNameForAndroidKeyCode
 import com.rc.launcher.ui.viewmodel.AwtSurfaceViewModel
 
 /**
@@ -170,55 +178,95 @@ fun AwtCanvasSurface(
             .onFocusChanged { viewModel.onFocusChanged(it.isFocused) }
             .onKeyEvent { event ->
                 if (!state.open) return@onKeyEvent false
-                val name = awtKeyNameForAndroidKeyCode(event.key.nativeKeyCode)
+                val keyCode = event.key.nativeKeyCode
+                // Task 12: the *side-aware* name (GLFW tells left from right shift,
+                // AWT cannot) and the physical scancode Android reported. The
+                // scancode is what `GLFWKeyCallback` needs and what Minecraft falls
+                // back to for every key its enumeration does not cover, which is
+                // what makes a non-US layout work; `scanCode` is 0 for a synthetic
+                // key, and the core then fills it in from its own table.
+                val name = gameKeyNameForAndroidKeyCode(keyCode)
+                val scancode = event.nativeKeyEvent.scanCode
+                    .takeIf { it > 0 }
+                    ?: awtScancodeForAndroidKeyCode(keyCode).takeIf { it > 0 }
                 when (event.type) {
                     KeyEventType.KeyDown -> {
                         if (name != null) {
-                            viewModel.onKeyNamed(true, name)
+                            viewModel.onKeyNamed(true, name, scancode)
+                            // A printable key also has to *type*: the game's chat
+                            // and every Swing text field react to the character,
+                            // not to the key. The core keeps the two apart.
+                            val ch = event.utf16CodePoint
+                            if (ch != 0 && !Character.isISOControl(ch)) {
+                                viewModel.onText(String(Character.toChars(ch)))
+                            }
                         } else if (event.utf16CodePoint != 0) {
                             viewModel.onText(String(Character.toChars(event.utf16CodePoint)))
                         }
                         name != null || event.utf16CodePoint != 0
                     }
                     KeyEventType.KeyUp -> {
-                        if (name != null) viewModel.onKeyNamed(false, name)
+                        if (name != null) viewModel.onKeyNamed(false, name, scancode)
                         name != null
                     }
                     else -> false
                 }
             }
-            .pointerInput(state.open, touchButton) {
+            // Task 9: keying the gesture detector on the surface orientation makes
+            // Compose restart it after a rotation, so a drag that started before
+            // the quarter turn cannot continue with stale coordinates (the core
+            // released the held buttons for the same reason).
+            .pointerInput(state.open, touchButton, state.surfaceOrientation) {
                 if (!state.open) return@pointerInput
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: continue
+                        val source = awtSourceOf(change.type)
                         if (event.type == PointerEventType.Scroll) {
-                            // Compose reports "scroll down" as +1; AWT wheel
-                            // notches use the same sign convention.
+                            // Compose reports "scroll down" as +1, the sign AWT
+                            // uses; the core flips it for GLFW.
+                            val ticks = change.scrollDelta.y
                             viewModel.onScroll(
                                 change.position.x,
                                 change.position.y,
-                                change.scrollDelta.y.toInt(),
+                                if (ticks > 0f) {
+                                    kotlin.math.ceil(ticks).toInt()
+                                } else {
+                                    kotlin.math.floor(ticks).toInt()
+                                },
                             )
                             change.consume()
                             continue
                         }
-                        // The pinned compose-ui 1.5.4 PointerButtons only exposes isPrimaryPressed
-                        // publicly; secondary/tertiary detection needs the internal packedValue or the
-                        // pressed: Set<PointerButton> API introduced in later Compose versions, neither of
-                        // which is available here. Map every non-touch pointer to the touch button for now
-                        // (this matches the original `else` branch for primary/touch pointers). Right/middle
-                        // mouse-button classification is deferred until the Compose stack is bumped.
-                        val button = touchButton
+                        // Task 12: which physical button is held. A mouse reports
+                        // primary / secondary / tertiary; a finger acts as
+                        // [touchButton] (which a UI toggle can set to "right").
+                        val button = when {
+                            source == AwtPointerSource.TOUCH -> touchButton
+                            event.buttons.isSecondaryPressed -> AwtMouseButton.RIGHT
+                            event.buttons.isTertiaryPressed -> AwtMouseButton.MIDDLE
+                            event.buttons.isPrimaryPressed -> AwtMouseButton.LEFT
+                            else -> touchButton
+                        }
                         val phase = when {
                             change.pressed && !change.previousPressed -> AwtPointerPhase.DOWN
                             !change.pressed && change.previousPressed -> AwtPointerPhase.UP
-                            change.pressed -> AwtPointerPhase.MOVE
+                            // A mouse hovers: report the motion even with no
+                            // button held, or Swing would never see a `mouseMoved`
+                            // (no tool-tips, no hover highlight, no I-beam).
+                            change.pressed || source != AwtPointerSource.TOUCH ->
+                                AwtPointerPhase.MOVE
                             else -> null
                         }
                         if (phase != null) {
-                            viewModel.onPointer(phase, change.position.x, change.position.y, button)
+                            viewModel.onPointer(
+                                phase,
+                                change.position.x,
+                                change.position.y,
+                                button,
+                                source,
+                            )
                             change.consume()
                         }
                     }
@@ -231,6 +279,7 @@ fun AwtCanvasSurface(
         } else {
             val placement = state.placement
             val cursor = state.cursor
+            val captured = state.captured
             val pointer = state.lastInput.pointer
             val viewport = state.viewport
             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -245,7 +294,10 @@ fun AwtCanvasSurface(
                 // manager, so the shape the JVM asked for is drawn here. It is the
                 // only cue that the thing under the finger is a text field (I-beam)
                 // or a link (hand).
-                if (cursor != AwtCursorKind.DEFAULT) {
+                // While the pointer is captured the *game* owns the cursor (it
+                // draws its own crosshair), so a second pointer on top would only
+                // be confusing — and it would sit at a stale position anyway.
+                if (cursor != AwtCursorKind.DEFAULT && !captured) {
                     val (sx, sy) = viewport.mapToSurface(pointer.x, pointer.y)
                     drawAwtCursor(cursor, Offset(sx, sy))
                 }
@@ -256,6 +308,10 @@ fun AwtCanvasSurface(
     LaunchedEffect(state.open) {
         if (state.open) runCatching { focusRequester.requestFocus() }
     }
+
+    // Task 12: hold Android's pointer capture while the game owns the cursor, and
+    // feed the relative motion it then delivers.
+    AwtPointerCaptureEffect(viewModel, enabled = state.open && state.captured)
 
     // A Swing text component gained / lost focus inside the JVM: offer or retract
     // the soft keyboard. Without this the user would have to guess that the
@@ -352,3 +408,123 @@ private fun DrawScope.drawAwtDesktop(
         dstSize = IntSize(width, height),
     )
 }
+
+/** Which device a Compose [PointerType] describes (task 12). */
+private fun awtSourceOf(type: PointerType): AwtPointerSource = when (type) {
+    PointerType.Mouse -> AwtPointerSource.MOUSE
+    PointerType.Stylus, PointerType.Eraser -> AwtPointerSource.STYLUS
+    else -> AwtPointerSource.TOUCH
+}
+
+/**
+ * Holds Android's **pointer capture** while the game owns the cursor (task 12).
+ *
+ * This is the piece that makes a mouse feel like the desktop game. Without
+ * capture Android keeps delivering absolute positions and stops at the edge of
+ * the screen, so the view cannot turn further than one swipe; with capture the
+ * events carry *relative* motion (`AXIS_RELATIVE_X/Y`) and there is no edge at
+ * all. Buttons and the wheel keep arriving on the same channel, so they are
+ * forwarded here too — a captured pointer sends nothing through `pointerInput`.
+ *
+ * Robustness (task 19):
+ *
+ * * `requestPointerCapture()` needs API 26 and a focused window; below that, or
+ *   when the request is refused, the canvas simply keeps working in absolute mode
+ *   — the player loses \"unlimited turning\", not the mouse;
+ * * every framework call is wrapped, because a manufacturer's `View` may throw;
+ * * the capture is released on dispose *and* whenever the flag goes false, so the
+ *   pointer can never stay trapped in a screen the player has left.
+ */
+@Composable
+private fun AwtPointerCaptureEffect(viewModel: AwtSurfaceViewModel, enabled: Boolean) {
+    val view = LocalView.current
+    // Android reports which buttons are held, never "this one went down": the
+    // tracker turns consecutive states into presses and releases.
+    val tracker = remember { AwtMouseTracker() }
+    // API 26 is where Android learned to hand an app relative mouse motion; below
+    // that the canvas simply stays in absolute mode.
+    val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+    DisposableEffect(view, enabled, supported) {
+        if (!enabled || !supported) {
+            return@DisposableEffect onDispose { }
+        }
+        tracker.setCaptured(true)
+        val listener = View.OnCapturedPointerListener { _, event ->
+            handleCapturedPointer(viewModel, tracker, event)
+        }
+        runCatching {
+            view.setOnCapturedPointerListener(listener)
+            // The window must have focus, and it may not have it yet on the frame
+            // the session opens — `requestFocus` first, then capture.
+            view.requestFocus()
+            view.requestPointerCapture()
+        }
+        onDispose {
+            runCatching {
+                view.releasePointerCapture()
+                view.setOnCapturedPointerListener(null)
+            }
+            // Leaving the screen with a button held would keep the game mining.
+            viewModel.onInputEvents(tracker.releaseHeld())
+            viewModel.flushInput()
+        }
+    }
+}
+
+/**
+ * One captured `MotionEvent` → input events (task 12).
+ *
+ * A captured mouse reports movement in `AXIS_RELATIVE_X/Y`; some devices only
+ * fill `getX()/getY()`, which are then already relative, so both are read and the
+ * axis wins when it carries anything. Buttons come as a *state* bitmask with no
+ * transition, which is what [AwtMouseTracker] exists for — and its captured
+ * dialect carries no coordinates, because the click has to land wherever the
+ * core's virtual pointer is.
+ */
+private fun handleCapturedPointer(
+    viewModel: AwtSurfaceViewModel,
+    tracker: AwtMouseTracker,
+    event: MotionEvent,
+): Boolean {
+    var handled = false
+    when (event.actionMasked) {
+        MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
+            val dx = relativeAxis(event, MotionEvent.AXIS_RELATIVE_X, event.x)
+            val dy = relativeAxis(event, MotionEvent.AXIS_RELATIVE_Y, event.y)
+            if (dx != 0f || dy != 0f) {
+                viewModel.onMouseRelative(dx, dy, AwtPointerSource.MOUSE)
+                handled = true
+            }
+        }
+        MotionEvent.ACTION_DOWN,
+        MotionEvent.ACTION_UP,
+        MotionEvent.ACTION_BUTTON_PRESS,
+        MotionEvent.ACTION_BUTTON_RELEASE,
+        -> {
+            // The bitmask is the truth; `getActionButton()` is 0 on some ROMs, so
+            // diffing the state is both simpler and more portable.
+            val events = tracker.onCapturedButtonState(event.buttonState)
+            if (events.isNotEmpty()) {
+                viewModel.onInputEvents(events)
+                handled = true
+            }
+        }
+        MotionEvent.ACTION_SCROLL -> {
+            val ticks = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+            if (ticks != 0f) {
+                // Android's VSCROLL is positive *away* from the user; AWT (and the
+                // core) count positive toward the user, hence the negation.
+                viewModel.onCapturedScroll(-ticks)
+                handled = true
+            }
+        }
+        else -> Unit
+    }
+    return handled
+}
+
+private fun relativeAxis(event: MotionEvent, axis: Int, fallback: Float): Float {
+    val value = runCatching { event.getAxisValue(axis) }.getOrDefault(0f)
+    return if (value != 0f) value else fallback
+}
+

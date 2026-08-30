@@ -204,4 +204,69 @@ class LauncherSettingsTest {
         assertEquals(null, restored.validationError())
     }
 
+    // ---- Physical keyboard & mouse (task 12) -------------------------------
+
+    @Test
+    fun mouseSettingsSurviveABackupRoundTrip() {
+        val settings = LauncherSettings(
+            mousePointerCapture = true,
+            mouseHybridTouch = false,
+            mouseSensitivity = 2.5f,
+            mouseInvertY = true,
+            mouseScrollScale = 1.5f,
+            mouseKeyBindingsJson = """{"keys":{"e":"f"},"buttons":{}}""",
+        ).sanitized()
+        val restored = LauncherSettings.fromBackupString(settings.toBackupString())
+        assertNotNull(restored)
+        assertEquals(settings.mousePointerCapture, restored!!.mousePointerCapture)
+        assertEquals(settings.mouseHybridTouch, restored.mouseHybridTouch)
+        assertEquals(settings.mouseSensitivity, restored.mouseSensitivity, 0.001f)
+        assertEquals(settings.mouseInvertY, restored.mouseInvertY)
+        assertEquals(settings.mouseScrollScale, restored.mouseScrollScale, 0.001f)
+        assertEquals(settings.mouseKeyBindingsJson, restored.mouseKeyBindingsJson)
+    }
+
+    @Test
+    fun mouseSettingsAreClampedLikeTheCoreDoes() {
+        val hostile = LauncherSettings(
+            mouseSensitivity = 1e9f,
+            mouseScrollScale = Float.NaN,
+        ).sanitized()
+        assertEquals(LauncherSettings.MAX_MOUSE_FACTOR, hostile.mouseSensitivity, 0.001f)
+        assertEquals(1f, hostile.mouseScrollScale, 0.001f)
+        val slow = LauncherSettings(mouseSensitivity = 0f).sanitized()
+        assertEquals(LauncherSettings.MIN_MOUSE_FACTOR, slow.mouseSensitivity, 0.001f)
+    }
+
+    @Test
+    fun theAwtInputSettingsRoundTripThroughThePersistedForm() {
+        val settings = LauncherSettings(
+            mousePointerCapture = true,
+            mouseHybridTouch = false,
+            mouseSensitivity = 2f,
+            mouseInvertY = true,
+            mouseScrollScale = 2f,
+            mouseKeyBindingsJson = """{"keys":{"e":"f"},"buttons":{"1":3}}""",
+        ).sanitized()
+        val input = settings.awtInputSettings()
+        assertTrue(input.captured)
+        assertFalse(input.hybridTouch)
+        assertEquals(2000, input.sensitivity.xPermille)
+        assertTrue(input.sensitivity.invertY)
+        assertEquals(2000, input.scrollPermille)
+        assertEquals("f", input.bindings.resolveKey("e"))
+        // …and back, without losing anything the player set.
+        val folded = LauncherSettings().withAwtInput(input)
+        assertEquals(settings.mousePointerCapture, folded.mousePointerCapture)
+        assertEquals(settings.mouseSensitivity, folded.mouseSensitivity, 0.001f)
+        assertEquals(settings.mouseInvertY, folded.mouseInvertY)
+        assertEquals(input.bindings, folded.awtInputSettings().bindings)
+        // A blank / corrupt blob is an empty remap, never a crash.
+        assertTrue(
+            LauncherSettings(mouseKeyBindingsJson = "not json")
+                .awtInputSettings()
+                .bindings
+                .isEmpty,
+        )
+    }
 }

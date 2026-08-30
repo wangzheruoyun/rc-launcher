@@ -15,6 +15,9 @@
 //! | `launch` | launch engine                            | 7 (implemented) |
 //! | `mods`   | mod / resource-pack / shader management      | 8 (implemented) |
 //! | `plugins`| pluggable renderer & native-lib extension (registry / injection / validation) | 9 (implemented) |
+//! | `gamepad`| gamepad mapping database + input calibration (task 4) | 4 (implemented) |
+//! | `display`| screen-orientation policy + window size classes (rotation-safe layout & input) | 9 (implemented) |
+//! | `discord`| Discord Rich Presence bridge: lazy `dlopen` of `libdiscord-rpc.so`, safe always-available API, launch hooks (task 5) | 5 (implemented) |
 //! | `ffi`/`event`/`capi`/`jobs` | FFI/JNI bridge: event bus + async callbacks + C-ABI (cbindgen) | 10 (implemented) |
 //! | `i18n`   | internationalisation: resource-file catalogues (zh-CN base / zh-Hant / en), negotiation, `{name}` + plurals, runtime overlay | 20 (implemented) |
 //! | `error`  | unified `RcError` model + recoverability metadata (severity / retryable / backoff) | 19 (implemented) |
@@ -51,6 +54,21 @@
 //!   never disagree; [`i18n::bundle`] hands Kotlin the whole resolved table in
 //!   one FFI crossing, and an on-disk *overlay* can hot-fix wording or add a
 //!   community translation without a new APK.
+//! * **`display`** (task 9) — screen-orientation adaptation. Owns the
+//!   [`display::OrientationPolicy`] (跟随系统 / 强制横屏 / 强制竖屏 → the
+//!   `android:screenOrientation` the Activity requests *and* the geometry a
+//!   forced orientation gives the game window through
+//!   [`launch::LaunchOptions::effective_window`]) and the
+//!   [`display::WindowMetrics`] size-class table the Compose UI re-lays itself
+//!   out from (navigation rail vs. bottom bar, grid columns, padding). Kotlin
+//!   mirrors the table in `ui/AdaptiveLayout.kt` — a rotation must not cost a JNI
+//!   crossing per recomposition — and the golden fixtures written by
+//!   `cargo run --example display_layout_golden` plus
+//!   `scripts/check_layout_parity.py` keep the two ports byte-identical.
+//!   [`display::rotation_flips`] classifies a surface resize, which is what lets
+//!   the AWT session drop an in-flight gesture on a quarter turn instead of
+//!   re-mapping stale coordinates into the new letterboxing (see
+//!   `cargo run --example rotation_demo`).
 //! * **`download`** (task 2) — a resumable, parallel, chunked
 //!   [`download::DownloadManager`] built on `tokio` + `reqwest` with SHA-1/MD5
 //!   verification, exponential-backoff retries and a cumulative progress
@@ -130,11 +148,14 @@
 
 pub mod auth;
 pub mod capi;
+pub mod discord;
+pub mod display;
 pub mod download;
 pub mod error;
 pub mod event;
 pub mod ffi;
 pub mod game;
+pub mod gamepad;
 pub mod i18n;
 pub mod jobs;
 pub mod launch;
@@ -161,6 +182,9 @@ pub use error::RcError;
 
 /// Convenience re-exports for the robustness layer (task 19).
 pub use robust::*;
+
+/// Convenience re-export of the gamepad mapping database (task 4).
+pub use gamepad::*;
 
 #[cfg(test)]
 mod integration_tests;

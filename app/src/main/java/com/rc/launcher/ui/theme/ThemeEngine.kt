@@ -14,6 +14,11 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * A single instance is shared across the process (mirroring FCL's singleton
  * engine) and is initialised from [RcApplication.onCreate].
+ *
+ * Task 11 extends the engine with a [BackgroundConfig] [StateFlow] that drives the
+ * custom launcher background (home + launch). Like the theme/night-mode state it
+ * is observable, mutated only through the helpers below, and persisted via the
+ * same [ThemeStorage].
  */
 object ThemeEngine {
     private val _availableThemes = MutableStateFlow(RcBuiltInThemes)
@@ -24,6 +29,9 @@ object ThemeEngine {
 
     private val _nightMode = MutableStateFlow(ThemeNightMode.SYSTEM)
     val nightMode: StateFlow<ThemeNightMode> = _nightMode.asStateFlow()
+
+    private val _backgroundConfig = MutableStateFlow(BackgroundConfig.DEFAULT)
+    val backgroundConfig: StateFlow<BackgroundConfig> = _backgroundConfig.asStateFlow()
 
     @Volatile
     private var storage: ThemeStorage? = null
@@ -36,6 +44,7 @@ object ThemeEngine {
         _currentTheme.value = RcBuiltInThemes.firstOrNull { it.id == savedId }
             ?: RcBuiltInThemes.first()
         _nightMode.value = ThemeNightMode.fromValue(s.getNightMode())
+        _backgroundConfig.value = s.getBackgroundConfig().normalized()
     }
 
     fun setTheme(id: String) {
@@ -51,4 +60,47 @@ object ThemeEngine {
 
     /** SYSTEM -> LIGHT -> DARK -> SYSTEM, handy for a one-tap toggle. */
     fun cycleNightMode() = setNightMode(_nightMode.value.next())
+
+    // ---- Background (task 11) ---------------------------------------------
+
+    private fun updateBackground(transform: (BackgroundConfig) -> BackgroundConfig) {
+        val next = transform(_backgroundConfig.value).normalized()
+        _backgroundConfig.value = next
+        storage?.setBackgroundConfig(next)
+    }
+
+    fun setBackgroundEnabled(enabled: Boolean) = updateBackground { it.copy(enabled = enabled) }
+
+    /**
+     * Set the chosen image source. Passing null clears the image (and disables the
+     * background). The [uri] is expected to be either a `content://` grant or a
+     * `file://` path vetted by [BackgroundValidator]; an invalid value is rejected
+     * and the previous config is kept.
+     */
+    fun setBackgroundUri(uri: String?) {
+        if (uri == null) {
+            updateBackground { BackgroundConfig.DEFAULT }
+            return
+        }
+        if (!BackgroundValidator.isValidUri(uri)) return
+        updateBackground { it.copy(uri = uri, enabled = true) }
+    }
+
+    fun setBackgroundEffect(effect: BackgroundEffect) = updateBackground { it.copy(effect = effect) }
+
+    fun setBlurRadius(dp: Int) = updateBackground {
+        it.copy(blurRadiusDp = dp.coerceIn(BackgroundLimits.MIN_BLUR_DP, BackgroundLimits.MAX_BLUR_DP))
+    }
+
+    fun setDarkenAlpha(alpha: Float) = updateBackground {
+        it.copy(darkenAlpha = alpha.coerceIn(BackgroundLimits.MIN_DARKEN, BackgroundLimits.MAX_DARKEN))
+    }
+
+    fun setFollowTheme(follow: Boolean) = updateBackground { it.copy(followTheme = follow) }
+
+    /** Reset the background to its defaults and drop the saved image source. */
+    fun clearBackground() = updateBackground { BackgroundConfig.DEFAULT }
+
+    /** Replace the whole background config at once (used by the settings UI). */
+    fun setBackgroundConfig(config: BackgroundConfig) = updateBackground { config }
 }

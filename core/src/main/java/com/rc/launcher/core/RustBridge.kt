@@ -76,6 +76,61 @@ object RustBridge {
     /** Return a fresh account, transparently refreshing if the token is expiring. */
     external fun authEnsureFresh(uuid: String): String
 
+    /**
+     * Discover an external (third-party) auth server's metadata by URL (task 10).
+     * Returns the server-info JSON (or `{"error":...}` with an optional
+     * `cn_fallback_hint` when the lookup failed on the mainland-China network).
+     */
+    external fun authBeginThirdParty(serverUrl: String): String
+
+    /**
+     * Complete a third-party login (Authlib-Injector / token relay). `loginJson`
+     * is the `ThirdPartyLogin` payload. Blocks while authenticating; call from a
+     * background thread. Returns the account JSON (or `{"error":...,
+     * "cn_fallback_hint":...}` on a network failure).
+     */
+    external fun authCompleteThirdParty(loginJson: String): String
+
+    // === Gamepad mapping database + input calibration (task 4) ==========
+    //
+    // These mirror the Rust core's `gamepad` module; the Compose UI currently
+    // uses the pure-Kotlin [com.rc.launcher.ui.model.GamepadDatabase] mirror so it
+    // works without loading the native library, but the same data/behaviour is
+    // available here for native-accelerated paths.
+
+    /** Built-in controller profile metadata as a JSON array (task 4). */
+    external fun getControllerProfiles(): String
+
+    /**
+     * Plug-and-play identification by USB vendor/product id. Returns the matched
+     * profile metadata as JSON, or the generic fallback.
+     */
+    external fun identifyController(vendorId: Int, productId: Int): String
+
+    /**
+     * Calibrate a single analog axis (dead-zone + sensitivity + invert).
+     * Returns the calibrated value in `[-1, 1]`.
+     */
+    external fun calibrateAxis(
+        value: Float,
+        deadzone: Float,
+        sensitivity: Float,
+        invert: Boolean,
+    ): Float
+
+    /**
+     * Calibrate a 2-D thumbstick (radial dead-zone + sensitivity + per-axis
+     * invert). Returns the calibrated `(x, y)` as a JSON pair string.
+     */
+    external fun calibrateStick(
+        x: Float,
+        y: Float,
+        deadzone: Float,
+        sensitivity: Float,
+        invertX: Boolean,
+        invertY: Boolean,
+    ): String
+
     // === Launch engine (task 7) =============================================
     //
     // JSON-in / JSON-out. The core assembles the whole JVM command line
@@ -107,6 +162,126 @@ object RustBridge {
 
     /** JSON array of selectable renderers (`id`, `gl_libname`, `env`). */
     external fun launchRenderers(): String
+
+    // === Screen orientation / adaptive layout (task 9) ======================
+    //
+    // The core owns the orientation policy and the window size-class table
+    // (`display` module); the Compose layer mirrors the table locally in
+    // `ui/AdaptiveLayout.kt` because a rotation must not cost a JNI round trip
+    // per recomposition. These two entry points are what keeps the mirror
+    // honest (the Kotlin parity test compares them) and what the diagnostics
+    // screen shows.
+
+    /**
+     * JSON array of the supported orientation policies:
+     * `[{"id":"system","android_screen_orientation":"user","forced":null}, …]`.
+     * The `id`s are exactly the ones [com.rc.launcher.core.RustBridge] accepts in
+     * `LaunchOptions.orientation` and the Kotlin `OrientationMode` persists.
+     */
+    external fun displayOrientations(): String
+
+    /**
+     * Resolve the adaptive-layout decisions for one window.
+     *
+     * `requestJson` = `{"width_dp":Int,"height_dp":Int,"orientation"?:String}`.
+     * Returns `{"orientation","width_class","height_class","landscape","short",
+     * "navigation_rail","instance_columns","settings_columns",
+     * "dashboard_columns","content_padding_dp","max_content_width_dp"}`, plus
+     * `policy` + the oriented `window` when an `orientation` policy id is given.
+     */
+    external fun displayLayout(requestJson: String): String
+
+    // === Discord Rich Presence (task 5) =====================================
+    //
+    // These mirror the Rust core's `discord` subsystem (a safe, always-available
+    // wrapper over the native `libdiscord-rpc.so` FCL bundles in its APK). The
+    // settings screen drives the bridge through them: a toggle + a custom
+    // application id, plus live presence updates. Every call returns a JSON
+    // `DiscordStateInfo` snapshot (`{ "enabled", "connected", "application_id",
+    // "status", "detail" }`) so the UI can render the current state directly.
+
+    /**
+     * (Re)configure the Discord Rich Presence bridge.
+     *
+     * `requestJson` = `{"enabled":Boolean,"application_id"?:String,
+     * "library_path"?:String}`. Returns the `DiscordStateInfo` JSON snapshot.
+     */
+    external fun discordConfigure(requestJson: String): String
+
+    /**
+     * Update the rich presence. `presenceJson` is a
+     * `{ "state"?:String, "details"?:String, "start_timestamp"?:Long,
+     *   "large_image_key"?:String, ... }` object; any omitted field is left
+     * unset. Returns the `DiscordStateInfo` JSON snapshot.
+     */
+    external fun discordUpdate(presenceJson: String): String
+
+    /**
+     * Clear the "now playing" card without disconnecting. Returns the
+     * `DiscordStateInfo` JSON snapshot.
+     */
+    external fun discordClear(): String
+
+    /**
+     * Current bridge state as a `DiscordStateInfo` JSON snapshot (no side
+     * effects).
+     */
+    external fun discordStatus(): String
+
+    /**
+     * Fully disconnect from Discord and release the native library. Returns the
+     * `DiscordStateInfo` JSON snapshot.
+     */
+    external fun discordShutdown(): String
+
+    // === Discord Rich Presence typed wrappers (task 5) ======================
+    //
+    // Thin, allocation-cheap Kotlin helpers over the raw `external fun`s above so
+    // the Compose settings screen can drive the bridge with real types instead of
+    // hand-built JSON. Each returns the `DiscordStateInfo` JSON
+    // (`{ "enabled", "connected", "application_id", "status", "detail" }`) parsed
+    // into a [JSONObject].
+
+    /** Configure the bridge from typed args. `appId`/`libraryPath` fall back to
+     *  the Rust defaults when null. */
+    fun discordConfigure(
+        enabled: Boolean,
+        appId: String? = null,
+        libraryPath: String? = null,
+    ): JSONObject {
+        val cfg = JSONObject().apply {
+            put("enabled", enabled)
+            if (appId != null) put("application_id", appId)
+            if (libraryPath != null) put("library_path", libraryPath)
+        }
+        return JSONObject(discordConfigure(cfg.toString()))
+    }
+
+    /** Update the rich presence; any null field is left unset on the Rust side. */
+    fun discordUpdate(
+        state: String? = null,
+        details: String? = null,
+        startTimestamp: Long? = null,
+        largeImageKey: String? = null,
+        largeImageText: String? = null,
+    ): JSONObject {
+        val p = JSONObject()
+        state?.let { p.put("state", it) }
+        details?.let { p.put("details", it) }
+        startTimestamp?.let { p.put("start_timestamp", it) }
+        largeImageKey?.let { p.put("large_image_key", it) }
+        largeImageText?.let { p.put("large_image_text", it) }
+        return JSONObject(discordUpdate(p.toString()))
+    }
+
+    /** Clear the "now playing" card (keeps the connection). */
+    fun discordClearStatus(): JSONObject = JSONObject(discordClear())
+
+    /** Current bridge state as a parsed `DiscordStateInfo` object. */
+    fun discordState(): JSONObject = JSONObject(discordStatus())
+
+    /** Fully disconnect from Discord and release the native library. */
+    fun discordDisconnect(): JSONObject = JSONObject(discordShutdown())
 
     // === FFI / JNI bridge: event bus + async callbacks (task 10) ============
     //

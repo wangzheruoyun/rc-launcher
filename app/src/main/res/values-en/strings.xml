@@ -13,6 +13,25 @@
     <string name="app_name">RC Launcher</string>
     <string name="app_tagline">A high-performance Minecraft Java Edition launcher</string>
 
+    <!-- auth -->
+    <string name="auth_login_cnFallback">Login failed: mainland-China networks often cannot reach Microsoft / Xbox / Mojang directly. Enable a mirror source or configure a proxy (HTTP / SOCKS5) in Settings, or sign in via a third-party auth service (Authlib-Injector).</string>
+
+    <!-- background -->
+    <string name="background_blur">Blur intensity</string>
+    <string name="background_darken">Darken intensity</string>
+    <string name="background_effect">Effect</string>
+    <string name="background_effect_blur">Blur</string>
+    <string name="background_effect_blur_darken">Blur + Darken</string>
+    <string name="background_effect_darken">Darken</string>
+    <string name="background_effect_none">None</string>
+    <string name="background_enable">Enable custom background</string>
+    <string name="background_follow_theme">Follow theme</string>
+    <string name="background_follow_theme_summary">Auto-adjust the darken strength for dark / light theme</string>
+    <string name="background_invalid">Invalid background image</string>
+    <string name="background_none_selected">No image selected</string>
+    <string name="background_pick">Choose image</string>
+    <string name="background_title">Background</string>
+
     <!-- common -->
     <string name="common_add">Add</string>
     <string name="common_apply">Apply</string>

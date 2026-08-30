@@ -84,6 +84,12 @@ data class AwtSessionConfig(
     val javaVersion: String? = null,
     /** Directory for the named-pipe channels, or `null` for an off-line canvas. */
     val transportDir: String? = null,
+    /**
+     * Physical keyboard / mouse settings (task 12), or `null` to keep the core's
+     * defaults. `awtOpen` starts a fresh session, so the UI passes the player's
+     * saved settings here instead of following up with an `awtConfigure`.
+     */
+    val input: AwtInputSettings? = null,
 ) {
     /** JSON for `RustBridge.awtOpen`. */
     fun toJson(): String {
@@ -94,6 +100,7 @@ data class AwtSessionConfig(
             "click_slop" to JsonValue.Num(clickSlop.toDouble()),
             "max_pending_events" to JsonValue.Num(maxPendingEvents.toDouble()),
         )
+        input?.let { entries["input"] = it.sanitized().toJson() }
         javaVersion?.let { entries["java_version"] = JsonValue.Str(it) }
         transportDir?.let {
             entries["transport"] = JsonValue.Obj(linkedMapOf("dir" to JsonValue.Str(it)))
@@ -114,6 +121,8 @@ data class AwtConfigureRequest(
     val resetInput: Boolean = false,
     val clear: Boolean = false,
     val fillArgb: Int? = null,
+    /** Physical keyboard / mouse settings to apply (task 12). */
+    val input: AwtInputSettings? = null,
 ) {
     /** JSON for `RustBridge.awtConfigure`. */
     fun toJson(): String {
@@ -131,13 +140,15 @@ data class AwtConfigureRequest(
         if (clear) entries["clear"] = JsonValue.Bool(true)
         // `fill` is an unsigned 32-bit ARGB colour on the wire.
         fillArgb?.let { entries["fill"] = JsonValue.Num((it.toLong() and 0xFFFFFFFFL).toDouble()) }
+        input?.let { entries["input"] = it.sanitized().toJson() }
         return JsonValue.Obj(entries).toJsonString()
     }
 
     /** `true` when the request would not change anything. */
     val isEmpty: Boolean
         get() = surfaceWidth == null && screenWidth == null && scaleMode == null &&
-            focus == null && !releaseAll && !resetInput && !clear && fillArgb == null
+            focus == null && !releaseAll && !resetInput && !clear && fillArgb == null &&
+            input == null
 }
 
 private fun size(width: Int, height: Int): JsonValue = JsonValue.Obj(
@@ -247,8 +258,34 @@ class FakeAwtCanvasBridge(
     private var rejected = 0L
     private var transportDir: String? = null
 
+    /** Physical input settings (task 12), as the core would hold them. */
+    private var inputSettings: AwtInputSettings = AwtInputSettings.DEFAULT
+
+    /** The AWT pointer, in desktop pixels (clamped, as in the core). */
+    private var pointer: AwtPoint = AwtPoint(0, 0)
+
+    /** The game's own cursor: free-running while the pointer is captured. */
+    private var gameCursor: AwtPoint = AwtPoint(0, 0)
+
+    /** Pointer samples refused because the device is filtered out right now. */
+    var filteredSamples = 0
+        private set
+
     /** Every event handed to [input], in order (assert on this in tests). */
     val received = mutableListOf<AwtInputEvent>()
+
+    /** Every request handed to [configure], in order. */
+    val configures = mutableListOf<AwtConfigureRequest>()
+
+    /**
+     * How many input events had already arrived when each [configure] landed.
+     *
+     * This is what makes the task-9 ordering guarantee testable: pointer samples
+     * taken against the *old* viewport must reach the core **before** a rotation
+     * publishes the new surface geometry, otherwise they would be mapped through
+     * the new letterboxing and the touch would land in the wrong place.
+     */
+    val configureInputMarks = mutableListOf<Int>()
 
     /** Control messages waiting for [drainControl]. */
     private val pendingControl = mutableListOf<AwtControlMessage>()
@@ -277,10 +314,16 @@ class FakeAwtCanvasBridge(
         accepted = 0
         rejected = 0
         received.clear()
+        configures.clear()
+        configureInputMarks.clear()
         pendingControl.clear()
         clipboardAnswers.clear()
         controlState = AwtControlState.EMPTY
         polls = 0
+        inputSettings = config.input?.sanitized() ?: AwtInputSettings.DEFAULT
+        pointer = AwtPoint(0, 0)
+        gameCursor = AwtViewport(screenW, screenH, surfaceW, surfaceH, scaleMode).centre()
+        filteredSamples = 0
         return info()
     }
 
@@ -309,6 +352,14 @@ class FakeAwtCanvasBridge(
             framesRejected = rejected,
             framesPresented = accepted,
             link = AwtLinkInfo(state = linkState, framesAccepted = accepted),
+            input = inputSettings,
+            gameInput = AwtGameInputState(
+                cursorX = gameCursor.x,
+                cursorY = gameCursor.y,
+                grabbed = inputSettings.captured,
+                frameWidth = screenW,
+                frameHeight = screenH,
+            ),
             framesChannel = transportDir?.let { "$it/awt-frames.rcaf" },
             eventsChannel = transportDir?.let { "$it/awt-events.rcae" },
         )
@@ -316,6 +367,8 @@ class FakeAwtCanvasBridge(
 
     override fun configure(request: AwtConfigureRequest): AwtSessionInfo {
         if (session == null) return AwtSessionInfo.failed("no AWT session is open")
+        configures += request
+        configureInputMarks += received.size
         if (request.surfaceWidth != null && request.surfaceHeight != null) {
             surfaceW = request.surfaceWidth.coerceAtLeast(1)
             surfaceH = request.surfaceHeight.coerceAtLeast(1)
@@ -328,6 +381,18 @@ class FakeAwtCanvasBridge(
         }
         request.scaleMode?.let { scaleMode = it }
         request.focus?.let { focused = it }
+        // Task 12: a capture change re-centres the game cursor, as in the core.
+        request.input?.let { next ->
+            val wasCaptured = inputSettings.captured
+            inputSettings = next.sanitized()
+            if (inputSettings.captured != wasCaptured) {
+                gameCursor = AwtViewport(screenW, screenH, surfaceW, surfaceH, scaleMode).centre()
+            }
+        }
+        if (request.resetInput) {
+            pointer = AwtPoint(0, 0)
+            gameCursor = AwtViewport(screenW, screenH, surfaceW, surfaceH, scaleMode).centre()
+        }
         clampCaretToDesktop()
         if (request.clear || request.fillArgb != null) {
             val colour = request.fillArgb ?: AwtWire.OPAQUE_BLACK
@@ -352,7 +417,58 @@ class FakeAwtCanvasBridge(
             received.add(event)
             queued += when (event) {
                 // A tap on the letterbox bars is not an AWT event (as in the core).
-                is AwtPointerEvent -> if (viewport.mapPointer(event.x, event.y) != null) 1 else 0
+                is AwtPointerEvent -> {
+                    if (!inputSettings.accepts(event.source)) {
+                        filteredSamples++
+                        0
+                    } else {
+                        val mapped = viewport.mapPointer(event.x, event.y)
+                        if (mapped != null) {
+                            pointer = mapped
+                            if (!inputSettings.captured) gameCursor = mapped
+                            1
+                        } else {
+                            0
+                        }
+                    }
+                }
+                // Task 12: relative motion moves the pointer without a position.
+                is AwtRelativePointerEvent -> {
+                    if (!inputSettings.accepts(event.source)) {
+                        filteredSamples++
+                        0
+                    } else {
+                        val (dx, dy) = viewport.scaleDelta(inputSettings.sensitivity, event.dx, event.dy)
+                        if (dx == 0 && dy == 0) {
+                            0
+                        } else {
+                            pointer = viewport.movePointer(pointer, dx, dy)
+                            // A grabbed cursor is free-running, exactly as in the
+                            // core: that is what lets the view keep turning.
+                            gameCursor = if (inputSettings.captured) {
+                                AwtPoint(gameCursor.x + dx, gameCursor.y + dy)
+                            } else {
+                                pointer
+                            }
+                            1
+                        }
+                    }
+                }
+                is AwtCaptureEvent -> {
+                    if (inputSettings.captured == event.captured) {
+                        0
+                    } else {
+                        inputSettings = inputSettings.copy(
+                            pointerMode = if (event.captured) {
+                                AwtPointerMode.CAPTURED
+                            } else {
+                                AwtPointerMode.ABSOLUTE
+                            },
+                        )
+                        gameCursor = viewport.centre()
+                        1
+                    }
+                }
                 is AwtTextEvent -> event.text.length
                 is AwtFocusEvent -> {
                     focused = event.gained
@@ -361,7 +477,14 @@ class FakeAwtCanvasBridge(
                 else -> 1
             }
         }
-        return AwtInputResult(queued = queued, focused = focused)
+        return AwtInputResult(
+            queued = queued,
+            focused = focused,
+            pointer = pointer,
+            captured = inputSettings.captured,
+            pointerMode = inputSettings.pointerMode,
+            gameCursor = gameCursor,
+        )
     }
 
     override fun submitFrame(frame: ByteArray): AwtFrameUpdate {

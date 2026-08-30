@@ -83,6 +83,13 @@ pub struct Classpath {
     pub substituted: Vec<String>,
     /// Coordinates dropped because a higher version was present.
     pub collapsed: Vec<String>,
+    /// Directory holding the JNA dispatcher (`libjnidispatch.so`) for this
+    /// launch's ABI, populated from the prebuilt `app_runtime/jna/jna-<abi>.zip`
+    /// when the runtime ships one (task 3). The launch engine puts it on
+    /// `-Djna.boot.library.path` so `com.sun.jna` loads instead of dying with
+    /// "Unable to load JNA library" — a common failure for JNA-using mods on
+    /// the mainland network where re-downloading a desktop dispatcher is hard.
+    pub jna_boot_path: Option<PathBuf>,
 }
 
 impl Classpath {
@@ -282,6 +289,34 @@ impl ClasspathBuilder {
                 let backend = AwtBackend::for_java(self.java_version);
                 for jar in CacioBundle::scan(rt, backend).classpath_jars() {
                     cp.entries.push(jar);
+                }
+            }
+        }
+
+        // JNA native dispatcher (task 3). The dispatcher bundled inside
+        // `jna.jar` is a *desktop* build that cannot load on Android, which is
+        // exactly why a JNA-using mod crashes with "Unable to load JNA library".
+        // FCL ships `app_runtime/jna/jna-<abi>.zip` (one `libjnidispatch.so` per
+        // JNA release); we unpack it and point `jna.boot.library.path` at the
+        // result. Only ABIs we actually ship an archive for get one, so an ABI
+        // without a JNA archive (e.g. x86_64) is left untouched.
+        if let Some(rt) = &self.app_runtime {
+            if rt.jna_archive(self.abi).is_some() {
+                match rt.extract_jna(self.abi) {
+                    Ok(jna_dir) => {
+                        cp.jna_boot_path = Some(jna_dir.clone());
+                        if !cp.native_dirs.contains(&jna_dir) {
+                            cp.native_dirs.push(jna_dir);
+                        }
+                    }
+                    Err(e) => {
+                        // JNA is required by many popular mods; surface a precise,
+                        // actionable error instead of letting the JVM die later
+                        // with an opaque `UnsatisfiedLinkError`.
+                        return Err(RcError::MissingFile(format!(
+                            "could not prepare the JNA native library: {e}"
+                        )));
+                    }
                 }
             }
         }
@@ -565,6 +600,44 @@ mod tests {
         assert!(joined.contains("cacio-shared.jar"), "{joined}");
         // the agent is passed with -javaagent, never on the classpath
         assert!(!joined.contains("cacio-agent.jar"), "{joined}");
+    }
+
+    #[test]
+    fn jna_native_library_is_injected_for_the_abi() {
+        let td = tempfile::tempdir().unwrap();
+        let root = td.path().join("app_runtime");
+        std::fs::create_dir_all(root.join("jna")).unwrap();
+
+        // Use FCL's real per-ABI JNA archive shipped as an app_runtime asset.
+        let asset = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../runtime/src/main/assets/app_runtime/jna/jna-arm64.zip");
+        assert!(asset.is_file(), "JNA asset missing at {asset:?}");
+        std::fs::copy(&asset, root.join("jna").join("jna-arm64.zip")).unwrap();
+
+        // `substitute_lwjgl` is irrelevant to JNA; disable it so the test does
+        // not need a full LWJGL bundle present on disk.
+        let mut b = builder().with_app_runtime(AppRuntime::new(&root), LwjglVersion::V3_3_3);
+        b.policy.substitute_lwjgl = false;
+        let v = resolved(r#"{"id":"x","libraries":[]}"#);
+        let cp = b.build(&v, Path::new("/mc/x.jar")).unwrap();
+
+        let jna_dir = cp
+            .jna_boot_path
+            .expect("JNA boot path should be injected for arm64");
+        assert_eq!(jna_dir, root.join("jna").join("arm64"));
+        // Bare dispatcher is surfaced for JNA's boot-path probe.
+        assert!(
+            jna_dir.join("libjnidispatch.so").is_file(),
+            "bare dispatcher"
+        );
+        // At least one versioned original is preserved.
+        assert!(jna_dir.join("jna").is_dir(), "versioned jna dir present");
+        // The JNA dir is also placed on the native search path.
+        assert!(cp.native_dirs.contains(&jna_dir));
+
+        // Idempotent: a second build reuses the already-extracted dir.
+        let cp2 = b.build(&v, Path::new("/mc/x.jar")).unwrap();
+        assert_eq!(cp2.jna_boot_path, Some(jna_dir));
     }
 
     #[test]

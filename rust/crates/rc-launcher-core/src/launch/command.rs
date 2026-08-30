@@ -247,7 +247,10 @@ impl<'a> CommandBuilder<'a> {
         if !o.use_cacio {
             return AwtBridge::headless();
         }
-        let mut bridge = AwtBridge::for_java(o.java_version, o.window);
+        // Task 9: the cacio managed screen must have the *oriented* geometry,
+        // otherwise a forced-portrait session would paint a landscape desktop
+        // into a tall surface and every touch would land letterboxed.
+        let mut bridge = AwtBridge::for_java(o.java_version, o.effective_window());
         if let Some(rt) = self.app_runtime() {
             let bundle = CacioBundle::scan(&rt, bridge.backend);
             bridge = bridge.with_bundle(bundle);
@@ -326,8 +329,9 @@ impl<'a> CommandBuilder<'a> {
             .set("primary_jar_name", format!("{}.jar", v.id));
 
         // --- window ---------------------------------------------------------
-        s.set("resolution_width", o.window.width.to_string())
-            .set("resolution_height", o.window.height.to_string());
+        let window = o.effective_window();
+        s.set("resolution_width", window.width.to_string())
+            .set("resolution_height", window.height.to_string());
 
         // --- quick play (MC 1.20+) -----------------------------------------
         match &o.quick_play {
@@ -357,7 +361,12 @@ impl<'a> CommandBuilder<'a> {
     /// Mirrors what FCL's `FCLauncher` sets up before `JNI_CreateJavaVM`, with
     /// the additions a *diagnosable* launch needs (`-XX:ErrorFile`,
     /// `-XX:-OmitStackTraceInFastThrow`).
-    pub fn base_jvm_args(&self, java_library_path: &str, notes: &mut Vec<String>) -> Vec<String> {
+    pub fn base_jvm_args(
+        &self,
+        java_library_path: &str,
+        jna_boot_path: Option<&Path>,
+        notes: &mut Vec<String>,
+    ) -> Vec<String> {
         let o = self.options;
         let java = o.java_version;
         let mut a: Vec<String> = Vec::new();
@@ -405,9 +414,12 @@ impl<'a> CommandBuilder<'a> {
             "-Djna.tmpdir={}",
             path(&o.data_root.join("tmp").join("jna"))
         ));
-        if let Some(nl) = &o.native_lib_dir {
-            // JNA must load its dispatcher from the app's nativeLibraryDir: the
-            // bundled desktop build inside jna.jar cannot run on Android.
+        // The classpath resolver (task 3) injects the per-ABI JNA dispatcher dir
+        // when the runtime ships one; fall back to the app's `nativeLibraryDir`
+        // (where the renderer / OpenAL .so live) otherwise. JNA must load its
+        // dispatcher from here: the desktop build inside `jna.jar` cannot run on
+        // Android and would otherwise fail with "Unable to load JNA library".
+        if let Some(nl) = jna_boot_path.or(o.native_lib_dir.as_deref()) {
             a.push(format!("-Djna.boot.library.path={}", path(nl)));
             a.push("-Djna.nosys=false".into());
         }
@@ -522,10 +534,11 @@ impl<'a> CommandBuilder<'a> {
                 args.push("--fullscreen".into());
             }
         } else if !has_flag(&args, "--width") && !has_flag(&args, "--height") {
+            let window = o.effective_window();
             args.push("--width".into());
-            args.push(o.window.width.to_string());
+            args.push(window.width.to_string());
             args.push("--height".into());
-            args.push(o.window.height.to_string());
+            args.push(window.height.to_string());
         }
 
         // Demo mode.
@@ -590,7 +603,11 @@ impl<'a> CommandBuilder<'a> {
         let subs = self.substitutions(&classpath, &natives_dir);
 
         // 1) our own base arguments
-        let mut jvm_args = self.base_jvm_args(&java_library_path, &mut notes);
+        let mut jvm_args = self.base_jvm_args(
+            &java_library_path,
+            self.classpath.jna_boot_path.as_deref(),
+            &mut notes,
+        );
 
         // 2) the manifest's `arguments.jvm`, rule-filtered and templated
         let manifest_jvm: Vec<String> = match &v.arguments {
@@ -773,11 +790,32 @@ mod tests {
             native_dirs: vec![PathBuf::from("/data/rt/lwjgl/3.3.3/natives/arm64-v8a")],
             substituted: vec!["org.lwjgl:lwjgl:3.3.3".into()],
             collapsed: vec![],
+            jna_boot_path: None,
         }
     }
 
     fn build(o: &LaunchOptions, v: &ResolvedVersion, c: &Classpath) -> LaunchCommand {
         CommandBuilder::new(o, v, c).build().expect("build")
+    }
+
+    #[test]
+    fn jna_boot_path_prefers_classpath_override() {
+        let (o, v, mut c) = (opts(), modern(), cp());
+        // The classpath resolver (task 3) injects the extracted per-ABI JNA dir
+        // into `jna_boot_path`; it must take precedence over nativeLibraryDir.
+        c.jna_boot_path = Some(PathBuf::from("/data/rt/jna/arm64"));
+        let cmd = build(&o, &v, &c);
+        let jna = cmd
+            .jvm_args
+            .iter()
+            .find(|a| a.starts_with("-Djna.boot.library.path="))
+            .expect("jna.boot.library.path present");
+        assert_eq!(jna, "-Djna.boot.library.path=/data/rt/jna/arm64");
+        // The app's nativeLibraryDir is NOT used when the classpath supplies one.
+        assert!(!cmd
+            .jvm_args
+            .iter()
+            .any(|a| a == "-Djna.boot.library.path=/data/app/lib/arm64"));
     }
 
     #[test]
@@ -1052,6 +1090,88 @@ mod tests {
             .jvm_args
             .iter()
             .any(|a| a == "-Dcacio.managed.screensize=854x480"));
+    }
+
+    #[test]
+    fn a_forced_portrait_launch_gets_a_portrait_window() {
+        // Task 9: the user pinned the launcher to portrait, so the game window
+        // (and cacio's managed screen) must be portrait too instead of a
+        // landscape window letterboxed into two fat black bars.
+        let mut o = opts();
+        o.window = WindowSize {
+            width: 1280,
+            height: 720,
+        };
+        o.orientation = crate::display::OrientationPolicy::Portrait;
+        assert_eq!(
+            o.effective_window(),
+            WindowSize {
+                width: 720,
+                height: 1280
+            }
+        );
+        assert_eq!(
+            o.window_orientation(),
+            crate::display::ScreenOrientation::Portrait
+        );
+        let cmd = build(&o, &modern(), &cp());
+        assert!(
+            cmd.game_args
+                .join(" ")
+                .contains("--width 720 --height 1280"),
+            "{:?}",
+            cmd.game_args
+        );
+        assert!(cmd
+            .jvm_args
+            .iter()
+            .any(|a| a == "-Dcacio.managed.screensize=720x1280"));
+    }
+
+    #[test]
+    fn forced_landscape_keeps_a_landscape_window_untouched() {
+        let mut o = opts();
+        o.window = WindowSize {
+            width: 1280,
+            height: 720,
+        };
+        o.orientation = crate::display::OrientationPolicy::Landscape;
+        let cmd = build(&o, &modern(), &cp());
+        assert!(cmd
+            .game_args
+            .join(" ")
+            .contains("--width 1280 --height 720"));
+        // ... and rotates a portrait window into landscape.
+        o.window = WindowSize {
+            width: 720,
+            height: 1280,
+        };
+        let cmd = build(&o, &modern(), &cp());
+        assert!(
+            cmd.game_args
+                .join(" ")
+                .contains("--width 1280 --height 720"),
+            "{:?}",
+            cmd.game_args
+        );
+    }
+
+    #[test]
+    fn following_the_system_never_touches_the_window() {
+        let mut o = opts();
+        o.window = WindowSize {
+            width: 720,
+            height: 1280,
+        };
+        assert_eq!(
+            o.orientation,
+            crate::display::OrientationPolicy::FollowSystem
+        );
+        let cmd = build(&o, &modern(), &cp());
+        assert!(cmd
+            .game_args
+            .join(" ")
+            .contains("--width 720 --height 1280"));
     }
 
     #[test]

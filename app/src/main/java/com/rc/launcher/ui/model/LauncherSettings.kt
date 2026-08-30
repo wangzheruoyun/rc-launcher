@@ -1,5 +1,12 @@
 package com.rc.launcher.ui.model
 
+import com.rc.launcher.ui.awt.AwtInputSettings
+import com.rc.launcher.ui.awt.AwtKeyBindings
+import com.rc.launcher.ui.awt.AwtMouseSensitivity
+import com.rc.launcher.ui.awt.AwtPointerMode
+import com.rc.launcher.ui.model.json.JsonValue
+import com.rc.launcher.ui.model.json.parseJson
+import com.rc.launcher.ui.model.json.toJsonString
 import kotlin.math.roundToInt
 import kotlin.comparisons.minOf
 
@@ -99,6 +106,11 @@ enum class RendererOption(
         "opengles3_angle", "ANGLE",
         "基于 Vulkan 的 GLES 实现，性能稳定（libGLESv2_angle.so）",
         "libGLESv2_angle.so",
+    ),
+    MOBILE_GLUES(
+        "mobile_glues", "Mobile Glues",
+        "基于 Vulkan 的 GLES 转译层，兼容性好（libmobileglues.so）",
+        "libmobileglues.so",
     );
 
     companion object {
@@ -116,6 +128,60 @@ enum class ResolutionMode(val label: String) {
     companion object {
         fun fromName(name: String?): ResolutionMode =
             entries.firstOrNull { it.name == name } ?: AUTO
+    }
+}
+
+/**
+ * Screen-orientation strategy the launcher applies to the Activity (task 9).
+ *
+ * Kotlin mirror of the core's `display::OrientationPolicy`: the [id] values are
+ * persisted in the settings *and* understood by the Rust core (they are the ids
+ * `LaunchOptions.orientation` accepts, which is how a forced orientation also
+ * orients the game window), and [androidScreenOrientation] names the
+ * `ActivityInfo.SCREEN_ORIENTATION_*` constant
+ * [com.rc.launcher.MainActivity.applyOrientation] requests.
+ *
+ * `user` — not `unspecified` — is deliberate for [FOLLOW_SYSTEM]: it honours the
+ * device rotation lock, so "follow system" means "follow the *user*" instead of
+ * spinning while rotation is locked. The forced modes use the `sensor*` variants
+ * so both directions of the pinned axis stay available (a tablet in a landscape
+ * dock, a phone held the other way round).
+ */
+enum class OrientationMode(
+    val id: String,
+    val label: String,
+    val androidScreenOrientation: String,
+    val description: String,
+) {
+    FOLLOW_SYSTEM(
+        "system",
+        "跟随系统",
+        "user",
+        "跟随系统方向与旋转锁定；界面按窗口尺寸自动切换栅格与导航栏。",
+    ),
+    LANDSCAPE(
+        "landscape",
+        "强制横屏",
+        "sensorLandscape",
+        "始终横屏（允许左右两个方向），适合手柄或平板；导航切换到侧边栏。",
+    ),
+    PORTRAIT(
+        "portrait",
+        "强制竖屏",
+        "sensorPortrait",
+        "始终竖屏（允许正反两个方向），单手操作更稳；游戏窗口同步为竖向分辨率。",
+    ),
+    ;
+
+    /** `true` for the two modes that pin the axis. */
+    val isForced: Boolean get() = this != FOLLOW_SYSTEM
+
+    companion object {
+        val DEFAULT = FOLLOW_SYSTEM
+        fun fromId(id: String?): OrientationMode =
+            entries.firstOrNull { it.id == id } ?: DEFAULT
+        fun isValidId(id: String?): Boolean =
+            id != null && entries.any { it.id == id }
     }
 }
 
@@ -183,11 +249,39 @@ data class LauncherSettings(
     val framerateLimit: Int = 0,
     val fullscreen: Boolean = false,
 
+    // --- Screen orientation (task 9) ---
+    val orientationModeId: String = OrientationMode.DEFAULT.id,
+
     // --- Controller ---
     val controllerEnabled: Boolean = false,
     val controllerLayoutId: String = CONTROLLER_LAYOUT_DEFAULT,
     val controllerDeadzone: Float = 0.15f,
     val controllerVibration: Boolean = true,
+    // --- Controller device mapping (task 4) ---
+    /** Built-in profile id resolved by plug-and-play (see [GamepadDatabase]). */
+    val controllerProfileId: String = CONTROLLER_PROFILE_DEFAULT,
+    /** Stick/trigger sensitivity multiplier (0.1..4.0). */
+    val controllerSensitivity: Float = 1.0f,
+    /** Invert the horizontal stick axis. */
+    val controllerInvertX: Boolean = false,
+    /** Invert the vertical stick axis. */
+    val controllerInvertY: Boolean = false,
+    /** Custom button/axis remap overrides as JSON (see [ControllerRemap]). */
+    val controllerRemapJson: String = "",
+
+    // --- Physical keyboard & mouse (task 12) ---
+    /** Capture the pointer when a game session starts (mouse look). */
+    val mousePointerCapture: Boolean = false,
+    /** Accept touch while the pointer is captured (mixed touch + mouse). */
+    val mouseHybridTouch: Boolean = true,
+    /** Pointer sensitivity multiplier (0.1..10). */
+    val mouseSensitivity: Float = 1f,
+    /** Invert the vertical axis ("flight-stick" look). */
+    val mouseInvertY: Boolean = false,
+    /** Wheel scaling multiplier (0.1..10). */
+    val mouseScrollScale: Float = 1f,
+    /** Key / button remaps as the JSON the core parses (see [AwtKeyBindings]). */
+    val mouseKeyBindingsJson: String = "",
 
     // --- Directory / misc ---
     val gameFilesRoot: String = "",
@@ -204,6 +298,11 @@ data class LauncherSettings(
         const val MIN_SCALE = 0.25f
         const val MAX_SCALE = 2f
         const val CONTROLLER_LAYOUT_DEFAULT = "default"
+        const val CONTROLLER_PROFILE_DEFAULT = "generic"
+
+        /** Slowest / fastest mouse + wheel factor (mirrors `MouseSensitivity`). */
+        const val MIN_MOUSE_FACTOR = 0.1f
+        const val MAX_MOUSE_FACTOR = 10f
 
         /** Heuristic auto heap: ~1/3 of device RAM, clamped to [MIN_HEAP_MB]..[MAX_HEAP_MB]. */
         fun autoHeapFor(deviceTotalMb: Int): Int {
@@ -261,10 +360,22 @@ data class LauncherSettings(
                     resolutionScale = float("resolutionScale", 1f),
                     framerateLimit = int("framerateLimit", 0),
                     fullscreen = bool("fullscreen", false),
+                    orientationModeId = str("orientationModeId", OrientationMode.DEFAULT.id),
                     controllerEnabled = bool("controllerEnabled", false),
                     controllerLayoutId = str("controllerLayoutId", CONTROLLER_LAYOUT_DEFAULT),
                     controllerDeadzone = float("controllerDeadzone", 0.15f),
                     controllerVibration = bool("controllerVibration", true),
+                    controllerProfileId = str("controllerProfileId", CONTROLLER_PROFILE_DEFAULT),
+                    controllerSensitivity = float("controllerSensitivity", 1.0f),
+                    controllerInvertX = bool("controllerInvertX", false),
+                    controllerInvertY = bool("controllerInvertY", false),
+                    controllerRemapJson = str("controllerRemapJson", ""),
+                    mousePointerCapture = bool("mousePointerCapture", false),
+                    mouseHybridTouch = bool("mouseHybridTouch", true),
+                    mouseSensitivity = float("mouseSensitivity", 1f),
+                    mouseInvertY = bool("mouseInvertY", false),
+                    mouseScrollScale = float("mouseScrollScale", 1f),
+                    mouseKeyBindingsJson = str("mouseKeyBindingsJson", ""),
                     gameFilesRoot = str("gameFilesRoot", ""),
                     autoCleanLogs = bool("autoCleanLogs", true),
                     keepCrashReports = bool("keepCrashReports", false),
@@ -295,6 +406,9 @@ data class LauncherSettings(
         resolutionScale !in MIN_SCALE..MAX_SCALE -> "分辨率缩放超出范围"
         framerateLimit !in MIN_FRAMERATE..MAX_FRAMERATE -> "帧率限制超出范围"
         controllerDeadzone !in 0f..1f -> "手柄死区超出范围"
+        controllerSensitivity !in InputCalibration.MIN_SENSITIVITY..InputCalibration.MAX_SENSITIVITY ->
+            "手柄灵敏度超出范围"
+        !GamepadDatabase.all.any { it.id == controllerProfileId } -> "手柄配置无效"
         else -> null
     }
 
@@ -313,11 +427,44 @@ data class LauncherSettings(
             javaMinHeapMb = javaMinHeapMb?.coerceIn(0, heap)?.takeIf { it > 0 },
             javaVersion = javaVersion?.coerceAtLeast(8),
             rendererId = if (RendererOption.isValidId(rendererId)) rendererId else RendererOption.DEFAULT.id,
+            orientationModeId = if (OrientationMode.isValidId(orientationModeId)) orientationModeId else OrientationMode.DEFAULT.id,
             customWidth = customWidth.coerceIn(WindowSize.MIN_W, WindowSize.MAX_W),
             customHeight = customHeight.coerceIn(WindowSize.MIN_H, WindowSize.MAX_H),
             resolutionScale = resolutionScale.coerceIn(MIN_SCALE, MAX_SCALE),
             framerateLimit = framerateLimit.coerceIn(MIN_FRAMERATE, MAX_FRAMERATE),
             controllerDeadzone = controllerDeadzone.coerceIn(0f, 1f),
+            // Task-4 controller device mapping: clamp + fall back to generic.
+            controllerProfileId = if (GamepadDatabase.all.any { it.id == controllerProfileId }) {
+                controllerProfileId
+            } else {
+                CONTROLLER_PROFILE_DEFAULT
+            },
+            controllerSensitivity = controllerSensitivity.coerceIn(
+                InputCalibration.MIN_SENSITIVITY,
+                InputCalibration.MAX_SENSITIVITY,
+            ),
+            // Task 12: the same bounds the Rust core clamps to, so the UI can
+            // never show a value the core would silently refuse. A NaN from a
+            // tampered backup becomes 1:1 rather than a dead mouse.
+            mouseSensitivity = if (mouseSensitivity.isFinite()) {
+                mouseSensitivity.coerceIn(MIN_MOUSE_FACTOR, MAX_MOUSE_FACTOR)
+            } else {
+                1f
+            },
+            mouseScrollScale = if (mouseScrollScale.isFinite()) {
+                mouseScrollScale.coerceIn(MIN_MOUSE_FACTOR, MAX_MOUSE_FACTOR)
+            } else {
+                1f
+            },
+            mouseKeyBindingsJson = mouseKeyBindingsJson.trim(),
+            // A corrupt remap blob degrades to an empty (safe) remap.
+            // A corrupt/invalid remap blob degrades to an empty (safe) remap, and an
+            // empty remap serialises back to "" so the backup round-trip stays
+            // byte-for-byte equal (task 19 robustness).
+            controllerRemapJson = run {
+                val parsed = ControllerRemap.fromJson(controllerRemapJson)
+                if (parsed == null || parsed.isEmpty()) "" else parsed.toJsonString()
+            },
             rendererOptions = rendererOptions.sanitized(),
         )
     }
@@ -330,6 +477,23 @@ data class LauncherSettings(
     fun mirror(): MirrorSource? = MirrorCatalog.fromId(mirrorId).takeIf { !it.official }
 
     fun renderer(): RendererOption = RendererOption.fromId(rendererId)
+
+    /** The resolved screen orientation strategy (task 9). */
+    fun orientationMode(): OrientationMode = OrientationMode.fromId(orientationModeId)
+
+    /** The resolved controller device profile (task 4). */
+    fun controllerProfile(): ControllerProfile = GamepadDatabase.byId(controllerProfileId)
+
+    /** The resolved input calibration (task 4). */
+    fun inputCalibration(): InputCalibration = InputCalibration(
+        deadzone = controllerDeadzone,
+        sensitivity = controllerSensitivity,
+        invertX = controllerInvertX,
+        invertY = controllerInvertY,
+    )
+
+    /** The resolved custom remap overrides (task 4), empty when none. */
+    fun controllerRemap(): ControllerRemap = ControllerRemap.fromJson(controllerRemapJson) ?: ControllerRemap()
 
     /** Resolved window size (custom size only applies in [ResolutionMode.CUSTOM]). */
     fun windowSize(): WindowSize = if (resolutionMode == ResolutionMode.CUSTOM) {
@@ -347,6 +511,37 @@ data class LauncherSettings(
      * Round-trips through [fromBackupString] for the Settings Center backup /
      * restore feature (task 14).
      */
+    /**
+     * The physical-input settings to hand to the AWT session (task 12).
+     *
+     * Persisted settings are the *source of truth*: the session is opened with
+     * them, so the first mouse sample already has the right sensitivity and the
+     * player's remaps are live before the game paints its first frame.
+     */
+    fun awtInputSettings(): AwtInputSettings = AwtInputSettings(
+        pointerMode = if (mousePointerCapture) AwtPointerMode.CAPTURED else AwtPointerMode.ABSOLUTE,
+        hybridTouch = mouseHybridTouch,
+        sensitivity = AwtMouseSensitivity.uniform(mouseSensitivity).copy(invertY = mouseInvertY),
+        scrollPermille = AwtMouseSensitivity.quantise(mouseScrollScale),
+        bindings = AwtKeyBindings.parse(
+            parseJson(mouseKeyBindingsJson.ifBlank { "{}" }) as? JsonValue.Obj,
+        ),
+    ).sanitized()
+
+    /** Fold settings edited on the AWT screen back into the persisted form. */
+    fun withAwtInput(input: AwtInputSettings): LauncherSettings = copy(
+        mousePointerCapture = input.captured,
+        mouseHybridTouch = input.hybridTouch,
+        mouseSensitivity = input.sensitivity.x,
+        mouseInvertY = input.sensitivity.invertY,
+        mouseScrollScale = input.scrollPermille / 1000f,
+        mouseKeyBindingsJson = if (input.bindings.isEmpty) {
+            ""
+        } else {
+            input.bindings.toJson().toJsonString()
+        },
+    ).sanitized()
+
     fun toBackupString(): String = buildString {
         val s = this@LauncherSettings
         appendLine("mirrorId=" + s.mirrorId)
@@ -365,10 +560,22 @@ data class LauncherSettings(
         appendLine("resolutionScale=" + s.resolutionScale)
         appendLine("framerateLimit=" + s.framerateLimit)
         appendLine("fullscreen=" + s.fullscreen)
+        appendLine("orientationModeId=" + s.orientationModeId)
         appendLine("controllerEnabled=" + s.controllerEnabled)
         appendLine("controllerLayoutId=" + s.controllerLayoutId)
         appendLine("controllerDeadzone=" + s.controllerDeadzone)
         appendLine("controllerVibration=" + s.controllerVibration)
+        appendLine("controllerProfileId=" + s.controllerProfileId)
+        appendLine("controllerSensitivity=" + s.controllerSensitivity)
+        appendLine("controllerInvertX=" + s.controllerInvertX)
+        appendLine("controllerInvertY=" + s.controllerInvertY)
+        appendLine("controllerRemapJson=" + s.controllerRemapJson)
+        appendLine("mousePointerCapture=" + s.mousePointerCapture)
+        appendLine("mouseHybridTouch=" + s.mouseHybridTouch)
+        appendLine("mouseSensitivity=" + s.mouseSensitivity)
+        appendLine("mouseInvertY=" + s.mouseInvertY)
+        appendLine("mouseScrollScale=" + s.mouseScrollScale)
+        appendLine("mouseKeyBindingsJson=" + s.mouseKeyBindingsJson)
         appendLine("gameFilesRoot=" + s.gameFilesRoot)
         appendLine("autoCleanLogs=" + s.autoCleanLogs)
         appendLine("keepCrashReports=" + s.keepCrashReports)

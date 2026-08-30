@@ -9,7 +9,18 @@ import com.rc.launcher.ui.awt.AwtControlRequest
 import com.rc.launcher.ui.awt.AwtControlResult
 import com.rc.launcher.ui.awt.AwtControlState
 import com.rc.launcher.ui.awt.AwtCursorKind
+import com.rc.launcher.ui.awt.AwtButtonEvent
+import com.rc.launcher.ui.awt.AwtCaptureEvent
 import com.rc.launcher.ui.awt.AwtFocusEvent
+import com.rc.launcher.ui.awt.AwtGameInputState
+import com.rc.launcher.ui.awt.AwtInputSettings
+import com.rc.launcher.ui.awt.AwtKeyBindings
+import com.rc.launcher.ui.awt.AwtMouseSensitivity
+import com.rc.launcher.ui.awt.AwtPointerMode
+import com.rc.launcher.ui.awt.AwtPointerSource
+import com.rc.launcher.ui.awt.AwtPoint
+import com.rc.launcher.ui.awt.AwtRelativePointerEvent
+import com.rc.launcher.ui.awt.AwtScrollAtPointerEvent
 import com.rc.launcher.ui.awt.AwtFrameUpdate
 import com.rc.launcher.ui.awt.AwtInputEvent
 import com.rc.launcher.ui.awt.AwtInputResult
@@ -24,6 +35,8 @@ import com.rc.launcher.ui.awt.AwtSessionConfig
 import com.rc.launcher.ui.awt.AwtSessionInfo
 import com.rc.launcher.ui.awt.AwtTextEvent
 import com.rc.launcher.ui.awt.AwtWire
+import com.rc.launcher.ui.ScreenOrientation
+import com.rc.launcher.ui.rotationFlips
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,6 +91,8 @@ class AwtSurfaceViewModel(
         screenHeight: Int = DEFAULT_SCREEN_HEIGHT,
         javaVersion: String? = null,
         transportDir: String? = null,
+        /** Physical keyboard / mouse settings to start with (task 12). */
+        input: AwtInputSettings? = null,
     ) {
         val current = _state.value
         val config = AwtSessionConfig(
@@ -88,6 +103,9 @@ class AwtSurfaceViewModel(
             scaleMode = current.info.scaleMode,
             javaVersion = javaVersion,
             transportDir = transportDir,
+            // A fresh session starts from the player's saved settings, so the
+            // first mouse sample already has the right sensitivity.
+            input = input ?: current.info.input,
         )
         pending.clear()
         applyInfo(runCatching { bridge.open(config) }.getOrElse { AwtSessionInfo.failed(reason(it)) })
@@ -124,15 +142,38 @@ class AwtSurfaceViewModel(
      * The Compose surface changed size (rotation, split screen, …). The desktop
      * keeps its own resolution: only the letterboxing changes, so no frame is
      * lost on a rotation.
+     *
+     * **Rotation safety (task 9).** Pointer samples are batched and flushed once
+     * per frame, and the *core* maps them from surface pixels to desktop pixels
+     * with whatever viewport it currently has. A rotation between the sample and
+     * the flush would therefore map old coordinates through the new letterboxing
+     * — a tap that visibly lands somewhere else. Two things prevent that:
+     *
+     * 1. queued samples are flushed **before** the new geometry is published, so
+     *    every sample is mapped with the viewport it was taken in;
+     * 2. when the resize is a real quarter turn ([rotationFlips]) the in-flight
+     *    gesture is dropped afterwards ([releaseAll]) — the finger is physically
+     *    somewhere else now, so continuing a drag/press would be wrong (and could
+     *    leave a button stuck). Resizes *inside* one orientation (soft keyboard,
+     *    split screen, foldable hinge) keep the gesture alive.
      */
     fun onSurfaceSizeChanged(width: Int, height: Int) {
         val w = width.coerceAtLeast(0)
         val h = height.coerceAtLeast(0)
         val current = _state.value
         if (current.surfaceWidth == w && current.surfaceHeight == h) return
-        _state.value = current.copy(surfaceWidth = w, surfaceHeight = h)
+        val rotated = rotationFlips(current.surfaceWidth, current.surfaceHeight, w, h)
+        // (1) Hand over everything sampled against the old viewport first.
+        if (current.info.open && pending.isNotEmpty()) flushInput()
+        _state.value = _state.value.copy(
+            surfaceWidth = w,
+            surfaceHeight = h,
+            rotations = _state.value.rotations + if (rotated) 1 else 0,
+        )
         if (!current.info.open || w == 0 || h == 0) return
         configure(AwtConfigureRequest(surfaceWidth = w, surfaceHeight = h))
+        // (2) A quarter turn invalidates the gesture that is in flight.
+        if (rotated) releaseAll()
     }
 
     /** Change the fitting policy (stretch / fit / crop / 1:1). */
@@ -223,11 +264,123 @@ class AwtSurfaceViewModel(
         x: Float,
         y: Float,
         button: AwtMouseButton = AwtMouseButton.LEFT,
+        /** Which device produced it (task 12): the core filters on this. */
+        source: AwtPointerSource = AwtPointerSource.TOUCH,
     ) {
-        enqueue(AwtPointerEvent(phase, x, y, button))
+        enqueue(AwtPointerEvent(phase, x, y, button, source))
         // A press / release must not wait for the next frame.
         if (phase != AwtPointerPhase.MOVE) flushInput()
     }
+
+    // ---- Physical keyboard & mouse (task 12) --------------------------------
+
+    /**
+     * Queue *relative* motion from a physical mouse.
+     *
+     * Batched like any other motion (one JNI call per frame): a 1000 Hz gaming
+     * mouse would otherwise cross the JNI boundary 16 times per rendered frame.
+     * The core accumulates the sub-pixel remainder, so batching loses nothing.
+     */
+    fun onMouseRelative(
+        dx: Float,
+        dy: Float,
+        source: AwtPointerSource = AwtPointerSource.MOUSE,
+    ) {
+        if (dx == 0f && dy == 0f) return
+        if (!dx.isFinite() || !dy.isFinite()) return
+        enqueue(AwtRelativePointerEvent(dx, dy, source))
+    }
+
+    /** Hand a whole batch (what [com.rc.launcher.ui.awt.AwtMouseTracker] produced). */
+    fun onInputEvents(events: List<AwtInputEvent>) {
+        if (events.isEmpty()) return
+        events.forEach { enqueue(it) }
+        // Anything that is not pure motion is latency-sensitive (a click, a
+        // capture change), so do not make it wait for the frame boundary.
+        if (events.any { it !is AwtRelativePointerEvent && it !is AwtPointerEvent }) flushInput()
+    }
+
+    /**
+     * Capture or release the pointer.
+     *
+     * Sent as an *input* event, not as a configure call, so it stays ordered with
+     * the gesture stream: a click queued before the capture must be delivered
+     * before the game is told it owns the cursor.
+     */
+    fun setPointerCapture(captured: Boolean) {
+        if (_state.value.captured == captured) return
+        sendNow(AwtCaptureEvent(captured))
+    }
+
+    /**
+     * A button press / release from a **captured** mouse.
+     *
+     * Flushed immediately: a click that waits for the frame boundary is a click
+     * that feels broken, and there is exactly one per press.
+     */
+    fun onCapturedButton(button: AwtMouseButton, down: Boolean) =
+        sendNow(AwtButtonEvent(button, down))
+
+    /**
+     * A wheel scroll from a captured mouse, in notches (positive = toward the
+     * user, as AWT and Compose count it).
+     *
+     * Fractional notches from a high-resolution wheel are rounded *away from
+     * zero*, so a small flick still switches one hotbar slot instead of nothing.
+     */
+    fun onCapturedScroll(ticks: Float) {
+        if (!ticks.isFinite() || ticks == 0f) return
+        val whole = if (ticks > 0f) kotlin.math.ceil(ticks).toInt() else kotlin.math.floor(ticks).toInt()
+        enqueue(AwtScrollAtPointerEvent(whole))
+    }
+
+    /** Toggle the capture (what the HUD button and a middle-click do). */
+    fun togglePointerCapture() = setPointerCapture(!_state.value.captured)
+
+    /** Switch pointer mode (absolute cursor ⇄ captured pointer). */
+    fun setPointerMode(mode: AwtPointerMode) = setPointerCapture(mode.isCaptured)
+
+    /** Replace the physical-input settings (sensitivity, hybrid touch, remaps). */
+    fun setInputSettings(settings: AwtInputSettings) {
+        configure(AwtConfigureRequest(input = settings.sanitized()))
+    }
+
+    /** Edit the settings in force, e.g. `updateInput { it.copy(hybridTouch = false) }`. */
+    fun updateInput(edit: (AwtInputSettings) -> AwtInputSettings) {
+        setInputSettings(edit(_state.value.inputSettings))
+    }
+
+    /** Set one sensitivity factor for both axes (the simple slider). */
+    fun setSensitivity(factor: Float) =
+        updateInput { it.copy(sensitivity = it.sensitivity.withUniform(factor)) }
+
+    /** Invert the vertical axis. */
+    fun setInvertY(invert: Boolean) =
+        updateInput { it.copy(sensitivity = it.sensitivity.copy(invertY = invert)) }
+
+    /** Accept touch while the pointer is captured (mixed touch + mouse). */
+    fun setHybridTouch(enabled: Boolean) = updateInput { it.copy(hybridTouch = enabled) }
+
+    /** Feed the game's own input queue as well as AWT's (normally on). */
+    fun setNativeInput(enabled: Boolean) = updateInput { it.copy(nativeInput = enabled) }
+
+    /** Wheel scaling, in per-mille (1000 = one notch per notch). */
+    fun setScrollPermille(permille: Int) = updateInput { it.copy(scrollPermille = permille) }
+
+    /** Remap one key onto another (both in the task-15 key vocabulary). */
+    fun bindKey(from: String, to: String) =
+        updateInput { it.copy(bindings = it.bindings.withKey(from, to)) }
+
+    /** Drop one key remap. */
+    fun unbindKey(from: String) =
+        updateInput { it.copy(bindings = it.bindings.withoutKey(from)) }
+
+    /** Remap one mouse button onto another (left-handed use). */
+    fun bindButton(from: AwtMouseButton, to: AwtMouseButton) =
+        updateInput { it.copy(bindings = it.bindings.withButton(from, to)) }
+
+    /** Forget every remap. */
+    fun clearBindings() = updateInput { it.copy(bindings = AwtKeyBindings.EMPTY) }
 
     /** Queue a scroll gesture in surface pixels. */
     fun onScroll(x: Float, y: Float, ticks: Int) {
@@ -238,10 +391,19 @@ class AwtSurfaceViewModel(
     /** Press / release a key by `KeyEvent.VK_*` code (flushed immediately). */
     fun onKey(down: Boolean, code: Int) = sendNow(AwtKeyEvent(down = down, code = code))
 
-    /** Press / release a key by name (`"escape"`, `"key.keyboard.w"`, …). */
-    fun onKeyNamed(down: Boolean, name: String) {
+    /**
+     * Press / release a key by name (`"escape"`, `"key.keyboard.w"`, …).
+     *
+     * [scancode] is the *physical* code Android reported
+     * (`KeyEvent.getScanCode()`, i.e. the Linux evdev number). Forwarding it is
+     * what makes a non-US layout and the extra keys of a real keyboard work in
+     * the game, because `GLFWKeyCallback` takes it and Minecraft falls back to it
+     * for anything its key enumeration does not cover (task 12). `null` lets the
+     * core fill it in from its table.
+     */
+    fun onKeyNamed(down: Boolean, name: String, scancode: Int? = null) {
         if (name.isBlank()) return
-        sendNow(AwtKeyEvent(down = down, name = name))
+        sendNow(AwtKeyEvent(down = down, name = name, scancode = scancode))
     }
 
     /** Commit text from the soft keyboard / IME. */
@@ -272,6 +434,15 @@ class AwtSurfaceViewModel(
                 focused = result.focused,
                 pendingEvents = result.pending,
                 modifiers = result.modifiers,
+                // Task 12: a `capture` event changes the mode inside the batch, so
+                // the answer is the authority — without this the UI would keep
+                // requesting Android pointer capture for a released pointer.
+                input = current.info.input.copy(pointerMode = result.pointerMode),
+                gameInput = current.info.gameInput.copy(
+                    cursorX = result.gameCursor.x,
+                    cursorY = result.gameCursor.y,
+                    grabbed = result.captured,
+                ),
             )
         } else {
             current.info
@@ -306,6 +477,12 @@ class AwtSurfaceViewModel(
             controlMessages = current.controlMessages + batch.messages.size,
             message = batch.error ?: current.message,
         )
+        // Task 12: you cannot type into a Swing text field with the pointer
+        // captured — there is no cursor and no soft keyboard. When the JVM says a
+        // text component has focus, give the pointer back.
+        if (batch.error == null && batch.state.wantsPointerReleased && _state.value.captured) {
+            setPointerCapture(false)
+        }
         return batch
     }
 
@@ -414,6 +591,12 @@ data class AwtSurfaceUiState(
     val lastControl: AwtControlBatch = AwtControlBatch.EMPTY,
     /** Control messages seen so far (diagnostics). */
     val controlMessages: Long = 0,
+    /**
+     * How often the surface really rotated (landscape ⇄ portrait, task 9). Each
+     * of those released the in-flight gesture; mirrors the core's
+     * `SessionStats::surface_rotations`.
+     */
+    val rotations: Long = 0,
     /** Transient error / notice for the diagnostics card. */
     val message: String? = null,
 ) {
@@ -441,6 +624,37 @@ data class AwtSurfaceUiState(
 
     /** The viewport used to map touches (surface → desktop pixels). */
     val viewport get() = AwtViewportHolder.viewport(info, surfaceWidth, surfaceHeight)
+
+    /** Orientation of the Compose surface (task 9 diagnostics). */
+    val surfaceOrientation: ScreenOrientation
+        get() = ScreenOrientation.of(surfaceWidth, surfaceHeight)
+
+    /** Physical keyboard / mouse settings in force (task 12). */
+    val inputSettings: AwtInputSettings get() = info.input
+
+    /**
+     * Whether the pointer is captured (task 12).
+     *
+     * Read from the *last input answer* when there is one and from the snapshot
+     * otherwise: the answer is one frame fresher, and the composable uses this to
+     * decide whether to hold Android's pointer capture and hide its own overlay.
+     */
+    val captured: Boolean
+        get() = open && if (lastInput === AwtInputResult.EMPTY) info.captured else lastInput.captured
+
+    /** Sensitivity in force (what the settings slider shows). */
+    val sensitivity: AwtMouseSensitivity get() = info.input.sensitivity
+
+    /** What the game's own input queue believes (diagnostics). */
+    val gameInput: AwtGameInputState get() = info.gameInput
+
+    /** The game's cursor, in game-window pixels (free-running while captured). */
+    val gameCursor: AwtPoint
+        get() = if (lastInput === AwtInputResult.EMPTY) {
+            AwtPoint(info.gameInput.cursorX, info.gameInput.cursorY)
+        } else {
+            lastInput.gameCursor
+        }
 }
 
 /**

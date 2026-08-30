@@ -1,5 +1,8 @@
 package com.rc.launcher.ui.awt
 
+import com.rc.launcher.ui.ScreenOrientation
+import com.rc.launcher.ui.rotationFlips
+
 /**
  * Geometry of the AWT/Swing compatibility layer (task 18, "fakefx").
  *
@@ -167,6 +170,69 @@ data class AwtViewport(
 
     /** `true` when the surface position is inside the drawn desktop. */
     fun contains(surfaceX: Float, surfaceY: Float): Boolean = mapPointer(surfaceX, surfaceY) != null
+
+    /** The centre of the virtual desktop — where a captured pointer starts. */
+    fun centre(): AwtPoint = AwtPoint(
+        x = (maxOf(1, screenWidth) / 2).coerceAtMost(maxOf(0, screenWidth - 1)),
+        y = (maxOf(1, screenHeight) / 2).coerceAtMost(maxOf(0, screenHeight - 1)),
+    )
+
+    /** Clamp a desktop position into the desktop (never outside a real pixel). */
+    fun clampToScreen(x: Int, y: Int): AwtPoint = AwtPoint(
+        x = x.coerceIn(0, maxOf(0, screenWidth - 1)),
+        y = y.coerceIn(0, maxOf(0, screenHeight - 1)),
+    )
+
+    /**
+     * Move a desktop position by a *relative* step, clamped to the desktop
+     * (task 12).
+     *
+     * The pointer overlay needs this to follow a captured mouse locally, at the
+     * frame rate, instead of waiting for the core's answer — which is why it is
+     * bit-for-bit the same integer arithmetic as
+     * `AwtInputTranslator::move_pointer_by`: the drawn pointer and the pointer the
+     * game sees must not drift apart.
+     */
+    fun movePointer(from: AwtPoint, dx: Int, dy: Int): AwtPoint =
+        clampToScreen(from.x + dx, from.y + dy)
+
+    /**
+     * Scale a raw mouse delta into whole desktop pixels with [sensitivity].
+     *
+     * Deliberately *lossy and local*: the authoritative sub-pixel accumulation
+     * lives in the core ([AwtRelativePointerEvent] carries the raw delta), and the
+     * UI only needs this for the overlay it draws in the same frame. Rounding
+     * instead of truncating keeps a slow mouse visible.
+     */
+    fun scaleDelta(sensitivity: AwtMouseSensitivity, dx: Float, dy: Float): Pair<Int, Int> {
+        if (!dx.isFinite() || !dy.isFinite()) return 0 to 0
+        val sx = Math.round(dx * sensitivity.x)
+        val sy = Math.round(dy * sensitivity.y) * if (sensitivity.invertY) -1 else 1
+        return sx to sy
+    }
+
+    /**
+     * Orientation of the Compose surface (task 9). Mirrors
+     * `AwtSession::surface_orientation` in the core.
+     */
+    fun surfaceOrientation(): ScreenOrientation = ScreenOrientation.of(surfaceWidth, surfaceHeight)
+
+    /** Orientation of the virtual AWT desktop. */
+    fun screenOrientation(): ScreenOrientation = ScreenOrientation.of(screenWidth, screenHeight)
+
+    /**
+     * `true` when moving to a `width x height` surface is a real quarter turn.
+     *
+     * The caller must then drop the in-flight gesture instead of re-mapping its
+     * coordinates: after a rotation the letterbox bars moved and the finger is
+     * physically elsewhere, so the same surface position means a *different*
+     * desktop pixel (task 9).
+     */
+    fun rotatesTo(width: Int, height: Int): Boolean =
+        rotationFlips(surfaceWidth, surfaceHeight, width, height)
+
+    /** The same viewport with the surface axes swapped (a 90° rotation). */
+    fun rotatedSurface(): AwtViewport = copy(surfaceWidth = surfaceHeight, surfaceHeight = surfaceWidth)
 
     /**
      * Map a *desktop* pixel back to a surface position — the inverse of

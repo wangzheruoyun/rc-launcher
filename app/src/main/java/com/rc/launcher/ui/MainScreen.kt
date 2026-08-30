@@ -1,5 +1,7 @@
 package com.rc.launcher.ui
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessAuto
@@ -14,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.MaterialTheme
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -29,8 +33,10 @@ import com.rc.launcher.ui.navigation.InstallRoute
 import com.rc.launcher.ui.navigation.InstanceDetailRoute
 import com.rc.launcher.ui.navigation.RcBottomNavigationBar
 import com.rc.launcher.ui.navigation.RcNavHost
+import com.rc.launcher.ui.navigation.RcNavigationRail
 import com.rc.launcher.ui.navigation.RcTopLevelDestinations
 import com.rc.launcher.ui.navigation.SettingsRoute
+import com.rc.launcher.ui.navigation.TopLevelDestination
 import com.rc.launcher.ui.i18n.LocalRcStrings
 import com.rc.launcher.ui.i18n.RcStringKeys
 import com.rc.launcher.ui.theme.ThemeNightMode
@@ -47,6 +53,15 @@ import com.rc.launcher.ui.theme.ThemeViewModel
  * Navigation is fully type-safe (Navigation Compose 2.9.x): the current route is
  * resolved as a `@Serializable` route object via [androidx.navigation.hasRoute]
  * and compared by type, so there are no string literals to drift out of sync.
+ *
+ * **Adaptive shell (task 9).** The shell reads [rcWindowInfo] and re-lays itself
+ * out for the live window instead of assuming a portrait phone: a compact
+ * portrait window keeps the bottom navigation bar, while every landscape /
+ * medium / expanded window switches to a leading [RcNavigationRail] (a bottom bar
+ * in landscape would eat the scarce height and sit under the thumbs). Because the
+ * Activity declares `configChanges="orientation|screenSize|…"`, a rotation never
+ * recreates it: the same composition is simply re-measured, so no screen state is
+ * lost and the game surface keeps its coordinate space.
  */
 @Composable
 fun MainScreen() {
@@ -72,6 +87,10 @@ fun MainScreen() {
     val themeVm: ThemeViewModel = viewModel()
     val nightMode by themeVm.nightMode.collectAsStateWithLifecycle()
 
+    // Task 11: when a custom background is enabled the scaffold goes transparent
+    // so RcBackground (rendered behind us in RcApp) shows through.
+    val background by themeVm.backgroundConfig.collectAsStateWithLifecycle()
+
     // Task 20: every title comes from the i18n catalogue, so switching the
     // language re-titles the app bar on the next recomposition.
     val strings = LocalRcStrings.current
@@ -88,7 +107,21 @@ fun MainScreen() {
         else -> strings[RcStringKeys.APP_NAME]
     }
 
+    // Task 9: one measurement drives every layout decision below.
+    val window = rcWindowInfo()
+    val useRail = window.usesNavigationRail
+
+    val navigateTo: (dest: TopLevelDestination) -> Unit = { dest ->
+        navController.navigate(dest.route) {
+            // Preserve the back stack and tab state across reselects.
+            popUpTo(navController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
     Scaffold(
+        containerColor = if (background.enabled) Color.Transparent else MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(title) },
@@ -107,29 +140,43 @@ fun MainScreen() {
             )
         },
         bottomBar = {
-            RcBottomNavigationBar(
-                destinations = RcTopLevelDestinations,
-                currentRoute = currentRoute,
-                onNavigate = { dest ->
-                    navController.navigate(dest.route) {
-                        // Preserve the back stack and tab state across reselects.
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-            )
+            // Landscape / wide windows navigate through the rail instead.
+            if (!useRail) {
+                RcBottomNavigationBar(
+                    destinations = RcTopLevelDestinations,
+                    currentRoute = currentRoute,
+                    onNavigate = navigateTo,
+                )
+            }
         },
     ) { innerPadding ->
-        RcNavHost(
-            navController = navController,
-            modifier = Modifier.padding(innerPadding),
-        )
+        Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            if (useRail) {
+                RcNavigationRail(
+                    destinations = RcTopLevelDestinations,
+                    currentRoute = currentRoute,
+                    // A short landscape phone cannot fit five labelled items.
+                    showLabels = !window.isShort,
+                    onNavigate = navigateTo,
+                )
+            }
+            RcNavHost(
+                navController = navController,
+                modifier = Modifier.weight(1f).fillMaxSize(),
+            )
+        }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(name = "Portrait", showBackground = true, widthDp = 392, heightDp = 872)
 @Composable
 private fun MainScreenPreview() {
     MainScreen()
+}
+
+/** Task 9: the landscape shell (navigation rail, no bottom bar). */
+@Preview(name = "Landscape", showBackground = true, widthDp = 872, heightDp = 392)
+@Composable
+private fun MainScreenLandscapePreview() {
+    ProvideRcWindowInfo { MainScreen() }
 }

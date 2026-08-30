@@ -14,6 +14,8 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -140,6 +142,51 @@ fun RcBottomNavigationBar(
                     )
                 },
                 label = { Text(label) },
+            )
+        }
+    }
+}
+
+/**
+ * Side navigation rail — the landscape / tablet counterpart of
+ * [RcBottomNavigationBar] (task 9).
+ *
+ * A bottom bar in landscape is the worst of both worlds: it eats the scarce
+ * vertical space *and* sits exactly under the thumbs that hold the device. The
+ * rail moves navigation to the leading edge instead, which is also where the
+ * Material 3 adaptive guidance puts it for medium/expanded widths.
+ *
+ * [showLabels] is driven by the window height: on a short landscape phone the
+ * five labelled items would not fit, so the icons go label-less (the label is
+ * still the icon's `contentDescription`, so TalkBack is unaffected).
+ */
+@Composable
+fun RcNavigationRail(
+    destinations: List<TopLevelDestination>,
+    currentRoute: Any?,
+    showLabels: Boolean = true,
+    onNavigate: (TopLevelDestination) -> Unit,
+) {
+    NavigationRail {
+        for (dest in destinations) {
+            val selected = currentRoute == dest.route
+            // Task 20: resolved per recomposition, so a language switch relabels
+            // the rail immediately (no Activity recreation).
+            val label = rcString(dest.labelKey)
+            NavigationRailItem(
+                selected = selected,
+                onClick = { onNavigate(dest) },
+                icon = {
+                    Icon(
+                        imageVector = if (selected) dest.selectedIcon else dest.icon,
+                        contentDescription = label,
+                    )
+                },
+                label = if (showLabels) {
+                    { Text(label) }
+                } else {
+                    null
+                },
             )
         }
     }

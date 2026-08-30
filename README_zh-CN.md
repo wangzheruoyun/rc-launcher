@@ -18,6 +18,10 @@
 - **渲染集成** — 预构建 LWJGL 原生库 + GL4ES/ANGLE 转译，并为弱 GPU 提供可调性能配置。
 - **AWT/Swing 兼容（fakefx）** — 通过 caciocavallo 将 Forge/OptiFine 安装器与崩溃对话框
   渲染为可触控、零拷贝的 Compose 画布。
+- **屏幕方向自适应** — 「跟随系统 / 强制横屏 / 强制竖屏」三种策略；Compose 按窗口尺寸
+  等级重新布局（侧边导航栏 / 底部导航栏、栅格列数、内边距），旋转不重建 Activity，
+  且横竖屏切换时释放未完成的手势，避免输入坐标错位。详见
+  [docs/orientation.md](docs/orientation.md)。
 - **国际化** — 以中文为优先的 `*.properties` 文案目录；未翻译字符串回退到 zh-CN。
   详见 [docs/i18n.md](docs/i18n.md)。
 

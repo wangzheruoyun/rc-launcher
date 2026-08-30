@@ -37,6 +37,7 @@ com.rc.launcher/
 │   │   │   │               │   │   ├── AwtControl.kt
 │   │   │   │               │   │   ├── AwtGeometry.kt
 │   │   │   │               │   │   ├── AwtInput.kt
+│   │   │   │               │   │   ├── AwtMouse.kt
 │   │   │   │               │   │   ├── AwtSessionInfo.kt
 │   │   │   │               │   │   └── AwtWire.kt
 │   │   │   │               │   ├── component/
@@ -97,6 +98,7 @@ com.rc.launcher/
 │   │   │   │               │   │   ├── LocaleViewModel.kt
 │   │   │   │               │   │   ├── MainViewModel.kt
 │   │   │   │               │   │   └── SettingsViewModel.kt
+│   │   │   │               │   ├── AdaptiveLayout.kt
 │   │   │   │               │   ├── MainScreen.kt
 │   │   │   │               │   └── RcApp.kt
 │   │   │   │               ├── MainActivity.kt
@@ -123,6 +125,7 @@ com.rc.launcher/
 │   │                           │   ├── AwtControlTest.kt
 │   │                           │   ├── AwtGeometryTest.kt
 │   │                           │   ├── AwtInputTest.kt
+│   │                           │   ├── AwtMouseTest.kt
 │   │                           │   ├── AwtSessionInfoTest.kt
 │   │                           │   └── AwtWireTest.kt
 │   │                           ├── component/
@@ -230,8 +233,11 @@ com.rc.launcher/
 │   │   └── rc-launcher-core/
 │   │       ├── examples/
 │   │       │   ├── awt_demo.rs
+│   │       │   ├── input_demo.rs
+│   │       │   ├── display_layout_golden.rs
 │   │       │   ├── i18n_demo.rs
-│   │       │   └── launch_demo.rs
+│   │       │   ├── launch_demo.rs
+│   │       │   └── rotation_demo.rs
 │   │       ├── i18n/
 │   │       │   ├── en.properties
 │   │       │   ├── zh-CN.properties
@@ -275,6 +281,7 @@ com.rc.launcher/
 │   │       │   │   ├── engine.rs
 │   │       │   │   ├── env.rs
 │   │       │   │   ├── fakefx.rs
+│   │       │   │   ├── input.rs
 │   │       │   │   ├── mod.rs
 │   │       │   │   ├── options.rs
 │   │       │   │   ├── process.rs
@@ -317,6 +324,7 @@ com.rc.launcher/
 │   │       │   │   ├── bufpool.rs
 │   │       │   │   └── mod.rs
 │   │       │   ├── capi.rs
+│   │       │   ├── display.rs
 │   │       │   ├── error.rs
 │   │       │   ├── event.rs
 │   │       │   ├── ffi.rs
@@ -335,6 +343,7 @@ com.rc.launcher/
 │   │   └── i18n_common.cpython-312.pyc
 │   ├── check_awt_wire.py
 │   ├── check_i18n.py
+│   ├── check_layout_parity.py
 │   ├── gen_android_strings.py
 │   ├── health_audit.py
 │   └── i18n_common.py

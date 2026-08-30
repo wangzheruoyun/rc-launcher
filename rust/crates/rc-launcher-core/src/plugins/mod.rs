@@ -27,6 +27,7 @@
 //! this module to enumerate, register, inject and *verify* renderers.
 
 pub mod fcl_apk;
+pub mod mobile_glues;
 pub mod native_lib;
 pub mod renderer;
 pub mod validation;
@@ -34,6 +35,11 @@ pub mod validation;
 pub use fcl_apk::{
     manifest, preset_registry, ApkLibEntry, FclApkRenderer, FclApkRendererManifest,
     FCL_APK_RENDERER_MANIFEST,
+};
+pub use mobile_glues::{
+    apply_mobileglues_integrity, gl_translation_native_libs, mobileglues_plugin,
+    mobileglues_plugin_from_apk, parse_mobileglues_apk, register_mobileglues_from_apk,
+    MobileGluesLib, MOBILEGLUES_APK_LIBS, MOBILEGLUES_APK_NAME,
 };
 pub use native_lib::{LibVerify, NativeLib, NativeLibSource};
 pub use renderer::{
@@ -45,7 +51,8 @@ pub use validation::{
     SignatureVerifier, TrustStore, ValidationContext, ValidationIssue, ValidationReport,
 };
 
-/// All built-in renderers (the 5 FCL stacks plus the LWJGL SDL backend), in the
+/// All built-in renderers (the 5 FCL stacks plus the LWJGL SDL backend and Mobile
+/// Glues), in the
 /// order they appear in the settings UI.
 ///
 /// Kept as a free function (rather than a `const`) so callers that want to
@@ -71,8 +78,9 @@ mod tests {
     #[test]
     fn builtin_registry_is_populated() {
         let reg = builtin_registry();
-        assert_eq!(reg.all().len(), 6);
+        assert_eq!(reg.all().len(), 7);
         assert!(reg.get("opengles2").is_some());
         assert!(reg.get("sdl2").is_some());
+        assert!(reg.get("mobile_glues").is_some());
     }
 }

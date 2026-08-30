@@ -125,6 +125,7 @@ impl TokenStorage for FileTokenStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::model::{ThirdPartyAccount, ThirdPartyProvider};
     use crate::auth::offline::offline_account_model;
 
     #[test]
@@ -164,6 +165,33 @@ mod tests {
         // File on disk must NOT contain the username in clear text.
         let raw = std::fs::read(&path).unwrap();
         assert!(!String::from_utf8_lossy(&raw).contains("Bob"));
+        let loaded = s.load().unwrap();
+        assert_eq!(loaded, vec![acc]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn file_store_third_party_encrypted() {
+        let dir = std::env::temp_dir().join("rc_auth_test_tp");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("accounts.enc");
+        let s = FileTokenStorage::with_aes(&path, &[4u8; 32]).unwrap();
+        let acc = Account::ThirdParty(ThirdPartyAccount {
+            uuid: "u".into(),
+            username: "n".into(),
+            provider: ThirdPartyProvider::AuthlibInjector,
+            server_url: "https://x.com".into(),
+            server_name: String::new(),
+            access_token: "SECRET-TOKEN".into(),
+            client_token: "CT".into(),
+            expires_at: 0,
+            relay_payload: None,
+        });
+        s.save(std::slice::from_ref(&acc)).unwrap();
+        // On-disk blob must NOT contain the clear-text access token.
+        let raw = std::fs::read(&path).unwrap();
+        assert!(!String::from_utf8_lossy(&raw).contains("SECRET-TOKEN"));
         let loaded = s.load().unwrap();
         assert_eq!(loaded, vec![acc]);
         let _ = std::fs::remove_dir_all(&dir);

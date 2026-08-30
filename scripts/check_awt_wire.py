@@ -23,7 +23,11 @@ the guard rail, and it needs neither a Rust toolchain nor a JVM:
   7. `ScaleMode` ids agree;
   8. every control kind the core can emit is handled by the Kotlin projection
      (an unhandled kind would be dropped without a trace);
-  9. every JSON key the core emits for the control plane is read by Kotlin.
+  9. every JSON key the core emits for the control plane is read by Kotlin;
+ 10. task 12 (physical keyboard & mouse): pointer-mode / pointer-source ids,
+     sensitivity + scroll bounds, the input-settings JSON keys, the input event
+     types the core accepts, and a sample of the evdev scancode table — a drift
+     here means a player's mouse or keyboard silently does nothing.
 
 Usage:  python3 scripts/check_awt_wire.py
 """
@@ -42,6 +46,11 @@ KT_WIRE = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtWire.k
 KT_CONTROL = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtControl.kt")
 KT_GEOMETRY = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtGeometry.kt")
 KT_BRIDGE = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtCanvasBridge.kt")
+# Task 12 (physical keyboard & mouse) lives in its own pair of files.
+RUST_INPUT = os.path.join(ROOT, "rust/crates/rc-launcher-core/src/launch/input.rs")
+KT_MOUSE = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtMouse.kt")
+KT_INPUT = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtInput.kt")
+KT_KEYS = os.path.join(ROOT, "app/src/main/java/com/rc/launcher/ui/awt/AwtAndroidKeys.kt")
 
 problems: list[str] = []
 
@@ -83,7 +92,9 @@ def rust_const(src: str, name: str) -> int | None:
 
 
 def kt_const(src: str, name: str) -> int | None:
-    m = re.search(rf"const val {re.escape(name)}\s*:\s*Int\s*=\s*(.+)", src)
+    # The type annotation is optional: `const val X = 1` and `const val X: Int = 1`
+    # are both idiomatic, and both appear in the AWT sources.
+    m = re.search(rf"const val {re.escape(name)}\s*(?::\s*Int\s*)?=\s*(.+)", src)
     if not m:
         fail(f"Kotlin constant {name} not found")
         return None
@@ -311,7 +322,124 @@ def main() -> int:
         if f'"{key}"' not in kt_control:
             fail(f"Kotlin does not read the control key {key!r}")
 
+    # ---- 10. physical keyboard & mouse (task 12) -------------------------
+    rust_input = read(RUST_INPUT)
+    kt_mouse = read(KT_MOUSE)
+    kt_input = read(KT_INPUT)
+    kt_keys = read(KT_KEYS)
+    if problems:
+        return report()
+    check_physical_input(rust_input, kt_mouse, kt_input, kt_keys)
+
     return report()
+
+
+def check_physical_input(rust: str, kt_mouse: str, kt_input: str, kt_keys: str) -> None:
+    """Task 12: the settings, ids and tables the two sides must agree on."""
+    # (a) `PointerMode` / `PointerSource` ids.
+    rust_modes = set(re.findall(r'PointerMode::\w+ => "(\w+)"', rust))
+    kt_modes = set(re.findall(r'^\s+[A-Z_]+\("(\w+)", ', _section(kt_mouse, "enum class AwtPointerMode"), re.M))
+    if rust_modes != kt_modes:
+        fail(f"pointer mode ids differ: Rust {sorted(rust_modes)} != Kotlin {sorted(kt_modes)}")
+    rust_sources = set(re.findall(r'PointerSource::\w+ => "(\w+)"', rust))
+    kt_sources = set(re.findall(r'^\s+[A-Z_]+\("(\w+)"\)', _section(kt_input, "enum class AwtPointerSource"), re.M))
+    if rust_sources != kt_sources:
+        fail(f"pointer source ids differ: Rust {sorted(rust_sources)} != Kotlin {sorted(kt_sources)}")
+
+    # (b) sensitivity / scroll bounds — a UI slider that offers what the core
+    #     clamps away would silently do nothing at the ends.
+    for rust_name, kt_name, kt_src in [
+        ("MIN_PERMILLE", "MIN_PERMILLE", kt_mouse),
+        ("MAX_PERMILLE", "MAX_PERMILLE", kt_mouse),
+        ("DEFAULT_PERMILLE", "DEFAULT_PERMILLE", kt_mouse),
+        ("MIN_SCROLL_PERMILLE", "MIN_SCROLL_PERMILLE", kt_mouse),
+        ("MAX_SCROLL_PERMILLE", "MAX_SCROLL_PERMILLE", kt_mouse),
+    ]:
+        m = re.search(rf"pub const {rust_name}: u32 = ([^;]+);", rust)
+        if not m:
+            fail(f"Rust constant {rust_name} not found in launch/input.rs")
+            continue
+        compare(rust_name, num(m.group(1)), kt_const(kt_src, kt_name))
+
+    # (c) the JSON keys `InputSettings::apply_json` reads must be the ones
+    #     `AwtInputSettings.toJson` writes (and vice versa).
+    rust_settings = _section(rust, "pub fn apply_json(&mut self, value: &serde_json::Value)")
+    rust_keys = set(re.findall(r'value\.get\("(\w+)"\)', rust_settings))
+    rust_keys.discard("captured")  # an alias for `pointer_mode`, write-only
+    kt_setting_keys = set(
+        re.findall(r'"(\w+)" to ', _section(kt_mouse, "data class AwtInputSettings("))
+    )
+    for key in sorted(rust_keys - kt_setting_keys):
+        fail(f"the core reads input setting {key!r} but Kotlin never sends it")
+    ignorable = {"x_permille", "y_permille", "invert_y", "keys", "buttons"}
+    for key in sorted(kt_setting_keys - rust_keys - ignorable):
+        fail(f"Kotlin sends input setting {key!r} but the core ignores it")
+
+    # (d) every input event type Kotlin emits must be a type the core accepts.
+    rust_events = set()
+    apply_event = _section(rust_awt_input(), "fn apply_awt_event(")
+    for arm in re.findall(
+        r'^\s+((?:"[a-z_]+"\s*\|\s*)*"[a-z_]+")\s*=>', apply_event, re.M
+    ):
+        rust_events.update(re.findall(r'"([a-z_]+)"', arm))
+    kt_events = set(re.findall(r'"type" to JsonValue\.Str\("(\w+)"\)', kt_input))
+    for event in sorted(kt_events - rust_events):
+        fail(f"Kotlin sends the input event {event!r}, which the core rejects")
+    for required in ["pointer", "pointer_relative", "capture", "button", "scroll", "key_down"]:
+        if required not in rust_events:
+            fail(f"the core no longer accepts the input event {required!r}")
+
+    # (e) a sample of the evdev scancode table: the fallback the UI uses for a
+    #     synthetic press must match the core's, or the same on-screen button
+    #     would reach the game with two different scancodes.
+    for label, expected, kt_pattern in [
+        ("KEY_ESC", 1, r"KEYCODE_ESCAPE, AndroidKeyEvent\.KEYCODE_BACK -> (\d+)"),
+        ("KEY_SPACE", 57, r"KEYCODE_SPACE -> (\d+)"),
+        ("KEY_LEFTSHIFT", 42, r"KEYCODE_SHIFT_LEFT -> (\d+)"),
+        ("KEY_RIGHTSHIFT", 54, r"KEYCODE_SHIFT_RIGHT -> (\d+)"),
+        ("KEY_ENTER", 28, r"KEYCODE_ENTER -> (\d+)"),
+    ]:
+        m = re.search(kt_pattern, kt_keys)
+        if not m:
+            fail(f"Kotlin scancode table lost {label}")
+        elif int(m.group(1)) != expected:
+            fail(f"Kotlin scancode for {label} is {m.group(1)}, expected {expected}")
+        if f"=> {expected}," not in rust:
+            fail(f"the core no longer maps anything to the evdev code {expected} ({label})")
+    # The letter rows are a table on both sides: compare them element-wise.
+    rust_letters = re.search(r"const LETTERS: \[i32; 26\] = \[(.*?)\];", rust, re.S)
+    kt_letters = re.search(r"private val LETTER_SCANCODES = intArrayOf\((.*?)\)", kt_keys, re.S)
+    if not rust_letters or not kt_letters:
+        fail("the letter scancode table is missing on one side")
+    else:
+        rust_row = [int(v) for v in re.findall(r"\d+", rust_letters.group(1))]
+        kt_row = [int(v) for v in re.findall(r"\d+", kt_letters.group(1))]
+        if rust_row != kt_row:
+            fail(f"letter scancode tables differ: Rust {rust_row} != Kotlin {kt_row}")
+
+    # (f) the `CallbackBridge` event types are the game's contract: they come
+    #     from the shipped LWJGL jar and must never be “cleaned up”.
+    for name, value in [
+        ("GRAB_STATE", 0),
+        ("CHAR", 1000),
+        ("CURSOR_POS", 1003),
+        ("KEY", 1005),
+        ("MOUSE_BUTTON", 1006),
+        ("SCROLL", 1007),
+    ]:
+        m = re.search(rf"pub const {name}: i32 = (\d+);", rust)
+        if not m:
+            fail(f"CallbackBridge event {name} is missing from launch/input.rs")
+        elif int(m.group(1)) != value:
+            fail(
+                f"CallbackBridge event {name} is {m.group(1)}, but the shipped "
+                f"lwjgl jar defines {value}"
+            )
+
+
+def rust_awt_input() -> str:
+    """`ffi.rs`, where `apply_awt_event` decides which event types exist."""
+    return read(os.path.join(ROOT, "rust/crates/rc-launcher-core/src/ffi.rs"))
 
 
 def _section(src: str, marker: str) -> str:

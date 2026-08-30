@@ -22,7 +22,8 @@ import com.rc.launcher.ui.model.json.toJsonString
 /** Discriminator for the account type (mirrors Rust `AccountKind`). */
 enum class AccountKind(val code: String, val label: String) {
     MICROSOFT("microsoft", "正版 · Microsoft"),
-    OFFLINE("offline", "离线 · Offline");
+    OFFLINE("offline", "离线 · Offline"),
+    THIRD_PARTY("thirdparty", "第三方 · Third-Party");
 
     companion object {
         fun fromCode(code: String?): AccountKind =
@@ -99,6 +100,32 @@ data class OfflineAccount(
 }
 
 /**
+ * Third-party account (external Yggdrasil auth server / Authlib-Injector, or a
+ * third-party Microsoft-OAuth token relay). The UI only ever holds *redacted*
+ * accounts, so [accessToken] / [clientToken] / [relayPayload] are empty here
+ * (they live encrypted in the Rust core's token store). [serverUrl] is what the
+ * game receives through the authlib-injector agent at launch (task 10).
+ */
+data class ThirdPartyAccount(
+    override val uuid: String = "",
+    override val username: String = "",
+    val provider: String = "authlib_injector",
+    val serverUrl: String = "",
+    val serverName: String = "",
+    val accessToken: String = "",
+    val clientToken: String = "",
+    val expiresAt: Long = 0,
+    val relayPayload: String? = null,
+) : Account {
+    override val kind: AccountKind get() = AccountKind.THIRD_PARTY
+
+    /** Proactive-refresh classification for the current time. */
+    val tokenStatus: TokenStatus
+        get() = if (expiresAt <= 0) TokenStatus.UNKNOWN
+        else TokenStatus.classify(expiresAt, expiresAt, nowSecs())
+}
+
+/**
  * Device-code challenge shown to the user during the Microsoft login flow
  * (task 16). The `message` is a ready-to-display instruction string from the
  * identity provider; `userCode` / `verificationUrl` are surfaced as copyable
@@ -125,6 +152,45 @@ data class DeviceCodeChallenge(
     ).toJsonString()
 }
 
+
+/**
+ * Metadata discovered from an external auth server (`RustBridge.authBeginThirdParty`),
+ * surfaced before the user types credentials (task 10).
+ */
+data class ThirdPartyServerInfo(
+    val serverUrl: String = "",
+    val serverName: String = "",
+    val links: List<ThirdPartyLink> = emptyList(),
+)
+
+/** A registration / homepage link surfaced from an auth server's metadata. */
+data class ThirdPartyLink(
+    val label: String = "",
+    val url: String = "",
+)
+
+/**
+ * Login request for a third-party (Authlib-Injector / token relay) account.
+ * Mirrors the Rust core's `ThirdPartyLogin` serde shape (camelCase JSON) so the
+ * [com.rc.launcher.core.RustBridge.authCompleteThirdParty] payload is 1:1 (task 10).
+ */
+data class ThirdPartyLogin(
+    val provider: String = "authlib_injector",
+    val serverUrl: String = "",
+    val username: String = "",
+    val password: String = "",
+    val relayCode: String? = null,
+) {
+    fun toJsonString(): String = JsonValue.Obj(
+        mapOf(
+            "provider" to JsonValue.Str(provider),
+            "serverUrl" to JsonValue.Str(serverUrl),
+            "username" to JsonValue.Str(username),
+            "password" to JsonValue.Str(password),
+            "relayCode" to (relayCode?.let { JsonValue.Str(it) } ?: JsonValue.Null),
+        ),
+    ).toJsonString()
+}
 // ============================================================================
 // JSON (de)serialization via MiniJson -- shapes match the Rust core 1:1.
 // ============================================================================
@@ -147,6 +213,14 @@ private fun JsonValue.toAccount(): Account? {
             uuid = str("uuid").orEmpty(),
             username = str("username").orEmpty(),
         )
+        "thirdparty" -> ThirdPartyAccount(
+            uuid = str("uuid").orEmpty(),
+            username = str("username").orEmpty(),
+            provider = str("provider").orEmpty(),
+            serverUrl = str("server_url").orEmpty(),
+            serverName = str("server_name").orEmpty(),
+            expiresAt = num("expires_at")?.toLong() ?: 0,
+        )
         else -> null
     }
 }
@@ -162,6 +236,20 @@ fun parseAccountList(text: String): List<Account> {
 }
 
 /** Parse a [DeviceCodeChallenge] from JSON text, or null if [text] is malformed. */
+
+/** Parse an external auth server's metadata from JSON text (task 10). */
+fun parseThirdPartyServerInfo(text: String): ThirdPartyServerInfo? {
+    val root = parseJson(text) as? JsonValue.Obj ?: return null
+    val links = (root.entries["links"] as? JsonValue.Arr)?.items?.mapNotNull { l ->
+        if (l is JsonValue.Obj) ThirdPartyLink(l.str("label").orEmpty(), l.str("url").orEmpty()) else null
+    } ?: emptyList()
+    return ThirdPartyServerInfo(
+        serverUrl = root.str("server_url").orEmpty(),
+        serverName = root.str("server_name").orEmpty(),
+        links = links,
+    )
+}
+
 fun parseDeviceCode(text: String): DeviceCodeChallenge? {
     val root = parseJson(text) as? JsonValue.Obj ?: return null
     return DeviceCodeChallenge(
