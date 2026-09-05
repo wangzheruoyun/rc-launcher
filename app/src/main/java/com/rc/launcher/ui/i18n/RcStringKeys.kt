@@ -139,5 +139,64 @@ object RcStringKeys {
         LAUNCH_STATE_IDLE, LAUNCH_STATE_PREPARING, LAUNCH_STATE_LAUNCHING,
         LAUNCH_STATE_RUNNING, LAUNCH_STATE_STOPPED, LAUNCH_STATE_CRASHED,
         "$DOWNLOAD_FILES.one", "$DOWNLOAD_FILES.other",
-    ) + RcValueFormat.requiredKeys()
+    ) + RcValueFormat.requiredKeys() + listOf(
+        TRANSLATE_TITLE, TRANSLATE_SUBTITLE, TRANSLATE_ENABLE,
+        TRANSLATE_SHOW_ORIGINAL, TRANSLATE_SHOW_TRANSLATED,
+        TRANSLATE_LANGUAGE, TRANSLATE_LANGUAGE_AUTO,
+        TRANSLATE_LANGUAGE_ZH_CN, TRANSLATE_LANGUAGE_ZH_HANT,
+        TRANSLATE_LANGUAGE_EN,
+        TRANSLATE_MODE, TRANSLATE_MODE_HYBRID, TRANSLATE_MODE_ONLINE, TRANSLATE_MODE_OFFLINE,
+        TRANSLATE_SOURCE, TRANSLATE_SOURCE_PASSTHROUGH,
+        TRANSLATE_SOURCE_DICTIONARY, TRANSLATE_SOURCE_CACHE,
+        TRANSLATE_SOURCE_GATEWAY, TRANSLATE_SOURCE_UNAVAILABLE,
+        TRANSLATE_REFRESH, TRANSLATE_BATCH, TRANSLATE_BATCH_SUMMARY,
+        TRANSLATE_EMPTY,
+        TRANSLATE_GATEWAY_TITLE, TRANSLATE_GATEWAY_URL, TRANSLATE_GATEWAY_MODEL,
+        TRANSLATE_GATEWAY_AUTH, TRANSLATE_GATEWAY_SYSTEM_PROMPT,
+        TRANSLATE_CACHE_TITLE, TRANSLATE_CACHE_CLEAR,
+        TRANSLATE_CACHE_COUNT, TRANSLATE_CACHE_SIZE,
+        TRANSLATE_NETWORK_FALLBACK, TRANSLATE_NETWORK_FALLBACK_SUMMARY,
+        TRANSLATE_CN_HINT,
+    )
 }
+
+    // --- task 13: mod browser inline translation ---
+    const val TRANSLATE_TITLE = "translate.title"
+    const val TRANSLATE_SUBTITLE = "translate.subtitle"
+    const val TRANSLATE_ENABLE = "translate.enable"
+    const val TRANSLATE_SHOW_ORIGINAL = "translate.show_original"
+    const val TRANSLATE_SHOW_TRANSLATED = "translate.show_translated"
+    const val TRANSLATE_LANGUAGE = "translate.language"
+    const val TRANSLATE_LANGUAGE_AUTO = "translate.language.auto"
+    const val TRANSLATE_LANGUAGE_ZH_CN = "translate.language.zh_cn"
+    const val TRANSLATE_LANGUAGE_ZH_HANT = "translate.language.zh_hant"
+    const val TRANSLATE_LANGUAGE_EN = "translate.language.en"
+    const val TRANSLATE_MODE = "translate.mode"
+    const val TRANSLATE_MODE_HYBRID = "translate.mode.hybrid"
+    const val TRANSLATE_MODE_ONLINE = "translate.mode.online"
+    const val TRANSLATE_MODE_OFFLINE = "translate.mode.offline"
+    const val TRANSLATE_SOURCE = "translate.source"
+    const val TRANSLATE_SOURCE_PASSTHROUGH = "translate.source.passthrough"
+    const val TRANSLATE_SOURCE_DICTIONARY = "translate.source.dictionary"
+    const val TRANSLATE_SOURCE_CACHE = "translate.source.cache"
+    const val TRANSLATE_SOURCE_GATEWAY = "translate.source.gateway"
+    const val TRANSLATE_SOURCE_UNAVAILABLE = "translate.source.unavailable"
+    const val TRANSLATE_REFRESH = "translate.refresh"
+    const val TRANSLATE_BATCH = "translate.batch"
+    /** Carries a `{count}` placeholder. */
+    const val TRANSLATE_BATCH_SUMMARY = "translate.batch_summary"
+    const val TRANSLATE_EMPTY = "translate.empty"
+    const val TRANSLATE_GATEWAY_TITLE = "translate.gateway.title"
+    const val TRANSLATE_GATEWAY_URL = "translate.gateway.url"
+    const val TRANSLATE_GATEWAY_MODEL = "translate.gateway.model"
+    const val TRANSLATE_GATEWAY_AUTH = "translate.gateway.auth"
+    const val TRANSLATE_GATEWAY_SYSTEM_PROMPT = "translate.gateway.system_prompt"
+    const val TRANSLATE_CACHE_TITLE = "translate.cache.title"
+    const val TRANSLATE_CACHE_CLEAR = "translate.cache.clear"
+    /** Carries a `{count}` placeholder. */
+    const val TRANSLATE_CACHE_COUNT = "translate.cache.count"
+    /** Carries a `{bytes}` placeholder. */
+    const val TRANSLATE_CACHE_SIZE = "translate.cache.size"
+    const val TRANSLATE_NETWORK_FALLBACK = "translate.network_fallback"
+    const val TRANSLATE_NETWORK_FALLBACK_SUMMARY = "translate.network_fallback.summary"
+    const val TRANSLATE_CN_HINT = "translate.cn_hint"

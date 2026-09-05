@@ -276,6 +276,14 @@ struct CacheEntry {
     expires_at: Instant,
 }
 
+impl Clone for DnsCache {
+    fn clone(&self) -> Self {
+        Self {
+            map: Mutex::new(self.map.lock().expect("DnsCache poisoned").clone()),
+        }
+    }
+}
+
 impl DnsCache {
     /// Create an empty cache.
     pub fn new() -> Self {

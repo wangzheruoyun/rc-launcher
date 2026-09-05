@@ -163,6 +163,7 @@ pub mod mods;
 pub mod net;
 pub mod plugins;
 pub mod robust;
+pub mod translate;
 pub mod runtime;
 pub mod util;
 

@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -263,6 +264,19 @@ fun SettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+
+        // ---- Translation (task 13) -----------------------------------------
+        SettingsSection(strings[RcStringKeys.TRANSLATE_TITLE]) {
+            Text(
+                strings[RcStringKeys.TRANSLATE_SUBTITLE],
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (navController != null) {
+                OutlinedButton(onClick = { navController.navigate(com.rc.launcher.ui.navigation.TranslationRoute) }) {
+                    Text(strings[RcStringKeys.TRANSLATE_GATEWAY_TITLE])
+                }
             }
         }
 

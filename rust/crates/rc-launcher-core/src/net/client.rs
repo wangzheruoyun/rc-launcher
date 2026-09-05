@@ -148,6 +148,7 @@ pub(crate) async fn try_candidates<F: Fetcher + ?Sized>(
 }
 
 /// The integrated, China-mainland-optimised network client.
+#[derive(Clone)]
 pub struct NetworkClient {
     client: reqwest::Client,
     config: NetworkConfig,
@@ -244,6 +245,77 @@ impl NetworkClient {
             .await
             .map_err(|e| RcError::Network(format!("read body: {e}")))?;
         serde_json::from_str(&txt).map_err(RcError::Json)
+    }
+
+    /// Convenience: POST a JSON body to a URL and read the response as text.
+    ///
+    /// Inherits the full network optimisation layer (mirrors / DoH / proxy /
+    /// connection reuse) — the request goes through the same retry /
+    /// backoff path as [`Self::get`]. Used by the translation service
+    /// (task 13) to call the OpenAI-compatible chat-completions gateway.
+    pub async fn post_json(
+        &self,
+        url: &str,
+        body: serde_json::Value,
+    ) -> RcResult<String> {
+        let resp = self.post(url, body).await?;
+        resp.text()
+            .await
+            .map_err(|e| RcError::Network(format!("read body: {e}")))
+    }
+
+    /// Issue a POST with a JSON body. Mirrors / DoH / proxy all apply; the
+    /// response is returned as-is so the caller can inspect headers,
+    /// status, etc. (used by the translation service to keep the raw
+    /// chat-completions response for diagnostics).
+    pub async fn post(
+        &self,
+        url: &str,
+        body: serde_json::Value,
+    ) -> RcResult<reqwest::Response> {
+        let candidates = self.candidate_urls(url);
+        // POST probes need a body, so we can't reuse the cheap `Fetcher`
+        // abstraction; issue once per candidate and retry transport failures
+        // with exponential backoff. HTTP non-success moves to the next candidate.
+        let mut last_err: Option<RcError> = None;
+        for cand in &candidates {
+            let mut attempt: u32 = 0;
+            loop {
+                match self
+                    .client
+                    .post(cand)
+                    .json(&body)
+                    .send()
+                    .await
+                {
+                    Ok(r) if r.status().is_success() => return Ok(r),
+                    Ok(r) => {
+                        last_err = Some(RcError::Network(format!(
+                            "POST {cand}: status {}",
+                            r.status()
+                        )));
+                        break;
+                    }
+                    Err(e) => {
+                        last_err = Some(RcError::Network(format!("POST {cand}: {e}")));
+                    }
+                }
+                attempt += 1;
+                if attempt >= self.config.max_retries {
+                    break;
+                }
+                let delay = compute_backoff(
+                    attempt,
+                    self.config.retry_base,
+                    self.config.retry_max,
+                    self.config.retry_jitter,
+                );
+                tokio::time::sleep(delay).await;
+            }
+        }
+        Err(last_err.unwrap_or_else(|| {
+            RcError::Network(format!("POST {url}: no candidate answered"))
+        }))
     }
 
     /// Measure mirrors and pin the fastest reachable one.

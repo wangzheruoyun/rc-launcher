@@ -556,4 +556,137 @@ object RustBridge {
      * `{"action":"dir","path":"/data/.../i18n"}` or `{"action":"clear"}`.
      */
     external fun i18nOverlay(requestJson: String): String
+
+    // === Inline auto-translation for the mod browser (task 13) =======
+    //
+    // The Rust core owns the translation pipeline: a configurable
+    // gateway (default = the kilo.ai chat-completions URL requested
+    // in the task brief), an on-disk cache so the player only pays
+    // once per sentence, a built-in dictionary for offline / fallback,
+    // and a "follow system" or "force offline" toggle.
+    //
+    // All calls exchange JSON; see the Rust `crate::ffi` module for the
+    // exact shape. The Compose layer never holds any native state
+    // beyond a Kotlin viewmodel cache.
+
+    /**
+     * (Re)configure the process-wide translation service.
+     *
+     * `requestJson` =
+     * `{ "cache_root"?: String, "gateway"?: TranslationGateway,
+     *    "force_offline"?: Boolean, "default_mode"?: "online"|"offline"|"hybrid" }`.
+     *
+     * Returns `{"ok": true}`.
+     */
+    external fun translateInit(requestJson: String): String
+
+    /**
+     * Translate one piece of text. `requestJson` =
+     * `{ "text": String, "source"?: String, "target": "zh-CN"|"zh-Hant"|"en"|"auto",
+     *    "mode"?: "online"|"offline"|"hybrid", "cache_ttl_secs"?: Long,
+     *    "extra_headers"?: { k: v } }`.
+     *
+     * Returns a JSON object: `{ original, translated, target, detected_source,
+     *   source, offline }`. `source` is one of
+     *   `passthrough|dictionary|cache|gateway|unavailable` so the UI can
+     *   show a badge next to each row.
+     */
+    external fun translate(requestJson: String): String
+
+    /**
+     * Translate a batch of requests in one JNI crossing — preserves input
+     * order. Accepts either a bare JSON array or `{ "requests": [...] }`.
+     */
+    external fun translateBatch(requestJson: String): String
+
+    /**
+     * The translation catalogue: `{ languages: [...], modes: [...],
+     *   sources: [...] }`. The UI uses it to populate the language picker.
+     */
+    external fun translateLanguages(): String
+
+    /**
+     * Cache stats: `{ root, entry_count, total_bytes, max_entries, max_bytes }`.
+     * Surfaced in the settings UI so the player can see how much room the
+     * translation cache is taking.
+     */
+    external fun translateCacheStats(): String
+
+    /**
+     * Drop every cached translation. The next call to [translate] will
+     * re-hit the gateway / dictionary. Returns `{ "removed": Int }`.
+     */
+    external fun translateClearCache(): String
+
+    /**
+     * The currently configured gateway (URL, model, auth). Surfaced in
+     * the settings UI to let the player pick a different translation
+     * endpoint or rotate their API key.
+     */
+    external fun translateGateway(): String
+
+    /**
+     * Typed wrapper around [translate] — accepts a Kotlin-friendly
+     * argument list and returns a parsed JSONObject (the raw JSON
+     * response exactly as the Rust side produced it). Returns
+     * `{"error": ...}` on any failure so the UI can degrade gracefully.
+     */
+    fun translateText(
+        text: String,
+        target: String,
+        source: String? = null,
+        mode: String? = null,
+        cacheTtlSecs: Long? = null,
+    ): JSONObject {
+        val req = JSONObject().apply {
+            put("text", text)
+            put("target", target)
+            source?.let { put("source", it) }
+            mode?.let { put("mode", it) }
+            cacheTtlSecs?.let { put("cache_ttl_secs", it) }
+        }
+        return try {
+            JSONObject(translate(req.toString()))
+        } catch (t: Throwable) {
+            JSONObject().apply { put("error", t.message ?: "unknown") }
+        }
+    }
+
+    /**
+     * Typed wrapper around [translateBatch] — accepts a list of
+     * `(text, target)` pairs and returns a JSON array of results
+     * (one per input, in input order). The wrapper tolerates both
+     * bare-array and `{ "requests": [...] }` request shapes, and either
+     * bare-array or `{ "results": [...] }` response shapes.
+     */
+    fun translateBatchText(
+        requests: List<Pair<String, String>>,
+        mode: String? = null,
+    ): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        for ((text, target) in requests) {
+            val req = JSONObject().apply {
+                put("text", text)
+                put("target", target)
+            }
+            arr.put(req)
+        }
+        val payload = if (mode != null) {
+            JSONObject().apply {
+                put("requests", arr)
+                put("mode", mode)
+            }.toString()
+        } else {
+            arr.toString()
+        }
+        val out = JSONObject(translateBatch(payload))
+        val results = out.optJSONArray("results")
+        if (results != null) return results
+        // translateBatch returns a bare array; tolerate that shape.
+        val fallback = org.json.JSONArray()
+        for (i in 0 until out.length()) {
+            fallback.put(out.get(i))
+        }
+        return fallback
+    }
 }

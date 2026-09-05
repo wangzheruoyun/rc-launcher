@@ -26,6 +26,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import com.rc.launcher.ui.screen.DownloadsScreen
+import com.rc.launcher.ui.screen.ModBrowserScreen
+import com.rc.launcher.ui.screen.TranslationSettingsScreen
 import com.rc.launcher.ui.screen.HomeScreen
 import com.rc.launcher.ui.screen.InstanceDetailScreen
 import com.rc.launcher.ui.screen.InstancesScreen
@@ -62,6 +64,8 @@ import com.rc.launcher.ui.i18n.rcString
 @Serializable data object AwtRoute
 
 @Serializable data object InstallRoute
+
+@Serializable data object TranslationRoute
 
 @Serializable data class InstanceDetailRoute(val id: String)
 
@@ -205,12 +209,13 @@ fun RcNavHost(
     ) {
         composable<HomeRoute> { HomeScreen(navController) }
         composable<InstancesRoute> { InstancesScreen(navController) }
-        composable<DownloadsRoute> { DownloadsScreen() }
+        composable<DownloadsRoute> { ModBrowserScreen() }
         composable<SettingsRoute> { SettingsScreen(navController = navController) }
         composable<AccountsRoute> { AccountsScreen() }
         composable<ControllerRoute> { ControllerScreen(onBack = { navController.popBackStack() }) }
         composable<AwtRoute> { AwtScreen(onBack = { navController.popBackStack() }) }
         composable<InstallRoute> { InstallWizardScreen(navController) }
+        composable<TranslationRoute> { TranslationSettingsScreen(navController = navController) }
         composable<InstanceDetailRoute> { backStackEntry ->
             val route = backStackEntry.toRoute<InstanceDetailRoute>()
             InstanceDetailScreen(

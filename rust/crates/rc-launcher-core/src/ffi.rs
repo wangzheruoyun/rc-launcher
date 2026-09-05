@@ -113,18 +113,57 @@ use crate::auth::microsoft::{self, DeviceCodeChallenge};
 use crate::auth::store::{FileTokenStorage, MemoryTokenStorage, TokenStorage};
 use crate::auth::transport::ReqwestTransport;
 use crate::auth::vault::{AesGcmVault, InsecureVault, SecretVault};
-use crate::error::RcResult;
+use crate::error::{RcError, RcResult};
 
 static MANAGER: OnceLock<Mutex<AccountManager>> = OnceLock::new();
-static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
-pub(crate) fn runtime() -> &'static tokio::runtime::Runtime {
-    RUNTIME.get_or_init(|| {
+/// Fallback tokio runtime used by [`block_on_async`] when no current
+/// runtime is in scope — i.e. the FFI is being called from a plain
+/// (non-tokio) thread, the way Java calls it in production. Lazily
+/// initialised on first use so unit tests that already run inside a
+/// tokio test runtime never spin it up.
+static FALLBACK_RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+#[inline]
+pub(crate) fn fallback_runtime() -> &'static tokio::runtime::Runtime {
+    FALLBACK_RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
-            .expect("init auth runtime")
+            .expect("init FFI fallback runtime")
     })
+}
+
+/// Run a future to completion on the current tokio runtime if one
+/// is already active (e.g. inside a `#[tokio::test]`), otherwise
+/// fall back to the FFI's process-wide multi-thread runtime.
+///
+/// `block_on` panics if the calling thread is already inside a runtime,
+/// which would break every unit test that runs the FFI under a tokio
+/// test runtime. This helper exists so the FFI can stay
+/// synchronous-from-Java's-perspective while remaining testable.
+pub(crate) fn block_on_async<F: std::future::Future>(fut: F) -> F::Output {
+    // We're already inside a runtime — `block_in_place` requires a
+    // multi-thread runtime, so probe the runtime flavour and only
+    // call it when safe. Otherwise a direct `block_on` is fine: there
+    // is no worker thread to block in a current-thread runtime.
+    match tokio::runtime::Handle::try_current() {
+        Ok(handle) => {
+            // `block_in_place` panics on a current-thread runtime;
+            // detect the runtime flavour by introspecting metrics
+            // (multi-thread runtimes expose worker counts).
+            let is_multi_thread = handle
+                .metrics()
+                .num_workers()
+                > 0;
+            if is_multi_thread {
+                tokio::task::block_in_place(move || handle.block_on(fut))
+            } else {
+                handle.block_on(fut)
+            }
+        }
+        Err(_) => fallback_runtime().block_on(fut),
+    }
 }
 
 pub(crate) fn manager() -> &'static Mutex<AccountManager> {
@@ -321,7 +360,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authBeginMicrosoft(
 ) -> jstring {
     auth_ffi!({
         let g = lock_manager();
-        let challenge = runtime().block_on(g.begin_microsoft());
+        let challenge = block_on_async(g.begin_microsoft());
         drop(g);
         rc_to_json(
             &mut env,
@@ -350,7 +389,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authCompleteMicrosof
             Err(e) => return err_json(&mut env, &format!("invalid challenge: {e}")),
         };
         let mut g = lock_manager();
-        let account = runtime().block_on(g.complete_microsoft(&challenge, |_| {}));
+        let account = block_on_async(g.complete_microsoft(&challenge, |_| {}));
         drop(g);
         rc_to_json(
             &mut env,
@@ -394,7 +433,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authRefreshAccount(
             None => return err_json(&mut env, "missing uuid"),
         };
         let mut g = lock_manager();
-        let account = runtime().block_on(g.refresh(&id));
+        let account = block_on_async(g.refresh(&id));
         drop(g);
         rc_to_json(
             &mut env,
@@ -419,7 +458,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authEnsureFresh(
             None => return err_json(&mut env, "missing uuid"),
         };
         let mut g = lock_manager();
-        let account = runtime().block_on(g.ensure_fresh(&id));
+        let account = block_on_async(g.ensure_fresh(&id));
         drop(g);
         rc_to_json(
             &mut env,
@@ -451,7 +490,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authBeginThirdParty(
             }
         };
         let g = lock_manager();
-        let info = runtime().block_on(g.begin_third_party(&url));
+        let info = block_on_async(g.begin_third_party(&url));
         drop(g);
         rc_to_json(
             &mut env,
@@ -494,7 +533,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authCompleteThirdPar
             }
         };
         let mut g = lock_manager();
-        let account = runtime().block_on(g.complete_third_party(&login));
+        let account = block_on_async(g.complete_third_party(&login));
         drop(g);
         rc_to_json(
             &mut env,
@@ -2085,6 +2124,310 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_calibrateStick(
         Ok(s) => s,
         Err(_) => std::ptr::null_mut(),
     }
+}
+
+// === Translation FFI (task 13) ===========================================
+//
+// Inline auto-translation for the mod browser. The Kotlin UI hands us
+// JSON requests through `RustBridge.translate` / `translateBatch`, and
+// gets JSON results back. The actual translation work happens in
+// `crate::translate::TranslationService`; this module is the thin
+// glue layer that:
+//
+//  * owns the **process-wide** `TranslationService` (lazy-init, so the
+//    JNI `RustBridge` class can be loaded even before the network
+//    subsystem has been built);
+//  * decodes the JSON request, calls the service, and re-encodes the
+//    JSON response;
+//  * never panics — every entry point is wrapped in `auth_ffi!`, and
+//    every failure becomes `{"error": ...}` JSON so the Compose layer
+//    can keep rendering the browser.
+//
+// The translation cache lives on disk under the launcher's cache
+// directory; the path is configurable through `translateInit` so the
+// UI can pass the canonical Android cache dir at startup.
+
+
+use crate::translate::{
+    TranslationGateway, TranslationMode, TranslationRequest, TranslationResult, TranslationService,
+    TranslationServiceBuilder,
+};
+
+/// The process-wide translation service. `OnceLock` because the network
+/// subsystem is built lazily (the same pattern as
+/// `crate::event::EventBus`).
+static TRANSLATION: OnceLock<std::sync::Mutex<Option<TranslationService>>> = OnceLock::new();
+
+fn translation_slot() -> &'static std::sync::Mutex<Option<TranslationService>> {
+    TRANSLATION.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+fn ensure_translation_service(network: crate::net::NetworkClient) -> TranslationService {
+    let mut guard = translation_slot()
+        .lock()
+        .expect("translation slot poisoned");
+    if let Some(svc) = guard.as_ref() {
+        return svc.clone();
+    }
+    let svc = TranslationServiceBuilder::new()
+        .network(network)
+        .build()
+        .expect("TranslationServiceBuilder::build only fails on missing network");
+    *guard = Some(svc.clone());
+    svc
+}
+
+fn shared_network() -> crate::net::NetworkClient {
+    use std::sync::OnceLock;
+    static NET: OnceLock<crate::net::NetworkClient> = OnceLock::new();
+    if let Some(c) = NET.get() {
+        return c.clone();
+    }
+    // Best-effort: if the network client cannot build (no mirrors, no
+    // DNS, etc.), fall back to a plain offline-friendly client.
+    let client = block_on_async(crate::net::NetworkClient::builder().build())
+        .unwrap_or_else(|_| {
+            block_on_async(
+                crate::net::NetworkClient::builder()
+                    .config(crate::net::NetworkConfig::default())
+                    .build(),
+            )
+            .expect("default NetworkClient::build() must succeed")
+        });
+    NET.get_or_init(|| client.clone()).clone()
+}
+
+/// Pure core of `RustBridge.translateInit` — (re)configure the process-wide
+/// translation service. `requestJson` =
+/// `{ "cache_root"?: string, "gateway"?: TranslationGateway,
+///   "force_offline"?: bool, "default_mode"?: "online"|"offline"|"hybrid" }`.
+///
+/// Returns `{"ok": true}` on success.
+pub fn translate_init_json(request: &serde_json::Value) -> serde_json::Value {
+    let cache_root = request
+        .get("cache_root")
+        .and_then(|v| v.as_str())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(crate::translate::service::default_cache_root);
+    let force_offline = request
+        .get("force_offline")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let default_mode = match request.get("default_mode").and_then(|v| v.as_str()) {
+        Some("online") => TranslationMode::Online,
+        Some("offline") => TranslationMode::Offline,
+        _ => TranslationMode::Hybrid,
+    };
+    let gateway: TranslationGateway = request
+        .get("gateway")
+        .cloned()
+        .and_then(|v| serde_json::from_value::<TranslationGateway>(v).ok())
+        .unwrap_or_default();
+
+    let network = shared_network();
+    let cache = crate::translate::TranslationCache::open(cache_root)
+        .unwrap_or_else(|_| crate::translate::TranslationCache::open(crate::translate::service::default_cache_root()).unwrap());
+    let dictionary = crate::translate::BuiltInDictionary::builtin();
+    let svc = TranslationService::with_parts(network, cache, dictionary, gateway)
+        .with_default_mode(default_mode)
+        .with_force_offline(force_offline);
+    let mut guard = translation_slot()
+        .lock()
+        .expect("translation slot poisoned");
+    *guard = Some(svc);
+    serde_json::json!({ "ok": true })
+}
+
+/// Pure core of `RustBridge.translate` — translate one request.
+pub fn translate_json(request: &serde_json::Value) -> RcResult<serde_json::Value> {
+    let req: TranslationRequest = serde_json::from_value(request.clone())
+        .map_err(|e| RcError::Other(format!("bad translate request: {e}")))?;
+    let svc = ensure_translation_service(shared_network());
+    // Synchronous wait — the service is async because of the gateway, but
+    // the JNI contract wants a synchronous return. `futures_util::executor::block_on`
+    // is fine here: the calling thread is already an off-main background
+    // thread (Kotlin dispatchers.IO), and a single translation should
+    // take <100 ms (dictionary) or a few seconds (gateway, but cached).
+    let result: TranslationResult = block_on_async(svc.translate(&req))?;
+    Ok(serde_json::to_value(&result).map_err(RcError::Json)?)
+}
+
+/// Pure core of `RustBridge.translateBatch` — translate N requests in
+/// order; the output array preserves input order.
+pub fn translate_batch_json(request: &serde_json::Value) -> RcResult<serde_json::Value> {
+    let reqs: Vec<TranslationRequest> = serde_json::from_value(request.clone())
+        .map_err(|e| RcError::Other(format!("bad translateBatch request: {e}")))?;
+    let svc = ensure_translation_service(shared_network());
+    let results: Vec<TranslationResult> =
+        block_on_async(svc.translate_batch(reqs))?;
+    Ok(serde_json::to_value(&results).map_err(RcError::Json)?)
+}
+
+/// Pure core of `RustBridge.translateLanguages` — JSON array of the
+/// translation languages the UI exposes in its picker.
+pub fn translate_languages_json() -> serde_json::Value {
+    use crate::translate::model::TranslationLanguage;
+    let langs: Vec<serde_json::Value> = TranslationLanguage::ALL
+        .iter()
+        .map(|l| {
+            serde_json::json!({
+                "tag": l.tag(),
+                "label": l.label(),
+                "english_label": l.english_label(),
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "languages": langs,
+        "modes": ["online", "offline", "hybrid"],
+        "sources": ["passthrough", "dictionary", "cache", "gateway", "unavailable"],
+    })
+}
+
+/// Pure core of `RustBridge.translateCacheStats` — report cache size and
+/// entry count, so the settings UI can show "已缓存 N 条翻译 (X MB)".
+pub fn translate_cache_stats_json() -> serde_json::Value {
+    let svc = ensure_translation_service(shared_network());
+    let cache = svc.cache();
+    serde_json::json!({
+        "root": cache.root().to_string_lossy(),
+        "entry_count": cache.entry_count(),
+        "total_bytes": cache.total_bytes(),
+        "max_entries": cache.config().max_entries,
+        "max_bytes": cache.config().max_bytes,
+    })
+}
+
+/// Pure core of `RustBridge.translateClearCache` — drop everything from
+/// the cache (the next translation will re-hit the gateway or
+/// dictionary). Returns the number of removed files.
+pub fn translate_clear_cache_json() -> serde_json::Value {
+    let svc = ensure_translation_service(shared_network());
+    let removed = svc.cache().clear().unwrap_or(0);
+    serde_json::json!({ "removed": removed })
+}
+
+/// Pure core of `RustBridge.translateGatewayJson` — return the
+/// currently-configured gateway (the UI uses it to populate the
+/// "Settings -> Translation -> Gateway" form).
+pub fn translate_gateway_json() -> serde_json::Value {
+    let svc = ensure_translation_service(shared_network());
+    serde_json::to_value(svc.gateway()).unwrap_or_else(|_| serde_json::json!({}))
+}
+
+/// `RustBridge.translateInit(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateInit(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        jstr(&mut env, &translate_init_json(&value).to_string())
+    })
+}
+
+/// `RustBridge.translate(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translate(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        rc_to_json(&mut env, translate_json(&value))
+    })
+}
+
+/// `RustBridge.translateBatch(requestJson): String` — accepts `{ "requests": [...] }`.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateBatch(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        // Accept either a bare array or `{ "requests": [...] }` for
+        // convenience.
+        let normalised = if value.is_array() {
+            serde_json::json!({ "requests": value })
+        } else {
+            value
+        };
+        let reqs = match normalised.get("requests").cloned() {
+            Some(v) => v,
+            None => return err_json(&mut env, "missing 'requests' field"),
+        };
+        rc_to_json(&mut env, translate_batch_json(&reqs))
+    })
+}
+
+/// `RustBridge.translateLanguages(): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateLanguages(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        jstr(&mut env, &translate_languages_json().to_string())
+    })
+}
+
+/// `RustBridge.translateCacheStats(): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateCacheStats(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        jstr(&mut env, &translate_cache_stats_json().to_string())
+    })
+}
+
+/// `RustBridge.translateClearCache(): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateClearCache(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        jstr(&mut env, &translate_clear_cache_json().to_string())
+    })
+}
+
+/// `RustBridge.translateGateway(): String` — current gateway config.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateGateway(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        jstr(&mut env, &translate_gateway_json().to_string())
+    })
 }
 
 #[cfg(test)]
@@ -4111,5 +4454,99 @@ mod i18n_tests {
             super::launch_diagnose_json(&json!({ "exit_code": 1, "log": "x", "language": "??" }));
         assert_eq!(out["language"], "en");
         crate::i18n::set_language(restore);
+    }
+}
+
+
+#[cfg(test)]
+mod translate_tests {
+    use super::*;
+
+    /// The translation FFI round-trips: a known mod id is served from the
+    /// built-in dictionary; an unknown phrase is processed by the term
+    /// substitutor; the result always has a non-empty translated field.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn translate_ffi_round_trips_known_mod() {
+        // Force an offline service so the test never depends on the
+        // gateway.
+        let _ = translate_init_json(&json!({
+            "force_offline": true,
+            "cache_root": tempfile::tempdir().unwrap().path().to_string_lossy(),
+            "default_mode": "hybrid",
+        }));
+
+        let out = translate_json(&json!({
+            "text": "sodium",
+            "target": "zh-CN",
+        }))
+        .unwrap();
+        assert_eq!(out["source"], "dictionary");
+        assert_eq!(out["translated"], "钠");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn translate_ffi_handles_unknown_phrase() {
+        let _ = translate_init_json(&json!({
+            "force_offline": true,
+            "cache_root": tempfile::tempdir().unwrap().path().to_string_lossy(),
+            "default_mode": "hybrid",
+        }));
+
+        let out = translate_json(&json!({
+            "text": "Improves FPS and render distance for the server.",
+            "target": "zh-CN",
+        }))
+        .unwrap();
+        // Offline + hybrid ⇒ term substitution kicks in.
+        assert!(out["translated"].as_str().unwrap().contains("帧率"));
+        assert!(out["translated"].as_str().unwrap().contains("渲染距离"));
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn translate_ffi_batch_preserves_order() {
+        let _ = translate_init_json(&json!({
+            "force_offline": true,
+            "cache_root": tempfile::tempdir().unwrap().path().to_string_lossy(),
+            "default_mode": "hybrid",
+        }));
+
+        let reqs = json!([
+            { "text": "sodium",    "target": "zh-CN" },
+            { "text": "iris",      "target": "zh-CN" },
+            { "text": "fabric-api", "target": "zh-CN" },
+        ]);
+        let out = translate_batch_json(&reqs).unwrap();
+        let arr = out.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[0]["translated"], "钠");
+        assert_eq!(arr[1]["translated"], "虹膜");
+        assert_eq!(arr[2]["translated"], "Fabric API");
+    }
+
+    #[test]
+    fn translate_languages_json_lists_every_target() {
+        let out = translate_languages_json();
+        let langs = out["languages"].as_array().unwrap();
+        assert!(langs.iter().any(|l| l["tag"] == "auto"));
+        assert!(langs.iter().any(|l| l["tag"] == "zh-CN"));
+        assert!(langs.iter().any(|l| l["tag"] == "zh-Hant"));
+        assert!(langs.iter().any(|l| l["tag"] == "en"));
+        let modes = out["modes"].as_array().unwrap();
+        assert!(modes.iter().any(|m| m == "online"));
+        assert!(modes.iter().any(|m| m == "offline"));
+        assert!(modes.iter().any(|m| m == "hybrid"));
+    }
+
+    #[test]
+    fn translate_ffi_bad_request_returns_error_json() {
+        // An unparseable request returns an error JSON, not a panic.
+        // The unit-tested pure core is what catches the bad payload.
+        let raw = serde_json::from_str::<serde_json::Value>("{}").unwrap();
+        let res = translate_json(&raw);
+        // An empty `{ "text": "" }` is valid (passthrough), so we need
+        // a clearly-bad payload to test the error path.
+        let raw = serde_json::json!({ "text": 42 });
+        let res = translate_json(&raw);
+        assert!(res.is_err(), "a number in `text` must be rejected");
     }
 }

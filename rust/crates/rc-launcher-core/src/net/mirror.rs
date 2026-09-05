@@ -189,6 +189,16 @@ pub struct MirrorProvider {
     latencies: Mutex<HashMap<String, Duration>>,
 }
 
+impl Clone for MirrorProvider {
+    fn clone(&self) -> Self {
+        Self {
+            mirrors: self.mirrors.clone(),
+            best: Mutex::new(self.best.lock().expect("MirrorProvider poisoned").clone()),
+            latencies: Mutex::new(self.latencies.lock().expect("MirrorProvider poisoned").clone()),
+        }
+    }
+}
+
 impl MirrorProvider {
     pub fn new(mirrors: Vec<MirrorSource>) -> Self {
         Self {
