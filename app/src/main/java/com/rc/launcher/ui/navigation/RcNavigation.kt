@@ -34,8 +34,10 @@ import com.rc.launcher.ui.screen.InstancesScreen
 import com.rc.launcher.ui.screen.SettingsScreen
 import com.rc.launcher.ui.screen.AccountsScreen
 import com.rc.launcher.ui.screen.ControllerScreen
+import com.rc.launcher.ui.screen.ControlLayoutLibraryScreen
 import com.rc.launcher.ui.screen.AwtScreen
 import com.rc.launcher.ui.screen.InstallWizardScreen
+import com.rc.launcher.ui.screen.OnboardingScreen
 import com.rc.launcher.ui.i18n.RcStringKeys
 import com.rc.launcher.ui.i18n.rcString
 
@@ -61,9 +63,15 @@ import com.rc.launcher.ui.i18n.rcString
 
 @Serializable data object ControllerRoute
 
+/** Task 15: community / built-in control-layout library. */
+@Serializable data object ControlLayoutLibraryRoute
+
 @Serializable data object AwtRoute
 
 @Serializable data object InstallRoute
+
+/** Task 14: first-run / rewatch onboarding flow. */
+@Serializable data object OnboardingRoute
 
 @Serializable data object TranslationRoute
 
@@ -83,6 +91,7 @@ object RcRoutes {
     const val CONTROLLER = "controller"
     const val AWT = "awt"
     const val INSTALL = "install"
+    const val ONBOARDING = "onboarding"
     const val INSTANCE_DETAIL = "instance/{id}"
 
     /**
@@ -212,9 +221,25 @@ fun RcNavHost(
         composable<DownloadsRoute> { ModBrowserScreen() }
         composable<SettingsRoute> { SettingsScreen(navController = navController) }
         composable<AccountsRoute> { AccountsScreen() }
-        composable<ControllerRoute> { ControllerScreen(onBack = { navController.popBackStack() }) }
+        composable<ControllerRoute> {
+            ControllerScreen(
+                onBack = { navController.popBackStack() },
+                onOpenLibrary = { navController.navigate(ControlLayoutLibraryRoute) },
+            )
+        }
+        composable<ControlLayoutLibraryRoute> {
+            ControlLayoutLibraryScreen(onBack = { navController.popBackStack() })
+        }
         composable<AwtRoute> { AwtScreen(onBack = { navController.popBackStack() }) }
         composable<InstallRoute> { InstallWizardScreen(navController) }
+        // Task 14: first-run / rewatch onboarding. Pop back to home on finish
+        // so the bottom-bar layout stays intact; navigating "forward" would
+        // leave the onboarding on top of the home screen.
+        composable<OnboardingRoute> {
+            OnboardingScreen(onFinished = {
+                navController.popBackStack(route = HomeRoute, inclusive = false)
+            })
+        }
         composable<TranslationRoute> { TranslationSettingsScreen(navController = navController) }
         composable<InstanceDetailRoute> { backStackEntry ->
             val route = backStackEntry.toRoute<InstanceDetailRoute>()

@@ -86,6 +86,7 @@ import kotlin.math.roundToInt
 fun ControllerScreen(
     viewModel: ControlLayoutViewModel = viewModel(),
     onBack: () -> Unit = {},
+    onOpenLibrary: () -> Unit = {},
 ) {
     val layout by viewModel.layout.collectAsStateWithLifecycle()
     val savedLayouts by viewModel.savedLayouts.collectAsStateWithLifecycle()
@@ -105,6 +106,8 @@ fun ControllerScreen(
         // ---- Header --------------------------------------------------------
         Row(verticalAlignment = Alignment.CenterVertically) {
             Button(onClick = onBack) { Text("返回") }
+            Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = onOpenLibrary) { Text("库") }
             Spacer(Modifier.width(12.dp))
             Text(
                 layout.name + if (dirty) " *" else "",
