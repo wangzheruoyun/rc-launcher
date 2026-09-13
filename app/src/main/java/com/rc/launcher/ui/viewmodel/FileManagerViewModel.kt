@@ -159,7 +159,6 @@ class FileManagerViewModel : ViewModel() {
     }
 
     /**
-     * Step one: ask the core to delete `paths`. Without `confirm: true` the    /**
      * Step one: ask the core to delete `paths`. Without `confirm: true` the
      * core returns a preview; the UI is expected to render it and, if the
      * user accepts, call [confirmPendingDelete].
