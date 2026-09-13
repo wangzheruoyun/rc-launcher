@@ -28,7 +28,7 @@
 //!     "/data/data/com.rc.launcher/files/instances",
 //!     Some(mirror),
 //!     ImportOptions::default(),
-//! )?;
+//! ).await?;
 //! let report = importer.import_url(
 //!     "https://cdn.modrinth.com/data/P7dR8mSH/versions/abc/atm9.mrpack",
 //!     "all-the-mods-9",
