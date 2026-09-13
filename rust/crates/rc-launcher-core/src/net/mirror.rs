@@ -16,6 +16,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::RcResult;
+
 /// Canonical Mojang / Minecraft hosts that the built-in mirrors can serve.
 pub const MOJANG_HOSTS: &[&str] = &[
     "launcher.mojang.com",
@@ -216,6 +218,12 @@ impl MirrorProvider {
     /// A provider seeded with [`default_mirrors`].
     pub fn new_default() -> Self {
         Self::new(default_mirrors())
+    }
+
+    /// A provider seeded with the built-in mirror set (convenience alias
+    /// for `new_default()`, used by the modpack import pipeline doctests).
+    pub fn builtin() -> RcResult<Self> {
+        Ok(Self::new_default())
     }
 
     /// All configured mirrors.

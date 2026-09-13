@@ -109,6 +109,16 @@ impl fmt::Display for TranslationLanguage {
     }
 }
 
+
+/// Allow "zh-CN".into() in API call sites and doctests (task 13). Unknown
+/// tags resolve to [TranslationLanguage::Auto], mirroring the lenient
+/// `from_tag` policy used for persisted preferences.
+impl From<&str> for TranslationLanguage {
+    fn from(tag: &str) -> Self {
+        TranslationLanguage::from_tag(tag).unwrap_or(TranslationLanguage::Auto)
+    }
+}
+
 /// How [`TranslationService::translate`] resolves a request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
