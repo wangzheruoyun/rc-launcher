@@ -1164,13 +1164,20 @@ object RustBridge {
         } else {
             arr.toString()
         }
-        val out = JSONObject(translateBatch(payload))
-        val results = out.optJSONArray("results")
+        val raw = translateBatch(payload)
+        val json = try {
+            JSONObject(raw)
+        } catch (e: org.json.JSONException) {
+            return org.json.JSONArray(raw)
+        }
+        val results = json.optJSONArray("results")
         if (results != null) return results
         // translateBatch returns a bare array; tolerate that shape.
         val fallback = org.json.JSONArray()
-        for (i in 0 until out.length()) {
-            fallback.put(out.get(i))
+        val keys = json.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            fallback.put(json.get(key))
         }
         return fallback
     }

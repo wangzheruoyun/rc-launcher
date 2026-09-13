@@ -28,6 +28,7 @@
 use rc_launcher::error::RcError;
 use rc_launcher::i18n::{self, number, pack, Language};
 use rc_launcher::launch::crash::diagnose;
+use rc_launcher::launch::crash::DeviceInfo;
 
 fn rule(title: &str) {
     println!("\n\x1b[1m== {} ==\x1b[0m", title);
@@ -115,6 +116,7 @@ fn main() {
         None,
         ["java.lang.OutOfMemoryError: Java heap space"],
         false,
+        DeviceInfo::default(),
     );
     for l in Language::ALL {
         println!(
