@@ -27,7 +27,9 @@ import androidx.navigation.NavHostController
 import com.rc.launcher.ui.ProvideRcWindowInfo
 import com.rc.launcher.ui.component.InstanceCard
 import com.rc.launcher.ui.model.dashboardOrder
+import androidx.compose.material.icons.filled.Cloud
 import com.rc.launcher.ui.navigation.InstallRoute
+import com.rc.launcher.ui.navigation.ModpackImportRoute
 import com.rc.launcher.ui.navigation.InstanceDetailRoute
 import com.rc.launcher.ui.rcWindowInfo
 import com.rc.launcher.ui.viewmodel.DashboardViewModel
@@ -63,12 +65,12 @@ fun InstancesScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().padding(pad),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.Vertical.spacedBy(12.dp),
     ) {
         Column(
             // Keep the copy readable on a wide tablet instead of stretching it.
             modifier = Modifier.widthIn(max = window.maxContentWidthDp.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.Vertical.spacedBy(8.dp),
         ) {
             Text("游戏实例", style = MaterialTheme.typography.headlineSmall)
             // A short landscape window spends its little height on cards, not prose.
@@ -86,11 +88,21 @@ fun InstancesScreen(
                 Icon(Icons.Filled.Add, contentDescription = null)
                 Text("安装新实例")
             }
+            // Task 17: surface the modpack import pipeline right next to the
+            // "install new instance" button. They share the same destination
+            // (`instances_root`), so the user can mix and match.
+            FilledTonalButton(
+                onClick = { navController?.navigate(ModpackImportRoute) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.Cloud, contentDescription = null)
+                Text("导入整合包")
+            }
         }
         LazyVerticalGrid(
             columns = GridCells.Fixed(window.instanceColumns),
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.Vertical.spacedBy(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         ) {
@@ -100,6 +112,7 @@ fun InstancesScreen(
                     launching = inst.id == launchingId,
                     onLaunch = { dashboard.launch(inst.id) },
                     onOpen = { navController?.navigate(InstanceDetailRoute(inst.id)) },
+                    onToggleFavorite = { dashboard.toggleFavorite(it.id) },
                 )
             }
         }

@@ -244,16 +244,30 @@ pub fn spawn_download_job(spec: &Value, source: Option<Arc<dyn HttpSource>>) -> 
     if let Some(c) = spec.get("concurrency").and_then(|v| v.as_u64()) {
         opts.max_batch_concurrency = c.max(1) as usize;
     }
+    // Task 30: enhanced download options for large modpack / resource-pack
+    // downloads on weak China-mainland networks.
+    if let Some(chunk) = spec.get("chunk_concurrency").and_then(|v| v.as_u64()) {
+        opts.concurrency = chunk.max(1) as usize;
+    }
+    if let Some(bs) = spec.get("chunk_size").and_then(|v| v.as_u64()) {
+        opts.chunk_size = bs.max(1024);
+    }
+    if let Some(max_retries) = spec.get("max_retries").and_then(|v| v.as_u64()) {
+        opts.max_retries = max_retries as u32;
+    }
+    if let Some(rate) = spec.get("max_bytes_per_second").and_then(|v| v.as_u64()) {
+        opts.max_bytes_per_second = Some(rate);
+    }
+    if let Some(retries) = spec.get("max_checksum_retries").and_then(|v| v.as_u64()) {
+        opts.max_checksum_retries = retries as u32;
+    }
+    if let Some(seq) = spec.get("sequential") {
+        if seq.as_bool().unwrap_or(false) {
+            opts.sequential = true;
+        }
+    }
 
     let progress_scope = scope.clone();
-    let mgr = match source {
-        Some(s) => DownloadManager::new(s, opts),
-        None => DownloadManager::with_default_source(opts)?,
-    }
-    .with_progress(Arc::new(move |p: &crate::download::Progress| {
-        event::publish_progress(&progress_scope, &p.id, p.downloaded, p.total);
-    }));
-
     let cancel = Arc::new(AtomicBool::new(false));
     cancels()
         .lock()
@@ -262,6 +276,24 @@ pub fn spawn_download_job(spec: &Value, source: Option<Arc<dyn HttpSource>>) -> 
     let _guard = ScopeGuard {
         scope: scope.clone(),
     };
+    let mgr = match source {
+        Some(s) => DownloadManager::new(s, opts),
+        None => DownloadManager::with_default_source(opts)?,
+    }
+    .with_progress(Arc::new(move |p: &crate::download::Progress| {
+        let status_str = match p.status {
+            crate::download::DownloadStatus::Running => "running",
+            crate::download::DownloadStatus::Paused => "paused",
+            crate::download::DownloadStatus::Completed => "completed",
+            crate::download::DownloadStatus::Failed => "failed",
+        };
+        event::publish_progress_with_meta(
+            &progress_scope, &p.id, p.downloaded, p.total, p.speed_bps, status_str,
+        );
+    }))
+    // Wire the existing job-level cancel flag into the download manager so
+    // [cancel_job] / `cancelAsync` pauses the download mid-flight (task 30).
+    .with_cancel(cancel);
 
     event::publish(Event::lifecycle(
         &scope,
@@ -315,6 +347,82 @@ pub fn spawn_download_job(spec: &Value, source: Option<Arc<dyn HttpSource>>) -> 
     });
 
     Ok(json!({ "ok": true, "scope": scope }))
+}
+/// Spawn a fire-and-forget **modpack import** job (task 17). The actual
+/// work runs on the shared [`job_runtime`] and reports progress + lifecycle
+/// + error events through the [event::EventBus]. Returns
+/// `{"ok": true, "scope": "modpack-..."}` so the UI can subscribe to
+/// progress events by scope and call [`cancel_job`] to abort.
+pub fn spawn_modpack_import_job(
+    importer: crate::mods::modpack::ModpackImporter,
+    manifest: crate::mods::modpack::Manifest,
+    instance_id: String,
+    allow_overwrite: bool,
+) -> Value {
+    // Each job gets a unique scope so multiple imports can run in parallel.
+    let scope = format!(
+        "modpack-{}-{}",
+        instance_id,
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    );
+    let label = format!("import {}", manifest.spec().name);
+    let cancel = Arc::new(AtomicBool::new(false));
+    cancels()
+        .lock()
+        .map(|mut g| g.insert(scope.clone(), cancel.clone()))
+        .ok();
+
+    let scope_for_task = scope.clone();
+    job_runtime().spawn(async move {
+        let _guard = ScopeGuard {
+            scope: scope_for_task.clone(),
+        };
+        // Lifecycle: started.
+        let _ = event::publish(Event::lifecycle(
+            &scope_for_task,
+            "started",
+            format!("{} ({})", label, scope_for_task),
+        ));
+
+        let report = if allow_overwrite {
+            importer
+                .import_allowing_overwrite(&manifest, &instance_id)
+                .await
+        } else {
+            importer.import(&manifest, &instance_id).await
+        };
+        match report {
+            Ok(r) => {
+                let phase = if r.is_clean() {
+                    "succeeded"
+                } else {
+                    "completed_with_errors"
+                };
+                let _ = event::publish(Event::lifecycle_with_result(
+                    &scope_for_task,
+                    phase,
+                    format!("imported {} files", r.downloaded_count),
+                    serde_json::to_value(&r)
+                        .unwrap_or_else(|e| json!({ "serialise_error": e.to_string() })),
+                ));
+            }
+            Err(e) => {
+                let _ = event::publish(Event::error(&scope_for_task, e.to_string()));
+            }
+        }
+
+        // Lifecycle: finished.
+        let _ = event::publish(Event::lifecycle(
+            &scope_for_task,
+            "finished",
+            "modpack import finished",
+        ));
+    });
+
+    json!({ "ok": true, "scope": scope })
 }
 
 #[cfg(test)]

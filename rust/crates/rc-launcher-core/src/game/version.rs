@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{RcError, RcResult};
 use crate::game::library::Library;
-use crate::net::MirrorProvider;
+use crate::net::NetworkClient;
 
 /// A reference to the assets index for a version (modern format).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,60 +290,24 @@ pub fn resolve_version_chain(
     Ok(merge_chain(&chain))
 }
 
-/// Fetch a `version.json` (or any JSON document) from `url`, transparently
-/// retrying against the China-mainland mirrors in priority order.
+/// Fetch a `version.json` (or any JSON document) from `url` through the
+/// [`NetworkClient`], transparently retrying against the China-mainland
+/// mirrors in priority order with exponential backoff and polluted-mirror
+/// fallback.
 ///
-/// Robustness: a mirror may answer with HTTP 200 but a *non-JSON* body — a captive
-/// portal, a CDN error page, a half-cached HTML stub — especially on the
-/// flaky domestic networks this launcher targets. A naïve implementation would
-/// parse-fail and abort; instead we treat a successful-but-unparseable response
-/// the same as a transport failure and **fall through to the next candidate**
-/// (the next mirror, or the origin). We only give up after every candidate has
-/// been tried, reporting the last error seen. This is the single most important
-/// resilience property for mirror-based downloads.
+/// Delegates to [`NetworkClient::fetch_json_with_fallback`], which provides the
+/// full network-optimisation stack (mirror ordering, DoH/proxy, connection
+/// pooling, timeouts, exponential backoff) plus the single most important
+/// resilience property for mirror-based fetches: a mirror that answers HTTP 200
+/// with a non-JSON body (a captive portal, CDN error page or half-cached HTML
+/// stub) is treated as a transport failure and we **fall through to the next
+/// candidate** (the next mirror, or the origin). We only give up after every
+/// candidate has been tried, reporting the last error seen.
 pub async fn fetch_json_with_mirrors<T: for<'de> Deserialize<'de>>(
-    client: &reqwest::Client,
-    mirror: &MirrorProvider,
+    client: &NetworkClient,
     url: &str,
 ) -> RcResult<T> {
-    let mut candidates: Vec<String> = mirror.rewrite_all(url);
-    if candidates.is_empty() {
-        candidates.push(url.to_string());
-    }
-    let mut last_err: Option<String> = None;
-    for c in &candidates {
-        let resp = match client.get(c).send().await {
-            Ok(r) => r,
-            Err(e) => {
-                last_err = Some(format!("request to {c} failed: {e}"));
-                continue;
-            }
-        };
-        if !resp.status().is_success() {
-            last_err = Some(format!("HTTP {} from {c}", resp.status()));
-            continue;
-        }
-        let text = match resp.text().await {
-            Ok(t) => t,
-            Err(e) => {
-                last_err = Some(format!("body read from {c} failed: {e}"));
-                continue;
-            }
-        };
-        match serde_json::from_str(&text) {
-            Ok(v) => return Ok(v),
-            Err(e) => {
-                // 200 OK but invalid JSON: a polluted mirror, not a real result.
-                // Try the next candidate instead of surfacing a parse error.
-                last_err = Some(format!("parse from {c} failed ({} bytes): {e}", text.len()));
-                continue;
-            }
-        }
-    }
-    Err(RcError::Other(format!(
-        "failed to fetch {}: {:?}",
-        url, last_err
-    )))
+    client.fetch_json_with_fallback(url).await
 }
 
 #[cfg(test)]
@@ -354,7 +318,7 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::Arc;
 
-    use crate::net::MirrorProvider;
+    use crate::net::NetworkClient;
 
     /// Minimal blocking HTTP/1.0 test server (no extra deps). `handler` returns
     /// `(status_code, body)` for a request, given its path.
@@ -558,18 +522,20 @@ mod tests {
                 (200, "{\"hello\":\"world\"}".to_string())
             }
         });
-        let provider = MirrorProvider::new(vec![
-            crate::net::MirrorSource::new("polluted", "Polluted", &base)
-                .with_path_prefix("polluted"),
-            crate::net::MirrorSource::new("good", "Good", &base).with_path_prefix("good"),
-        ]);
-        provider.set_best("polluted");
-
-        let client = reqwest::Client::new();
-        let url = "https://launchermeta.mojang.com/mc/game/test.json";
-        let val: serde_json::Value = fetch_json_with_mirrors(&client, &provider, url)
+        // mirrors are configured on the NetworkClient below
+        let client = NetworkClient::builder()
+            .mirrors(vec![
+                crate::net::MirrorSource::new("polluted", "Polluted", &base)
+                    .with_path_prefix("polluted"),
+                crate::net::MirrorSource::new("good", "Good", &base).with_path_prefix("good"),
+            ])
+            .build()
             .await
             .unwrap();
+        client.mirror_provider().set_best("polluted");
+
+        let url = "https://launchermeta.mojang.com/mc/game/test.json";
+        let val: serde_json::Value = fetch_json_with_mirrors(&client, url).await.unwrap();
         assert_eq!(val["hello"], "world");
     }
 
@@ -577,13 +543,15 @@ mod tests {
     async fn fetch_json_errors_when_all_polluted() {
         // Both candidates return HTML -> ultimate failure (not a silent ok).
         let (base, _h) = start_json_server(|_path| (200, "<html>error</html>".to_string()));
-        let provider = MirrorProvider::new(vec![crate::net::MirrorSource::new(
-            "polluted", "Polluted", &base,
-        )]);
-        let client = reqwest::Client::new();
+        let client = NetworkClient::builder()
+            .mirrors(vec![crate::net::MirrorSource::new(
+                "polluted", "Polluted", &base,
+            )])
+            .build()
+            .await
+            .unwrap();
         let url = "https://launchermeta.mojang.com/mc/game/test.json";
-        let res: RcResult<serde_json::Value> =
-            fetch_json_with_mirrors(&client, &provider, url).await;
+        let res: RcResult<serde_json::Value> = fetch_json_with_mirrors(&client, url).await;
         assert!(res.is_err());
     }
 }

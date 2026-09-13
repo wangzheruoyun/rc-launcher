@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::display::{OrientationPolicy, ScreenOrientation};
 use crate::error::{RcError, RcResult};
 use crate::game::platform::{Features, Platform};
+use crate::launch::crash::DeviceInfo;
 use crate::launch::render::PerfProfile;
 use crate::plugins::RendererPlugin;
 use crate::runtime::{Abi, JavaVersion};
@@ -167,6 +168,26 @@ impl AccountProfile {
             return Err(RcError::Launch("account uuid is empty".into()));
         }
         Ok(())
+    }
+}
+
+impl LaunchOptions {
+    /// Build a [`DeviceInfo`] from the launch options (task 24).
+    ///
+    /// Aggregates the ABI, Java version, renderer and LWJGL version that the
+    /// engine configured for this session, so the crash dialog can show *what*
+    /// the game was running on without the user having to dig through the log.
+    pub fn to_device_info(&self) -> DeviceInfo {
+        DeviceInfo {
+            device_model: String::new(), // supplied by the Android layer
+            abi: self.abi.as_android_abi().to_string(),
+            java_version: self.java_version.to_string(),
+            renderer_id: self.renderer.id().to_string(),
+            renderer_lib: self.renderer.gl_libname().to_string(),
+            lwjgl_version: self.lwjgl_version.as_dir().to_string(),
+            opengl_version: None,
+            gles_version: None,
+        }
     }
 }
 

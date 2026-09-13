@@ -104,4 +104,18 @@ class InstanceDetailViewModelTest {
         assertNull(InstanceRepository.getById("fabric-1.20.1"))
         assertTrue(InstanceRepository.instances.value.isEmpty())
     }
+
+    /** Task 18: the favourite star on the detail hero must flip the
+     *  repository-backed `isFavorite` flag so the dashboard / list reflect the
+     *  new pinning immediately. */
+    @Test
+    fun toggleFavorite_flipsPersistedFlag() {
+        val vm = InstanceDetailViewModel()
+        vm.load("fabric-1.20.1")
+        val before = InstanceRepository.getById("fabric-1.20.1")?.isFavorite == true
+        vm.toggleFavorite()
+        assertEquals(!before, InstanceRepository.getById("fabric-1.20.1")?.isFavorite == true)
+        vm.toggleFavorite()
+        assertEquals(before, InstanceRepository.getById("fabric-1.20.1")?.isFavorite == true)
+    }
 }

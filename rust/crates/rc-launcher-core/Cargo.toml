@@ -28,7 +28,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util
 # reqwest with rustls (no OpenSSL) so it cross-compiles cleanly to Android via
 # cargo-ndk. We deliberately avoid the default `native-tls` feature.
 # `hickory-dns` enables Happy Eyeballs (IPv4/IPv6 racing) at the resolver layer.
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "hickory-dns", "json", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "hickory-dns", "json", "stream", "multipart"] }
 # Cryptographic hashes for post-download verification.
 sha1 = "0.10"
 sha2 = "0.10"
@@ -73,6 +73,9 @@ toml = "0.8"
 semver = { version = "1", features = ["serde"] }
 # Recursive, sorted directory scanning of the per-instance mods folder.
 walkdir = "2"
+
+# --- Task 17: modpack import (base64 decode archive bytes from Kotlin) ---
+base64 = "0.22"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

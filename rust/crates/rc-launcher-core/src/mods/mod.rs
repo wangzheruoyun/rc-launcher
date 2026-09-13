@@ -35,6 +35,7 @@ pub mod conflict;
 pub mod constraint;
 pub mod loader;
 pub mod metadata;
+pub mod modpack;
 pub mod resource_pack;
 pub mod shader;
 
@@ -46,6 +47,12 @@ pub use conflict::{resolve_issues, ModIssue, ModIssueKind, ModView};
 pub use constraint::VersionConstraint;
 pub use loader::ModLoader;
 pub use metadata::{ModDependency, ModMetadata};
+pub use modpack::{
+    build_mmc_manifest, detect_and_parse as detect_modpack, extract_overrides, parse_archive_bytes,
+    parse_curse_manifest, parse_instance_cfg, parse_mmc_pack, parse_modrinth_index, FileOutcome,
+    FileReport, ImportOptions, Manifest, ModpackFile, ModpackFlavour, ModpackImportReport,
+    ModpackImporter, ModpackLoader, ModpackOrigin, ModpackSpec,
+};
 
 use crate::error::{RcError, RcResult};
 use std::path::{Path, PathBuf};

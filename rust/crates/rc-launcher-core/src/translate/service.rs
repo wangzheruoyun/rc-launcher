@@ -62,7 +62,12 @@ impl TranslationService {
     pub fn with_cache_root(network: NetworkClient, cache_root: PathBuf) -> Self {
         let cache = TranslationCache::open(cache_root)
             .unwrap_or_else(|_| TranslationCache::open(default_cache_root()).unwrap());
-        Self::with_parts(network, cache, BuiltInDictionary::builtin(), TranslationGateway::default())
+        Self::with_parts(
+            network,
+            cache,
+            BuiltInDictionary::builtin(),
+            TranslationGateway::default(),
+        )
     }
 
     /// Open a service with every part customisable.
@@ -308,7 +313,9 @@ impl TranslationService {
     }
 
     async fn post_gateway(&self, body: &serde_json::Value) -> RcResult<String> {
-        self.network.post_json(&self.gateway.url, body.clone()).await
+        self.network
+            .post_json(&self.gateway.url, body.clone())
+            .await
     }
 
     fn extract_reply(&self, raw: &str, fallback: &str) -> String {
@@ -572,7 +579,9 @@ mod tests {
     #[tokio::test]
     async fn with_default_mode_overrides() {
         let dir = tempfile::tempdir().unwrap();
-        let svc = offline_service(dir.path()).await.with_default_mode(TranslationMode::Online);
+        let svc = offline_service(dir.path())
+            .await
+            .with_default_mode(TranslationMode::Online);
         assert_eq!(svc.default_mode(), TranslationMode::Online);
     }
 }

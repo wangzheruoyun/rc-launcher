@@ -256,3 +256,126 @@ mod tests {
         }
     }
 }
+
+// === Skin model (task 22) ==================================================
+
+/// Source of a player skin texture.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkinSource {
+    /// Official skin/cape downloaded from Mojang's session server.
+    Official,
+    /// Custom skin uploaded by the player.
+    Custom,
+}
+
+impl SkinSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SkinSource::Official => "official",
+            SkinSource::Custom => "custom",
+        }
+    }
+}
+
+/// Skin (and cape) metadata for a Minecraft profile (task 22).
+///
+/// Fetched from Mojang's session profile API
+/// (`https://sessionserver.mojang.com/session/profile/{uuid}?unsigned=false`)
+/// which returns a `textures` property containing the skin and cape download URLs.
+/// The actual PNG bytes are fetched by the UI from `skin_url` / `cape_url` and
+/// cached locally for offline display.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SkinModel {
+    /// Player UUID this skin belongs to.
+    pub uuid: String,
+    /// URL to the skin PNG (64x64 or 64x32). Fetched from Mojang's texture servers.
+    pub skin_url: String,
+    /// URL to the cape PNG ("抛羽翅"), if the player owns one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cape_url: Option<String>,
+    /// Unix epoch seconds when the model was last refreshed from the server.
+    pub fetched_at: u64,
+    /// When the skin PNG bytes were last cached locally (0 = not cached).
+    #[serde(default)]
+    pub cached_at: u64,
+    /// Where this skin came from.
+    pub source: SkinSource,
+    /// SHA-256 hash of the cached skin PNG bytes (for integrity / dedup).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    /// The Minecraft "model" field from the profile texture payload: `"slim"`
+    /// (Alex) or `"default"` (Steve). Empty string when unknown.
+    pub model: String,
+}
+
+impl SkinModel {
+    /// True when the skin data has been cached locally (offline displayable).
+    pub fn is_cached(&self) -> bool {
+        self.cached_at > 0 && !self.skin_url.is_empty()
+    }
+
+    /// Cache key derived from the UUID — used by the UI to look up the cached
+    /// PNG bytes on disk.
+    pub fn cache_key(&self) -> String {
+        format!("skin_{}", self.uuid.replace('-', ""))
+    }
+}
+
+#[cfg(test)]
+mod skin_tests {
+    use super::*;
+
+    #[test]
+    fn skin_model_serialises_roundtrip() {
+        let s = SkinModel {
+            uuid: "abc-123".into(),
+            skin_url: "https://textures.minecraft.net/texture/x".into(),
+            cape_url: Some("https://textures.minecraft.net/texture/y".into()),
+            fetched_at: 100,
+            cached_at: 90,
+            source: SkinSource::Official,
+            hash: Some("deadbeef".into()),
+            model: "slim".into(),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let back: SkinModel = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, s);
+        assert_eq!(back.source.as_str(), "official");
+    }
+
+    #[test]
+    fn skin_model_is_cached_respects_cache() {
+        let uncached = SkinModel {
+            uuid: "u".into(),
+            skin_url: "https://x".into(),
+            cape_url: None,
+            fetched_at: 100,
+            cached_at: 0,
+            source: SkinSource::Official,
+            hash: None,
+            model: String::new(),
+        };
+        assert!(!uncached.is_cached());
+
+        let cached = SkinModel {
+            cached_at: 100,
+            ..uncached.clone()
+        };
+        assert!(cached.is_cached());
+    }
+
+    #[test]
+    fn skin_model_default_cape_url_is_none() {
+        let json = r#"{"uuid":"u","skin_url":"https://x","fetched_at":1,"cached_at":0,"source":"official","model":""}"#;
+        let s: SkinModel = serde_json::from_str(json).unwrap();
+        assert!(s.cape_url.is_none());
+        assert!(s.hash.is_none());
+    }
+
+    #[test]
+    fn skin_source_as_str() {
+        assert_eq!(SkinSource::Official.as_str(), "official");
+        assert_eq!(SkinSource::Custom.as_str(), "custom");
+    }
+}

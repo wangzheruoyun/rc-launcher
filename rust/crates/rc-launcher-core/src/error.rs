@@ -127,6 +127,11 @@ pub enum RcError {
     #[error("internal panic: {0}")]
     Panic(String),
 
+    /// The operation was cancelled (e.g. by the UI via the task-30 cancel flag).
+    /// Recoverable — the caller can resume or surface a "cancelled" state.
+    #[error("cancelled: {scope}")]
+    Cancelled { scope: String },
+
     #[error("{0}")]
     Other(String),
 }
@@ -153,6 +158,7 @@ impl RcError {
             RcError::RateLimited { .. } => ErrorSeverity::Transient,
             RcError::Cache(_) => ErrorSeverity::Recoverable,
             RcError::Panic(_) => ErrorSeverity::Fatal,
+            RcError::Cancelled { .. } => ErrorSeverity::Recoverable,
             RcError::Other(_) => ErrorSeverity::Recoverable,
         }
     }
@@ -175,6 +181,7 @@ impl RcError {
     pub fn suggested_backoff(&self) -> Option<Duration> {
         match self {
             RcError::RateLimited { retry_after } => *retry_after,
+            RcError::Cancelled { .. } => None,
             _ => None,
         }
     }
@@ -204,6 +211,7 @@ impl RcError {
             | RcError::Mod(_)
             | RcError::UnsupportedPlatform(_)
             | RcError::Cache(_)
+            | RcError::Cancelled { .. }
             | RcError::Panic(_)
             | RcError::Other(_) => "error.unknown",
         }
@@ -272,6 +280,7 @@ impl RcError {
                     None
                 }
             }
+            RcError::Cancelled { .. } => None,
             _ => None,
         }
     }
@@ -505,6 +514,9 @@ mod tests {
                 retry_after: Some(Duration::from_secs(3)),
             },
             RcError::Cache("corrupt".into()),
+            RcError::Cancelled {
+                scope: "test".into(),
+            },
             RcError::Panic("boom".into()),
             RcError::Other("misc".into()),
         ];

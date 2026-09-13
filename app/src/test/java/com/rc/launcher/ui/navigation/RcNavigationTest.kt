@@ -2,6 +2,7 @@ package com.rc.launcher.ui.navigation
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,7 +27,9 @@ class RcNavigationTest {
             RcRoutes.CONTROLLER,
             RcRoutes.AWT,
             RcRoutes.INSTALL,
+            RcRoutes.ONBOARDING,
             RcRoutes.INSTANCE_DETAIL,
+            RcRoutes.FILE_MANAGER,
         )
         assertTrue("routes must not be empty", routes.isNotEmpty())
         routes.forEach { assertFalse("route must not be blank: [$it]", it.isBlank()) }
@@ -55,12 +58,46 @@ class RcNavigationTest {
         val routes = listOf(
             HomeRoute, InstancesRoute, DownloadsRoute, SettingsRoute,
             AccountsRoute, ControllerRoute, AwtRoute, InstallRoute,
+            ControlLayoutLibraryRoute, ModpackImportRoute, OnboardingRoute,
+            TranslationRoute,
         )
         assertEquals("type-safe top-level routes must be unique", routes.size, routes.toSet().size)
+
+        // Task 27: the resource-pack / shader-pack management routes each carry
+        // a required instanceId so the screen can resolve the per-instance
+        // `resourcepacks/` / `shaderpacks/` directory.
+        val rp = ResourcePackManagerRoute(instanceId = "fabric-1.20.1")
+        assertEquals("fabric-1.20.1", rp.instanceId)
+        assertNotEquals(
+            ResourcePackManagerRoute(instanceId = "a"),
+            ResourcePackManagerRoute(instanceId = "b"),
+        )
+
+        val sp = ShaderPackManagerRoute(instanceId = "fabric-1.20.1")
+        assertEquals("fabric-1.20.1", sp.instanceId)
+        assertNotEquals(
+            ShaderPackManagerRoute(instanceId = "a"),
+            ShaderPackManagerRoute(instanceId = "b"),
+        )
+
+        // Task 26: the world-manager route also carries a required instanceId.
+        val wm = WorldManagerRoute(instanceId = "fabric-1.20.1")
+        assertEquals("fabric-1.20.1", wm.instanceId)
 
         val detail = InstanceDetailRoute("abc-123")
         assertEquals("abc-123", detail.id)
         assertNotEquals(InstanceDetailRoute("x"), InstanceDetailRoute("y"))
+
+        // Task 19: the in-app small file manager is a single route that
+        // carries two optional arguments. Both must default to null so
+        // "open the game root" is just `navigate(FileManagerRoute())`.
+        val defaultManager = FileManagerRoute()
+        assertEquals(null, defaultManager.instanceId)
+        assertEquals(null, defaultManager.subdir)
+
+        val instanceManager = FileManagerRoute(instanceId = "fabric-1.20.1", subdir = "saves")
+        assertEquals("fabric-1.20.1", instanceManager.instanceId)
+        assertEquals("saves", instanceManager.subdir)
     }
 
     @Test

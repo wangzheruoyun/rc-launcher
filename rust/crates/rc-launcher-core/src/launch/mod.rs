@@ -79,7 +79,10 @@ pub use awt_host::{
 };
 pub use classpath::{Classpath, ClasspathBuilder, ClasspathPolicy};
 pub use command::{CommandBuilder, LaunchCommand};
-pub use crash::{diagnose, CrashCategory, CrashReport, CrashSeverity};
+pub use crash::{
+    diagnose, CrashAction, CrashCategory, CrashReport, CrashSeverity, DeviceInfo,
+    RecoverySuggestion,
+};
 pub use engine::{LaunchEngine, PreflightChecks, PreparedLaunch};
 pub use env::{build_env, jre_lib_dirs, library_path, LaunchEnv, PATH_SEP};
 pub use fakefx::{

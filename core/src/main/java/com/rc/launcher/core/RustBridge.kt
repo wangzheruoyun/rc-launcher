@@ -51,9 +51,35 @@ object RustBridge {
     // then encrypts the token database with AES-256-GCM under that key, so the
     // key never leaves Keystore and the file is useless without it.
 
-    /** (Re)configure the global account store. `configJson` =
-     *  `{"path"?:string,"key_hex"?:string,"client_id"?:string}`. */
+    /**
+     * (Re)configure the global account store.
+     * `configJson = {"path"?:string,"key_hex"?:string,"client_id"?:string,
+     *   "redirect_uri"?:string,"proxy"?:string}`.
+     *
+     * `redirect_uri` (task 28) sets a custom callback address for the Microsoft
+     * browser redirect; the embedded `microsoft_auth.html` asset page can serve
+     * as this address so users can complete sign-in via the in-app callback
+     * page. When omitted, Microsoft uses its default redirect behaviour.
+     *
+     * `proxy` (task 28) optionally configures an HTTP/HTTPS/SOCKS5 proxy for
+     * the auth transport so Microsoft/Xbox/Mojang token-exchange calls can
+     * reach the network through the Great Firewall.
+     */
     external fun authInit(configJson: String): String
+
+    /**
+     * Returns the default `redirect_uri` for the embedded callback page
+     * (`file:///android_asset/microsoft_auth.html`) — task 28.
+     */
+    external fun authDefaultRedirectUri(): String
+
+    /**
+     * Returns the embedded `microsoft_auth.html` callback page content,
+     * translated to the current UI language — task 28. The caller can write
+     * this string to `assets/microsoft_auth.html` at first launch to guarantee
+     * the callback asset exists even when the APK build omits it.
+     */
+    external fun authGetCallbackHtml(): String
 
     /** JSON array of redacted accounts (no secrets). */
     external fun authListAccounts(): String
@@ -61,19 +87,33 @@ object RustBridge {
     /** Add an offline account. Returns the account JSON (or `{"error":...}`). */
     external fun authAddOfflineAccount(name: String): String
 
-    /** Begin Microsoft device-code login. Returns the challenge JSON. */
+    /** Begin Microsoft device-code login. Returns the challenge JSON.
+     *  The challenge includes `redirect_uri` when one was configured via
+     *  `authInit` (task 28). */
     external fun authBeginMicrosoft(): String
 
-    /** Complete Microsoft login (blocks; background thread). Returns account JSON. */
+    /**
+     * Complete Microsoft login (blocks; background thread). Returns account JSON
+     * or `{"error":...,"cn_fallback_hint":...}` on failure. The
+     * `cn_fallback_hint` is populated on network-level errors so the UI can
+     * suggest a proxy / mirror for mainland-China players (task 28).
+     */
     external fun authCompleteMicrosoft(challengeJson: String): String
 
     /** Remove an account by uuid. Returns `{"removed":bool}`. */
     external fun authRemoveAccount(uuid: String): String
 
-    /** Force-refresh a Microsoft account's token. Returns account JSON. */
+    /**
+     * Force-refresh a Microsoft account's token. Returns account JSON or
+     * `{"error":...,"cn_fallback_hint":...}` on network failure (task 28).
+     */
     external fun authRefreshAccount(uuid: String): String
 
-    /** Return a fresh account, transparently refreshing if the token is expiring. */
+    /**
+     * Return a fresh account, transparently refreshing if the token is
+     * expiring. Returns account JSON or `{"error":...,"cn_fallback_hint":...}`
+     * on network failure (task 28).
+     */
     external fun authEnsureFresh(uuid: String): String
 
     /**
@@ -90,6 +130,26 @@ object RustBridge {
      * "cn_fallback_hint":...}` on a network failure).
      */
     external fun authCompleteThirdParty(loginJson: String): String
+
+    // === Skin preview (task 22) ==============================================
+    //
+    // Fetch / upload the player's Minecraft skin and cape metadata from
+    // Mojang's session profile API. The Rust core returns a [`crate::auth::model::SkinModel`]
+    // JSON (skin_url, cape_url, model type, cache/timestamp) which the Compose
+    // UI renders as a 2D preview and caches for offline display.
+
+    /** Fetch skin + cape metadata for [uuid] from Mojang's session profile API.
+     *  Returns [SkinModel] JSON (or `{"error":...}`). The skin PNG itself is
+     *  downloaded by the UI from `skin_url`/`cape_url`. Call from a background thread.
+     *  The account must have a valid Minecraft token first (`authEnsureFresh`). */
+    external fun authFetchSkin(uuid: String): String
+
+    /**
+     *  Upload a custom skin for [uuid]. `model` is "slim" or "classic";
+     *  `skinBase64` is the PNG bytes base64-encoded. Returns `{"ok":true}`
+     *  on success or `{"error":...}` on failure. Call from a background thread.
+     */
+    external fun authUploadSkin(uuid: String, model: String, skinBase64: String): String
 
     // === Gamepad mapping database + input calibration (task 4) ==========
     //
@@ -163,6 +223,45 @@ object RustBridge {
     /** JSON array of selectable renderers (`id`, `gl_libname`, `env`). */
     external fun launchRenderers(): String
 
+    // === Crash report management (task 24) ===================================
+    //
+    // The crash diagnosis lives in the Rust core (`launch::crash`): `launchDiagnose`
+    // classifies a single finished session into a verdict with evidence, actions and
+    // mirror/proxy recovery suggestions. These four entry points manage the
+    // *persisted* crash-log store that backs the crash-history / crash-detail screen:
+    // install the panic hook, list stored reports, fetch the live log tail, and prune
+    // old reports.
+
+    /**
+     * Install the process-wide panic hook ("the launcher never silently dies").
+     * `requestJson` = `{"data_root": String}`. Returns `{"ok":true,"installed":bool,
+     * "already_installed":bool}`. Idempotent — safe to call at app startup.
+     */
+    external fun crashInstallReporter(requestJson: String): String
+
+    /**
+     * List every persisted crash log under the given directory.
+     * `requestJson` = `{"dir": String}`. Returns `{"ok":true,"count":N,"logs":[CrashLog]},`
+     * where each CrashLog carries `id`, `timestamp`, `kind`, `message`, `logs` (the
+     * captured log tail) and `context` (the full CrashReport verdict: category, evidence,
+     * exception, hs_err_files, device_info, actions, recovery).
+     */
+    external fun crashListLogs(requestJson: String): String
+
+    /**
+     * Most recent `n` (default 200) log lines from the process-wide ring buffer,
+     * newest first. `requestJson` = `{"n": Int?}`. Returns `{"ok":true,"n":N,"logs":[`
+     * {ts, level, line}]}`. Feeds the diagnostics card and the crash snapshot (tasks
+     * 10, 19, 21).
+     */
+    external fun crashRecentLogs(requestJson: String): String
+
+    /**
+     * Delete old crash logs beyond the `keep` count (default 50). `requestJson` =
+     * `{"dir": String, "keep": Int?}`. Returns `{"ok":true,"removed":N,"remaining":N}`.
+     */
+    external fun crashPruneLogs(requestJson: String): String
+
     // === Screen orientation / adaptive layout (task 9) ======================
     //
     // The core owns the orientation policy and the window size-class table
@@ -233,6 +332,61 @@ object RustBridge {
      * `DiscordStateInfo` JSON snapshot.
      */
     external fun discordShutdown(): String
+
+    // === Task 16: complete and auto-updating game-version list ==============
+    //
+    // These three entry points back the version picker. The Rust core owns a
+    // process-wide TTL cache (`VersionListCache`); the Compose layer asks for
+    // "the current best list" and gets back `{ manifest, info, groups,
+    // filtered }`. The native side handles every network concern: DoH, mirror
+    // fallback (BMCLAPI/MCBBS/Aliyun/...), parallel speed-test selection,
+    // graceful degradation to the last-good / offline built-in manifest.
+    //
+    // `requestJson` for [gameFetchVersionList] is
+    // `{
+    //   ttl_secs?: Int,        // override the 6h default TTL
+    //   force_refresh?: Bool,  // bypass TTL even when the cache is fresh
+    //   query?: String,        // case-insensitive substring filter
+    //   group?: String,        // release|snapshot|pre_release|old_alpha|old_beta|special
+    //   mirror_mode?: String,  // all|mirrors_only|auto|off
+    //   dns_mode?: { mode: "doh"|"system", servers?: [String] }
+    // }`. An empty / missing request returns the default list.
+    //
+    // The reply envelope is
+    // `{ manifest: { latest, versions: [...] }, info: { fresh, fetched_at_unix,
+    // stale_fallback, offline_only, total, groups: { release: N, ... } },
+    // groups: { release: [...], snapshot: [...], pre_release: [...],
+    // old_alpha: [...], old_beta: [...], special: [...] }, filtered: [...],
+    // query: String, group: String? }`.
+
+    /**
+     * Fetch the game-version list. Honours the cache, falls back to the
+     * last-good snapshot and then to the offline built-in manifest if every
+     * mirror is unreachable, and surfaces `info.fresh` / `info.stale_fallback`
+     * / `info.offline_only` so the UI can render an honest status badge.
+     */
+    external fun gameFetchVersionList(requestJson: String): String
+
+    /**
+     * Force a network refresh of the version list (ignores the TTL cache).
+     * Same reply envelope as [gameFetchVersionList]. Useful for the
+     * "refresh" / "check for updates" buttons in the version picker.
+     */
+    external fun gameRefreshVersionList(requestJson: String): String
+
+    /**
+     * Inspect the version-list cache without performing any IO. Returns the
+     * `VersionListInfo` JSON: `{ fresh, fetched_at_unix, stale_fallback,
+     * offline_only, total, groups }`.
+     */
+    external fun gameVersionListCacheInfo(requestJson: String): String
+
+    /**
+     * Drop both the fresh and last-good cache slots. The next
+     * [gameFetchVersionList] call will re-fetch from the network (or fall
+     * back to the offline built-in manifest). Returns `{ "cleared": true }`.
+     */
+    external fun gameVersionListClearCache(): String
 
     // === Discord Rich Presence typed wrappers (task 5) ======================
     //
@@ -343,6 +497,337 @@ object RustBridge {
         val out = JSONObject(downloadAsync(specJson))
         return RcJobHandle(out.optBoolean("ok", false), out.optString("scope", ""))
     }
+
+    // === Modpack import (task 17) ===========================================
+    //
+    // The pipeline accepts a Modrinth `modrinth.index.json`, a CurseForge
+    // `manifest.json`, or a MultiMC `instance.cfg + mmc-pack.json` pair (all
+    // expressed as a single normalised `Manifest` JSON in the response).
+    // `modpackInspect` does pure parsing (no I/O); `modpackImport` runs the
+    // full pipeline asynchronously and reports progress through the event
+    // bus exactly like `runDownloadAsync`.
+
+    /**
+     * Inspect a modpack manifest text. The input is a JSON envelope:
+     * `{"text": "...manifest text...", "origin": "..."}`. Returns the
+     * normalised `Manifest` JSON (the same shape `modpackImport` consumes),
+     * or `{"error": "..."}` on parse failure.
+     */
+    external fun modpackInspect(specJson: String): String
+
+    /**
+     * Inspect a modpack *archive* (`.zip` / `.mrpack`) passed as a base64
+     * payload. `{"bytes_b64": "...", "origin": "..."}` -> same reply shape
+     * as [modpackInspect].
+     */
+    external fun modpackInspectArchive(specJson: String): String
+
+    /**
+     * Fire-and-forget modpack import (task 17). Returns
+     * `{"ok": bool, "scope": "modpack-..."}`. The full progress / lifecycle /
+     * error stream is published on the event bus; subscribe through
+     * [RcEventBus] to render the import progress bar.
+     *
+     * `specJson` =
+     * ```
+     * {
+     *   "config": { "instances_root": "/data/.../instances",
+     *               "concurrency": 4, "chunk_size": 4194304, "max_retries": 3 },
+     *   "manifest": { ... output of modpackInspect ... },
+     *   "instance_id": "all-the-mods-9",
+     *   "allow_overwrite": false
+     * }
+     * ```
+     */
+    external fun modpackImport(specJson: String): String
+
+    /**
+     * Synchronously extract the `overrides/` directory out of an archive
+     * already saved on disk. `{"bytes_b64": "...", "instance_root": "..."}`
+     * -> `{"ok": true, "written": ["..."]}` on success.
+     */
+    external fun modpackExtractOverrides(specJson: String): String
+
+    /** Typed Kotlin wrapper for [modpackInspect]. Returns the parsed
+     *  `Manifest` envelope or throws with `error` in `message`. */
+    fun modpackInspectManifest(text: String, origin: String? = null): JSONObject {
+        val req = JSONObject().apply {
+            put("text", text)
+            if (origin != null) put("origin", origin)
+        }
+        return JSONObject(modpackInspect(req.toString()))
+    }
+
+    /** Convenience: inspect a base64 archive. */
+    fun modpackInspectArchive(base64: String, origin: String? = null): JSONObject {
+        val req = JSONObject().apply {
+            put("bytes_b64", base64)
+            if (origin != null) put("origin", origin)
+        }
+        return JSONObject(modpackInspectArchive(req.toString()))
+    }
+
+    /** Start a modpack import from a pre-built manifest JSON. */
+    fun runModpackImport(
+        instancesRoot: String,
+        manifestJson: JSONObject,
+        instanceId: String,
+        allowOverwrite: Boolean = false,
+        concurrency: Int = 4,
+        chunkSize: Long = 4L * 1024 * 1024,
+        maxRetries: Int = 3,
+    ): RcJobHandle {
+        val req = JSONObject().apply {
+            put("config", JSONObject().apply {
+                put("instances_root", instancesRoot)
+                put("concurrency", concurrency)
+                put("chunk_size", chunkSize)
+                put("max_retries", maxRetries)
+            })
+            put("manifest", manifestJson)
+            put("instance_id", instanceId)
+            put("allow_overwrite", allowOverwrite)
+        }
+        val out = try {
+            JSONObject(modpackImport(req.toString()))
+        } catch (t: Throwable) {
+            JSONObject().apply { put("error", t.message ?: "native bridge error") }
+        }
+        return RcJobHandle(out.optBoolean("ok", false), out.optString("scope", ""))
+    }
+
+    // === File manager (task 19) ============================================
+    //
+    // JSON-in / JSON-out bridge for the in-app small file manager. Every
+    // entry point takes a JSON envelope with a list of "allowed roots" and
+    // (for destructive operations) a `confirm: true` flag. The Rust core
+    // canonicalises every path, asserts it falls under an allowed root, and
+    // returns either the typed success payload or `{"error": "..."}` so the
+    // Compose layer can surface the failure as a snackbar.
+    //
+    // Path-traversal is rejected at the core boundary (`fs_ops::resolve_under_
+    // roots`): the UI cannot trick the bridge into reading or writing outside
+    // the roots it was given. This is the same defence-in-depth pattern FCL
+    // uses in its `FileFinder`.
+
+    /**
+     * List a directory. `requestJson` =
+     * `{"path": String, "roots": [String]}`. Returns the
+     * `FsListing` envelope `{path, parent, entries, dir_count, file_count}`,
+     * where each `entries[i]` carries `name, kind, size, mtime_ms, path,
+     * hidden`.
+     */
+    external fun fsListDir(requestJson: String): String
+
+    /**
+     * Create a directory under an allowed root. `requestJson` =
+     * `{"parent": String, "name": String, "roots": [String]}`. Returns the
+     * `FsOpResult` JSON (`{op, path, files_touched, bytes_written}`) on
+     * success.
+     */
+    external fun fsMkdir(requestJson: String): String
+
+    /**
+     * Copy a file or directory tree. `requestJson` =
+     * `{"source": String, "destination": String, "roots": [String]}`. Both
+     * paths must resolve under an allowed root; the destination must not
+     * already exist. Returns `FsOpResult`.
+     */
+    external fun fsCopy(requestJson: String): String
+
+    /**
+     * Move (rename) a file or directory. `requestJson` =
+     * `{"source": String, "destination": String, "roots": [String],
+     * "confirm": Bool}`. With `confirm: false` and an existing destination,
+     * returns an `FsOpPreview` so the UI can ask for confirmation; with
+     * `confirm: true`, performs the move and returns `FsOpResult`.
+     */
+    external fun fsMove(requestJson: String): String
+
+    /**
+     * Rename a single entry inside its parent directory. `requestJson` =
+     * `{"path": String, "new_name": String, "roots": [String]}`. The new name
+     * is checked for `..` / absolute / drive-prefix components.
+     */
+    external fun fsRename(requestJson: String): String
+
+    /**
+     * Delete one or more paths. `requestJson` =
+     * `{"paths": [String], "roots": [String], "confirm": Bool}`. The first
+     * call without `confirm: true` returns an `FsOpPreview` so the UI can
+     * show a confirmation dialog with the exact list of victims + total
+     * size; the call with `confirm: true` actually performs the delete.
+     */
+    external fun fsDelete(requestJson: String): String
+
+    /**
+     * Extract a `.zip` archive into `destination`. `requestJson` =
+     * `{"archive": String, "destination": String, "roots": [String]}`. Used
+     * by the import buttons on the mod / resource-pack / shader-pack
+     * browsers. Returns `FsOpResult`.
+     */
+    external fun fsExtractZip(requestJson: String): String
+
+    /**
+     * Write an opaque byte blob (typically decoded from a `content://` URI
+     * by the Android side) into `destination`. `requestJson` =
+     * `{"destination": String, "data_b64": String, "roots": [String]}`. The
+     * destination must be an *exact* file path (no `..`); the parent
+     * directory is created on demand.
+     */
+    external fun fsImportBytes(requestJson: String): String
+
+    // === File manager typed wrappers (task 19) ==============================
+    //
+    // Thin, allocation-cheap Kotlin helpers over the raw `external fun`s so
+    // the Compose file-manager screen drives the bridge with real types
+    // (and never builds the JSON envelopes by hand). The wrappers catch
+    // every Throwable (parse / IO / native panic) and return a sealed
+    // [FileManagerResult] so the UI can render success / preview / error
+    // states with a `when`.
+
+    /**
+     * Outcome of one file-manager operation. Sealed so the UI's `when` is
+     * exhaustive at compile time.
+     */
+    sealed class FileManagerResult {
+        /** Operation succeeded; payload is the `FsOpResult` JSON. */
+        data class Success(val json: JSONObject) : FileManagerResult()
+
+        /** Destructive operation needs user confirmation; payload is the
+         *  `FsOpPreview` JSON (`{op, targets, total_bytes, has_directories}`). */
+        data class NeedsConfirmation(val json: JSONObject) : FileManagerResult()
+
+        /** Anything else: `{"error": "..."}` or a native panic. */
+        data class Error(val message: String) : FileManagerResult()
+    }
+
+    /** Parse a raw bridge reply into a typed [FileManagerResult]. */
+    private fun parseFsReply(raw: String, confirmExpected: Boolean): FileManagerResult {
+        val obj = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return FileManagerResult.Error(t.message ?: "bad reply")
+        }
+        if (obj.has("error")) {
+            return FileManagerResult.Error(obj.optString("error"))
+        }
+        if (confirmExpected && obj.has("op") && obj.has("targets")) {
+            return FileManagerResult.NeedsConfirmation(obj)
+        }
+        return FileManagerResult.Success(obj)
+    }
+
+    /** List `path` (must be inside one of `roots`). */
+    fun fsListDirTyped(path: String, roots: List<String>): FileManagerResult =
+        parseFsReply(
+            fsListDir(JSONObject().apply {
+                put("path", path)
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
+
+    /** Create `name` inside `parent`. */
+    fun fsMkdirTyped(parent: String, name: String, roots: List<String>): FileManagerResult =
+        parseFsReply(
+            fsMkdir(JSONObject().apply {
+                put("parent", parent)
+                put("name", name)
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
+
+    /** Copy `source` to a not-yet-existing `destination`. */
+    fun fsCopyTyped(source: String, destination: String, roots: List<String>): FileManagerResult =
+        parseFsReply(
+            fsCopy(JSONObject().apply {
+                put("source", source)
+                put("destination", destination)
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
+
+    /**
+     * Move `source` to `destination`. Pass `confirm = false` to get an
+     * `FsOpPreview`; pass `confirm = true` to actually apply.
+     */
+    fun fsMoveTyped(
+        source: String,
+        destination: String,
+        roots: List<String>,
+        confirm: Boolean = false,
+    ): FileManagerResult =
+        parseFsReply(
+            fsMove(JSONObject().apply {
+                put("source", source)
+                put("destination", destination)
+                put("roots", org.json.JSONArray(roots))
+                put("confirm", confirm)
+            }.toString()),
+            confirmExpected = true,
+        )
+
+    /** Rename `path` to `newName` (a single leaf, no `..` allowed). */
+    fun fsRenameTyped(path: String, newName: String, roots: List<String>): FileManagerResult =
+        parseFsReply(
+            fsRename(JSONObject().apply {
+                put("path", path)
+                put("new_name", newName)
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
+
+    /**
+     * Delete `paths`. Pass `confirm = false` to get an `FsOpPreview`;
+     * pass `confirm = true` to actually delete.
+     */
+    fun fsDeleteTyped(
+        paths: List<String>,
+        roots: List<String>,
+        confirm: Boolean = false,
+    ): FileManagerResult =
+        parseFsReply(
+            fsDelete(JSONObject().apply {
+                put("paths", org.json.JSONArray(paths))
+                put("roots", org.json.JSONArray(roots))
+                put("confirm", confirm)
+            }.toString()),
+            confirmExpected = true,
+        )
+
+    /** Extract a `.zip` archive into `destination`. */
+    fun fsExtractZipTyped(
+        archive: String,
+        destination: String,
+        roots: List<String>,
+    ): FileManagerResult =
+        parseFsReply(
+            fsExtractZip(JSONObject().apply {
+                put("archive", archive)
+                put("destination", destination)
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
+
+    /** Write `bytes` to `destination` (used for `content://` imports). */
+    fun fsImportBytesTyped(
+        destination: String,
+        bytes: ByteArray,
+        roots: List<String>,
+    ): FileManagerResult =
+        parseFsReply(
+            fsImportBytes(JSONObject().apply {
+                put("destination", destination)
+                put("data_b64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+                put("roots", org.json.JSONArray(roots))
+            }.toString()),
+            confirmExpected = false,
+        )
 
     // === AWT / Swing compatibility layer (fakefx, task 18) ==================
     //
@@ -688,5 +1173,248 @@ object RustBridge {
             fallback.put(out.get(i))
         }
         return fallback
+    }
+    // === Task 16 typed wrappers (version list) =============================
+    //
+    // Thin Kotlin-side helpers over the raw `external fun`s so Compose call
+    // sites read naturally and never build raw JSON by hand. The wrappers
+    // catch every Throwable (parse / IO / native panic) and degrade to an
+    // "offline only" reply so the UI never blocks on a failed native call.
+
+    /**
+     * Kotlin envelope for the version-list reply. `manifest` carries
+     * `latest.release/snapshot` and the flat `versions` array; `info`
+     * carries the cache state for the badge; `groups` is the per-bucket
+     * split (`release / snapshot / pre_release / old_alpha / old_beta /
+     * special`) the picker renders as tabs; `filtered` is the (optionally
+     * queried) subset the UI is currently showing.
+     */
+    data class VersionListReply(
+        val manifest: JSONObject,
+        val info: JSONObject,
+        val groups: JSONObject,
+        val filtered: org.json.JSONArray,
+        val query: String,
+        val group: String?,
+    )
+
+    /**
+     * Fetch the version list. Empty / default arguments produce the standard
+     * "give me everything you have, the freshest you can find" reply; combine
+     * `query` + `group` to narrow the picker. The wrapper is total: any
+     * failure inside the bridge is caught, logged into `info`, and returned
+     * as an empty list so the UI keeps rendering.
+     */
+    fun fetchVersionList(
+        query: String = "",
+        group: String? = null,
+        ttlSecs: Long? = null,
+        forceRefresh: Boolean = false,
+        mirrorMode: String? = null,
+        dnsMode: String? = null,
+        dnsServers: List<String> = emptyList(),
+    ): VersionListReply {
+        val req = JSONObject().apply {
+            if (query.isNotEmpty()) put("query", query)
+            if (group != null) put("group", group)
+            ttlSecs?.let { put("ttl_secs", it) }
+            if (forceRefresh) put("force_refresh", true)
+            if (mirrorMode != null) put("mirror_mode", mirrorMode)
+            if (dnsMode != null) {
+                val dns = JSONObject().apply { put("mode", dnsMode) }
+                if (dnsServers.isNotEmpty()) {
+                    val arr = org.json.JSONArray()
+                    for (s in dnsServers) arr.put(s)
+                    dns.put("servers", arr)
+                }
+                put("dns_mode", dns)
+            }
+        }
+        val raw = try {
+            gameFetchVersionList(req.toString())
+        } catch (t: Throwable) {
+            return offlineReply(errorMessage = t.message ?: "native bridge error")
+        }
+        val obj = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return offlineReply(errorMessage = t.message ?: "bad JSON from native")
+        }
+        return VersionListReply(
+            manifest = obj.optJSONObject("manifest") ?: JSONObject(),
+            info = obj.optJSONObject("info") ?: JSONObject().apply {
+                put("offline_only", true)
+                put("error", obj.optString("error", "no manifest"))
+            },
+            groups = obj.optJSONObject("groups") ?: JSONObject(),
+            filtered = obj.optJSONArray("filtered") ?: org.json.JSONArray(),
+            query = obj.optString("query", query),
+            group = obj.optString("group", group).takeIf { obj.has("group") && !obj.isNull("group") },
+        )
+    }
+
+    /** Force-refresh the version list (ignores TTL). Same reply shape as
+     *  [fetchVersionList] but always hits the network first. */
+    fun refreshVersionList(): VersionListReply {
+        val raw = try {
+            gameRefreshVersionList("{}")
+        } catch (t: Throwable) {
+            return offlineReply(errorMessage = t.message ?: "native bridge error")
+        }
+        val obj = try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            return offlineReply(errorMessage = t.message ?: "bad JSON from native")
+        }
+        return VersionListReply(
+            manifest = obj.optJSONObject("manifest") ?: JSONObject(),
+            info = obj.optJSONObject("info") ?: JSONObject().apply {
+                put("offline_only", true)
+                put("error", obj.optString("error", "no manifest"))
+            },
+            groups = obj.optJSONObject("groups") ?: JSONObject(),
+            filtered = obj.optJSONArray("filtered") ?: org.json.JSONArray(),
+            query = "",
+            group = null,
+        )
+    }
+
+    /** Inspect the cache without IO. Returns the `info` field as-is. */
+    fun versionListCacheInfo(ttlSecs: Long? = null): JSONObject {
+        val req = JSONObject().apply { ttlSecs?.let { put("ttl_secs", it) } }
+        val raw = try {
+            gameVersionListCacheInfo(req.toString())
+        } catch (t: Throwable) {
+            return JSONObject().apply {
+                put("offline_only", true)
+                put("error", t.message ?: "native bridge error")
+            }
+        }
+        return try {
+            JSONObject(raw)
+        } catch (t: Throwable) {
+            JSONObject().apply {
+                put("offline_only", true)
+                put("error", t.message ?: "bad JSON from native")
+            }
+        }
+    }
+
+    /** Drop the cache. The next [fetchVersionList] re-fetches or degrades
+     *  to the offline built-in manifest. */
+    fun clearVersionListCache(): Boolean {
+        val raw = try {
+            gameVersionListClearCache()
+        } catch (t: Throwable) {
+            return false
+        }
+        return try {
+            JSONObject(raw).optBoolean("cleared", false)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private fun offlineReply(errorMessage: String): VersionListReply {
+        return VersionListReply(
+            manifest = JSONObject(),
+            info = JSONObject().apply {
+                put("offline_only", true)
+                put("fresh", false)
+                put("total", 0)
+                put("error", errorMessage)
+            },
+            groups = JSONObject(),
+            filtered = org.json.JSONArray(),
+            query = "",
+            group = null,
+        )
+    }
+
+
+    // === Crash report typed wrappers (task 24) =================================
+    //
+    // Thin Kotlin helpers over `crashListLogs` / `crashRecentLogs` /
+    // `crashInstallReporter` / `crashPruneLogs` so the Compose crash screen
+    // works with real types and never builds JSON by hand. Each wrapper
+    // catches Throwable (parse / IO / native panic) and returns a safe
+    // default so the UI never blocks on a failed native call.
+
+    /**
+     * Install the crash reporter (panic hook). Returns true if the hook was
+     * newly installed, false if it was already active. Call this once at
+     * app startup with the launcher data-root directory.
+     */
+    fun installCrashReporter(dataRoot: String): Boolean {
+        val req = JSONObject().put("data_root", dataRoot).toString()
+        val raw = try {
+            crashInstallReporter(req)
+        } catch (t: Throwable) {
+            return false
+        }
+        return try {
+            val obj = JSONObject(raw)
+            obj.optBoolean("ok", false) && obj.optBoolean("installed", false)
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
+     * List persisted crash logs. Returns a JSON array of CrashLog objects
+     * (each with id, timestamp, kind, message, logs, context). Returns an
+     * empty array on any error.
+     */
+    fun listCrashLogs(crashDir: String): org.json.JSONArray {
+        val req = JSONObject().put("dir", crashDir).toString()
+        val raw = try {
+            crashListLogs(req)
+        } catch (t: Throwable) {
+            return org.json.JSONArray()
+        }
+        return try {
+            val obj = JSONObject(raw)
+            obj.optJSONArray("logs") ?: org.json.JSONArray()
+        } catch (_: Throwable) {
+            org.json.JSONArray()
+        }
+    }
+
+    /**
+     * Most recent [n] log lines from the process-wide ring buffer, newest
+     * first. Returns a JSON array of `{ts, level, line}` objects.
+     */
+    fun recentLogs(n: Int = 200): org.json.JSONArray {
+        val req = JSONObject().put("n", n).toString()
+        val raw = try {
+            crashRecentLogs(req)
+        } catch (t: Throwable) {
+            return org.json.JSONArray()
+        }
+        return try {
+            val obj = JSONObject(raw)
+            obj.optJSONArray("logs") ?: org.json.JSONArray()
+        } catch (_: Throwable) {
+            org.json.JSONArray()
+        }
+    }
+
+    /**
+     * Delete old crash logs beyond [keep] (default 50). Returns the number of
+     * reports removed (0 on error).
+     */
+    fun pruneCrashLogs(crashDir: String, keep: Int = 50): Int {
+        val req = JSONObject().put("dir", crashDir).put("keep", keep).toString()
+        val raw = try {
+            crashPruneLogs(req)
+        } catch (t: Throwable) {
+            return 0
+        }
+        return try {
+            val obj = JSONObject(raw)
+            obj.optInt("removed", 0)
+        } catch (_: Throwable) {
+            0
+        }
     }
 }

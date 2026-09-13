@@ -14,6 +14,7 @@
 //! | `runtime`| JRE / JDK supply (OpenJDK packaging / extraction) | 6 (implemented) |
 //! | `launch` | launch engine                            | 7 (implemented) |
 //! | `mods`   | mod / resource-pack / shader management      | 8 (implemented) |
+//! | `mods/modpack` | modpack import pipeline (CurseForge / Modrinth / MultiMC) | 17 (implemented) |
 //! | `plugins`| pluggable renderer & native-lib extension (registry / injection / validation) | 9 (implemented) |
 //! | `gamepad`| gamepad mapping database + input calibration (task 4) | 4 (implemented) |
 //! | `display`| screen-orientation policy + window size classes (rotation-safe layout & input) | 9 (implemented) |
@@ -154,6 +155,7 @@ pub mod download;
 pub mod error;
 pub mod event;
 pub mod ffi;
+pub mod fs_ops;
 pub mod game;
 pub mod gamepad;
 pub mod i18n;
@@ -163,8 +165,8 @@ pub mod mods;
 pub mod net;
 pub mod plugins;
 pub mod robust;
-pub mod translate;
 pub mod runtime;
+pub mod translate;
 pub mod util;
 
 /// Crate version, surfaced to the UI through [`ffi::get_version`].

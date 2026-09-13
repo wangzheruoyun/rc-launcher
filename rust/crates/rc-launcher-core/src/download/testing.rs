@@ -6,16 +6,19 @@
 
 use std::collections::HashMap;
 use std::io::{Seek, Write};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use tokio::io::AsyncWrite;
 
 use async_trait::async_trait;
 
 use crate::download::client::{FetchResult, HttpSource};
 use crate::download::hash;
 use crate::download::manager::plan_chunks;
-use crate::download::{DownloadManager, DownloadOptions, DownloadTask, Progress, ProgressCallback};
+use crate::download::{
+    DownloadManager, DownloadOptions, DownloadStatus, DownloadTask, Progress, ProgressCallback,
+};
 use crate::error::{RcError, RcResult};
 
 /// Kind of error injected for a URL that matches a configured substring.
@@ -36,6 +39,10 @@ pub struct MockSource {
     /// Substring -> (remaining failures, error kind) for URL-based injection
     /// (simulates a dead primary host or an HTTP 429 rate-limit).
     url_fail: Arc<Mutex<HashMap<String, (usize, InjectedUrlError)>>>,
+    /// Number of remaining `fetch_range` calls that should return *corrupted*
+    /// data (byte 0 flipped). Used by the checksum-retry tests (task 30) to
+    /// simulate a corrupt mirror that recovers on retry.
+    corrupt_remaining: Arc<AtomicU64>,
 }
 
 impl MockSource {
@@ -46,7 +53,15 @@ impl MockSource {
             fail_map: Arc::new(Mutex::new(HashMap::new())),
             calls: Arc::new(AtomicU64::new(0)),
             url_fail: Arc::new(Mutex::new(HashMap::new())),
+            corrupt_remaining: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    /// Make the next `n` `fetch_range` calls return data with byte 0 flipped
+    /// (simulating a corrupt mirror / bitrot). Used to test checksum-failure
+    /// retry (task 30).
+    pub fn corrupt_next_n(&self, n: u64) {
+        self.corrupt_remaining.store(n, Ordering::Relaxed);
     }
 
     /// Disable `Range` support (the whole resource is always returned).
@@ -137,7 +152,14 @@ impl HttpSource for MockSource {
                 supports_range: true,
             });
         }
-        let bytes = self.data[start as usize..=end as usize].to_vec();
+        let mut bytes = self.data[start as usize..=end as usize].to_vec();
+        // Inject corruption for checksum-retry tests (task 30).
+        if self.corrupt_remaining.load(Ordering::Relaxed) > 0 {
+            self.corrupt_remaining.fetch_sub(1, Ordering::Relaxed);
+            if !bytes.is_empty() {
+                bytes[0] = bytes[0].wrapping_add(1);
+            }
+        }
         Ok(FetchResult {
             bytes,
             total_size: total,
@@ -589,4 +611,352 @@ async fn honors_rate_limited_retry_after() {
     let summary = mgr.download(&task).await.unwrap();
     assert_eq!(summary.size, data.len() as u64);
     assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+// --- Task 30: enhanced download tests -------------------------------------
+
+/// Rate limiting (task 30) — a low `max_bytes_per_second` must throttle
+/// aggregate throughput without corrupting data. We use a tiny payload so the
+/// test finishes in ~2s while still proving the sleep path is exercised.
+#[tokio::test]
+async fn rate_limit_does_not_corrupt_data() {
+    let data: Vec<u8> = (0..8u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    let opts = DownloadOptions {
+        chunk_size: 4,
+        concurrency: 2,
+        max_bytes_per_second: Some(2), // 2 bytes/sec — very slow
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("rl.bin");
+    let task = DownloadTask::new("http://mock/rl.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let start = std::time::Instant::now();
+    let summary = mgr.download(&task).await.unwrap();
+    let elapsed = start.elapsed();
+    assert_eq!(summary.size, data.len() as u64);
+    // Data must be intact despite the rate limit.
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+    // 8 bytes at 2 bytes/sec with initial bucket of 2 → ~3s of throttling
+    // (two chunks each delayed ~1.5s by the shared limiter). Use a generous
+    // lower bound of 1s to avoid CI flakiness.
+    assert!(
+        elapsed.as_millis() >= 1_000,
+        "rate limiter should have slowed the download, elapsed = {:?}",
+        elapsed
+    );
+}
+
+/// Sequential download (task 30) — chunks must arrive in order and the file
+/// must be correct. `concurrency` should be ignored when `sequential` is true.
+#[tokio::test]
+async fn sequential_download_in_order() {
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4, // should be overridden by sequential mode
+        sequential: true,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("seq.bin");
+    let task = DownloadTask::new("http://mock/seq.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Cancel / pause (task 30) — when the cancel flag is set before download
+/// starts, the manager must return `Cancelled` and leave the `.part` file
+/// intact for later resume.
+#[tokio::test]
+async fn cancel_stops_download() {
+    let data: Vec<u8> = (0..200_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4,
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let flag = Arc::new(AtomicBool::new(true));
+    let mgr = mgr.with_cancel(flag);
+    let dir = tempdir();
+    let dest = dir.join("canc.bin");
+    let task = DownloadTask::new("http://mock/canc.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let res = mgr.download(&task).await;
+    assert!(res.is_err(), "cancelled download should error");
+    assert!(
+        matches!(res.unwrap_err(), RcError::Cancelled { .. }),
+        "should be Cancelled error"
+    );
+}
+
+/// Checksum retry (task 30) — when the first download returns corrupted data,
+/// the manager should automatically retry (clearing the stale resume state)
+/// and the second attempt should succeed.
+#[tokio::test]
+async fn checksum_retry_recovers_from_corruption() {
+    let data: Vec<u8> = (0..120_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    // Corrupt the first full download attempt (all chunks).
+    let total_chunks = plan_chunks(data.len() as u64, 32 * 1024).len() as u64;
+    src.corrupt_next_n(total_chunks);
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4,
+        max_checksum_retries: 2,
+        retry_base: Duration::from_millis(1),
+        retry_max: Duration::from_millis(5),
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("ck.bin");
+    let task = DownloadTask::new("http://mock/ck.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert_eq!(summary.checksum_retries, 1, "should have retried once");
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Checksum retry exhaustion (task 30) — if corruption persists across all
+/// retries, the error must surface.
+#[tokio::test]
+async fn checksum_retry_exhausts_and_fails() {
+    let data: Vec<u8> = (0..120_000u32).map(|i| (i % 211) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    // Corrupt *every* attempt (large N so it never runs out).
+    src.corrupt_next_n(u64::MAX);
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 4,
+        max_checksum_retries: 2,
+        retry_base: Duration::from_millis(1),
+        retry_max: Duration::from_millis(5),
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("fail.bin");
+    let task = DownloadTask::new("http://mock/fail.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    let res = mgr.download(&task).await;
+    assert!(res.is_err(), "permanently corrupt data should fail");
+    assert!(matches!(res.unwrap_err(), RcError::ChecksumMismatch { .. }));
+}
+
+/// Enhanced Progress (task 30) — the progress callback must receive
+/// `speed_bps` and `status` fields.
+#[tokio::test]
+async fn progress_includes_speed_and_status() {
+    let data: Vec<u8> = (0..120_000u32).map(|i| (i % 7) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+    let src = Arc::new(MockSource::new(data.clone()));
+    let opts = DownloadOptions {
+        chunk_size: 32 * 1024,
+        concurrency: 2,
+        ..Default::default()
+    };
+    let events: Arc<Mutex<Vec<Progress>>> = Arc::new(Mutex::new(Vec::new()));
+    let ev = events.clone();
+    let cb: ProgressCallback = Arc::new(move |p: &Progress| {
+        ev.lock().unwrap().push(p.clone());
+    });
+    let mgr = DownloadManager::new(src, opts).with_progress(cb);
+    let dir = tempdir();
+    let dest = dir.join("prog.bin");
+    let task = DownloadTask::new("http://mock/prog.bin", dest.clone())
+        .with_sha1(sha)
+        .with_size(data.len() as u64);
+    mgr.download(&task).await.unwrap();
+    let evs = events.lock().unwrap();
+    assert!(!evs.is_empty());
+    // At least one non-finished event should have status Running.
+    let running = evs
+        .iter()
+        .any(|p| p.status == DownloadStatus::Running && !p.finished);
+    assert!(running, "should have at least one Running status event");
+    // The last event should be finished with status Completed.
+    let last = evs.last().unwrap();
+    assert!(last.finished);
+    assert_eq!(last.status, DownloadStatus::Completed);
+    assert_eq!(last.downloaded, data.len() as u64);
+}
+
+/// Single-shot retransmission tracking (task 30) — when the single-shot
+/// download (no Range support) retries after a network failure, the shared
+/// `bytes_retransmitted` counter should be incremented so the UI can report it.
+#[tokio::test]
+async fn single_shot_tracks_retransmission() {
+    use tokio::io::AsyncWriteExt;
+
+    let data: Vec<u8> = (0..50_000u32).map(|i| (i % 251) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+
+    // A source that always succeeds on fetch_range (probe) but fails on the
+    // first fetch_range_into and succeeds on the second.
+    struct FailOnceSource {
+        data: Vec<u8>,
+        first: AtomicBool,
+    }
+    #[async_trait]
+    impl HttpSource for FailOnceSource {
+        async fn fetch_range(
+            &self,
+            _url: &str,
+            _start: u64,
+            _end: Option<u64>,
+        ) -> RcResult<FetchResult> {
+            Ok(FetchResult {
+                bytes: self.data.clone(),
+                total_size: self.data.len() as u64,
+                supports_range: false,
+            })
+        }
+
+        async fn fetch_range_into(
+            &self,
+            _url: &str,
+            _start: u64,
+            _end: Option<u64>,
+            writer: &mut (dyn AsyncWrite + Send + Unpin),
+        ) -> RcResult<u64> {
+            if self.first.swap(false, Ordering::SeqCst) {
+                return Err(RcError::Network("injected failure".into()));
+            }
+            writer.write_all(&self.data).await.map_err(RcError::Io)?;
+            writer.flush().await.map_err(RcError::Io)?;
+            Ok(self.data.len() as u64)
+        }
+    }
+
+    let src = Arc::new(FailOnceSource {
+        data: data.clone(),
+        first: AtomicBool::new(true),
+    });
+    let opts = DownloadOptions {
+        chunk_size: 16 * 1024,
+        concurrency: 2,
+        max_retries: 3,
+        retry_base: Duration::from_millis(1),
+        retry_max: Duration::from_millis(5),
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("retr.bin");
+    // No .with_size() — resolve() probes and discovers supports_range: false.
+    let task = DownloadTask::new("http://mock/retr.bin", dest.clone()).with_sha1(sha);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    assert!(
+        summary.bytes_retransmitted > 0,
+        "should have tracked retransmission (got {})",
+        summary.bytes_retransmitted
+    );
+    assert_eq!(std::fs::read(&dest).unwrap(), data);
+}
+
+/// Seek-before-retry correctness (task 30) — when the single-shot fetch writes
+/// partial data before failing, a retry must rewind the writer to offset 0 so
+/// the new data overwrites (not appends to) the stale partial write.
+#[tokio::test]
+async fn single_shot_seeks_before_retry_after_partial_write() {
+    use tokio::io::AsyncWriteExt;
+
+    let data: Vec<u8> = (0..40_000u32).map(|i| (i % 251) as u8).collect();
+    let sha = hash::sha1_bytes(&data);
+
+    /// A source that always succeeds on fetch_range (probe) returning
+    /// supports_range: false, but on fetch_range_into writes half the data
+    /// then fails the first time, and writes the full data on the second.
+    struct PartialFailSource {
+        data: Vec<u8>,
+        first: AtomicBool,
+    }
+    #[async_trait]
+    impl HttpSource for PartialFailSource {
+        async fn fetch_range(
+            &self,
+            _url: &str,
+            _start: u64,
+            _end: Option<u64>,
+        ) -> RcResult<FetchResult> {
+            Ok(FetchResult {
+                bytes: self.data.clone(),
+                total_size: self.data.len() as u64,
+                supports_range: false,
+            })
+        }
+
+        async fn fetch_range_into(
+            &self,
+            _url: &str,
+            _start: u64,
+            _end: Option<u64>,
+            writer: &mut (dyn AsyncWrite + Send + Unpin),
+        ) -> RcResult<u64> {
+            if self.first.swap(false, Ordering::SeqCst) {
+                // First attempt: write half the data, then fail.
+                let half = self.data.len() / 2;
+                writer
+                    .write_all(&self.data[..half])
+                    .await
+                    .map_err(RcError::Io)?;
+                writer.flush().await.map_err(RcError::Io)?;
+                return Err(RcError::Network("injected partial-write failure".into()));
+            }
+            // Second attempt: write the full data. retry_fetch_into has
+            // already seeked to 0, so this overwrites the stale half.
+            writer.write_all(&self.data).await.map_err(RcError::Io)?;
+            writer.flush().await.map_err(RcError::Io)?;
+            Ok(self.data.len() as u64)
+        }
+    }
+
+    let src = Arc::new(PartialFailSource {
+        data: data.clone(),
+        first: AtomicBool::new(true),
+    });
+    let opts = DownloadOptions {
+        chunk_size: 16 * 1024,
+        concurrency: 2,
+        max_retries: 3,
+        retry_base: Duration::from_millis(1),
+        retry_max: Duration::from_millis(5),
+        ..Default::default()
+    };
+    let mgr = DownloadManager::new(src, opts);
+    let dir = tempdir();
+    let dest = dir.join("partial.bin");
+    // No .with_size() — resolve() probes and discovers supports_range: false.
+    let task = DownloadTask::new("http://mock/partial.bin", dest.clone()).with_sha1(sha);
+    let summary = mgr.download(&task).await.unwrap();
+    assert_eq!(summary.size, data.len() as u64);
+    // Data must be correct — the seek-before-retry prevented the half+full
+    // concatenation corruption.
+    let got = std::fs::read(&dest).unwrap();
+    assert_eq!(got, data, "partial-write retry must not corrupt data");
+    assert_eq!(
+        summary.bytes_retransmitted, 1,
+        "should have tracked exactly 1 retransmission"
+    );
 }

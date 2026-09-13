@@ -29,6 +29,7 @@ pub mod platform;
 pub mod resolve;
 pub mod version;
 pub mod version_extra;
+pub mod version_list;
 
 pub use assets::{AssetObject, AssetsIndex};
 pub use library::{Action, Artifact, ExtractRule, Library, LibraryDownloads, Rule};
@@ -40,6 +41,9 @@ pub use version::{
     VersionJson,
 };
 pub use version_extra::{UnlistedVersionDb, VersionAliasDb};
+pub use version_list::{
+    VersionGroups, VersionListCache, VersionListInfo, VersionListSearch, DEFAULT_TTL_SECS,
+};
 
 #[cfg(test)]
 mod tests {

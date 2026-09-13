@@ -44,6 +44,7 @@
     <string name="common_loading">Loading…</string>
     <string name="common_next">Next</string>
     <string name="common_ok">OK</string>
+    <string name="common_open_in_browser">Open in Browser</string>
     <string name="common_previous">Previous</string>
     <string name="common_refresh">Refresh</string>
     <string name="common_retry">Retry</string>
@@ -51,12 +52,24 @@
     <string name="common_unavailable">Unavailable</string>
 
     <!-- crash -->
+    <string name="crash_action_copy_details">Copy details</string>
+    <string name="crash_action_export_report">Export report</string>
+    <string name="crash_action_retry_launch">Retry launch</string>
+    <string name="crash_action_submit_report">Submit report</string>
+    <string name="crash_action_switch_renderer">Switch renderer</string>
     <string name="crash_authentication_failure_advice">Re-login to the account (the token expired), or use an offline account for single-player.</string>
     <string name="crash_authentication_failure_summary">the account session was rejected</string>
     <string name="crash_clean_exit_advice">Nothing to do.</string>
     <string name="crash_clean_exit_summary">the game exited normally</string>
     <string name="crash_corrupted_file_advice">Re-download the version (and the failing mod / library): the file is truncated, usually after an interrupted download.</string>
     <string name="crash_corrupted_file_summary">a game file is corrupt or incomplete</string>
+    <string name="crash_device_info_abi">ABI</string>
+    <string name="crash_device_info_gles">OpenGL ES</string>
+    <string name="crash_device_info_java_version">Java version</string>
+    <string name="crash_device_info_lwjgl_version">LWJGL</string>
+    <string name="crash_device_info_model">Device</string>
+    <string name="crash_device_info_opengl">OpenGL</string>
+    <string name="crash_device_info_renderer">Renderer</string>
     <string name="crash_disk_full_advice">Free up storage and launch again.</string>
     <string name="crash_disk_full_summary">the device is out of storage</string>
     <string name="crash_game_error_advice">Check the stack trace in the log; removing the most recently added mod / resource pack usually fixes it.</string>
@@ -77,6 +90,9 @@
     <string name="crash_out_of_memory_summary">the game ran out of memory</string>
     <string name="crash_permission_denied_advice">Grant storage permission, or move the game directory into the app\'s private storage.</string>
     <string name="crash_permission_denied_summary">the launcher lacks filesystem permission</string>
+    <string name="crash_recovery_re_download_natives">Re-download the LWJGL / renderer native libraries from a mirror, then retry. If mirrors do not work, configure an HTTP/SOCKS5 proxy under Settings -&gt; Network.</string>
+    <string name="crash_recovery_re_download_version">Re-download the version files from a mirror (the download was likely interrupted), then retry. If mirrors do not work, configure a proxy under Settings -&gt; Network.</string>
+    <string name="crash_recovery_switch_renderer">Switch the OpenGL ES translation renderer (Settings -&gt; Renderer), then retry. If the problem persists, re-download the runtime natives via a mirror.</string>
     <string name="crash_unknown_advice">Export the full log and report it; try launching without mods to narrow it down.</string>
     <string name="crash_unknown_summary">the game crashed for an unknown reason</string>
     <string name="crash_unsupported_java_version_advice">Switch the instance to the Java version the game requires (Java 8 for &lt;= 1.16, Java 17 for 1.17-1.20.4, Java 21 for 1.20.5+).</string>
@@ -115,6 +131,35 @@
     <string name="error_timeout">Request timed out: {detail}</string>
     <string name="error_unknown">Unknown error: {detail}</string>
 
+    <!-- file_manager -->
+    <string name="file_manager_back">Back</string>
+    <string name="file_manager_confirm_delete_body">{count} items, {bytes} total.</string>
+    <string name="file_manager_confirm_delete_body_dirs">{count} items (including sub-directories), {bytes} total.</string>
+    <string name="file_manager_confirm_delete_irreversible">This cannot be undone.</string>
+    <string name="file_manager_confirm_delete_title">Confirm delete?</string>
+    <string name="file_manager_confirm_overwrite_body">{path} already exists ({bytes}). Continuing will overwrite it.</string>
+    <string name="file_manager_confirm_overwrite_title">Overwrite?</string>
+    <string name="file_manager_copy">Copy…</string>
+    <string name="file_manager_delete">Delete</string>
+    <string name="file_manager_dialog_copy_label">New name</string>
+    <string name="file_manager_dialog_copy_title">Copy to…</string>
+    <string name="file_manager_dialog_create_label">Name</string>
+    <string name="file_manager_dialog_create_title">New folder</string>
+    <string name="file_manager_dialog_rename_label">New name</string>
+    <string name="file_manager_dialog_rename_title">Rename</string>
+    <string name="file_manager_empty">This folder is empty. Tap &quot;New folder&quot; or &quot;Import&quot; to get started.</string>
+    <string name="file_manager_extract_here">Extract here</string>
+    <string name="file_manager_import">Import</string>
+    <string name="file_manager_kind_dir">Folder</string>
+    <string name="file_manager_kind_file">File</string>
+    <string name="file_manager_kind_link">Link</string>
+    <string name="file_manager_more">More</string>
+    <string name="file_manager_new_folder">New folder</string>
+    <string name="file_manager_open">Open</string>
+    <string name="file_manager_refresh">Refresh</string>
+    <string name="file_manager_rename">Rename</string>
+    <string name="file_manager_up">Up</string>
+
     <!-- format -->
     <string name="format_decimal_separator">.</string>
     <string name="format_duration_join">{first} {second}</string>
@@ -125,6 +170,53 @@
     <string name="format_progress_of">{done} / {total}</string>
     <string name="format_rate">{value} {unit}/s</string>
     <string name="format_size">{value} {unit}</string>
+
+    <!-- hud -->
+    <string name="hud_action_force_quit">Force Quit</string>
+    <string name="hud_action_log_passthrough">Allow touch-through</string>
+    <string name="hud_action_open_log">Real-time Log</string>
+    <string name="hud_action_screenshot">Screenshot</string>
+    <string name="hud_action_switch_input">Switch Input Mode</string>
+    <string name="hud_close_content_description">Close HUD</string>
+    <string name="hud_collapse_content_description">Collapse menu</string>
+    <string name="hud_crash_exit_code">Exit Code</string>
+    <string name="hud_crash_na">N/A</string>
+    <string name="hud_crash_signal">Signal</string>
+    <string name="hud_drag_content_description">Drag to move HUD</string>
+    <string name="hud_expand_content_description">Expand floating menu</string>
+    <string name="hud_input_mode_mouse">Mouse mode</string>
+    <string name="hud_input_mode_touch">Touch mode</string>
+    <string name="hud_log_clear">Clear Log</string>
+    <string name="hud_log_export">Export Log</string>
+    <string name="hud_log_export_done">Exported to {path}</string>
+    <string name="hud_log_export_failed">Export failed: {error}</string>
+    <string name="hud_log_exporting">Exporting…</string>
+    <string name="hud_log_filter_all">All</string>
+    <string name="hud_log_filter_errors">Errors</string>
+    <string name="hud_log_filter_stderr">Stderr</string>
+    <string name="hud_log_filter_stdout">Stdout</string>
+    <string name="hud_log_filter_warn">Warnings</string>
+    <string name="hud_log_level_debug">Debug</string>
+    <string name="hud_log_level_error">Error</string>
+    <string name="hud_log_level_fatal">Fatal</string>
+    <string name="hud_log_level_info">Info</string>
+    <string name="hud_log_level_stderr">Stderr</string>
+    <string name="hud_log_level_stdout">Stdout</string>
+    <string name="hud_log_level_trace">Trace</string>
+    <string name="hud_log_level_unknown">Unknown</string>
+    <string name="hud_log_level_warn">Warning</string>
+    <string name="hud_log_overlay_title">Real-time Log</string>
+    <string name="hud_log_passthrough">Touch-through</string>
+    <string name="hud_log_passthrough_summary">Allow touches to pass through the log panel to the game beneath</string>
+    <string name="hud_log_search_placeholder">Search logs…</string>
+    <string name="hud_log_snapshot">Crash Snapshot</string>
+    <string name="hud_menu_title">In-game Floating Menu</string>
+    <string name="hud_setting_anti_misoperation">Anti-misoperation zone</string>
+    <string name="hud_setting_anti_misoperation_summary">Touches near the HUD are not passed to the game</string>
+    <string name="hud_setting_auto_hide">Auto-hide</string>
+    <string name="hud_setting_auto_hide_summary">Auto-collapse the menu when idle</string>
+    <string name="hud_setting_opacity">Opacity</string>
+    <string name="hud_setting_title">HUD Settings</string>
 
     <!-- language -->
     <string name="language_en">English</string>
@@ -140,6 +232,13 @@
     <string name="launch_state_running">Running</string>
     <string name="launch_state_stopped">Stopped</string>
 
+    <!-- mod -->
+    <string name="mod_collapse">Collapse</string>
+    <string name="mod_dependencies">Dependencies</string>
+    <string name="mod_description">Description</string>
+    <string name="mod_expand">Expand</string>
+    <string name="mod_version">Version</string>
+
     <!-- nav -->
     <string name="nav_accounts">Accounts</string>
     <string name="nav_downloads">Downloads</string>
@@ -152,11 +251,29 @@
     <string name="relative_now">just now</string>
     <string name="relative_past">{duration} ago</string>
 
+    <!-- resource_pack -->
+    <string name="resource_pack_compatible">Compatible</string>
+    <string name="resource_pack_delete">Delete</string>
+    <string name="resource_pack_delete_confirm">Delete resource pack {name}?</string>
+    <string name="resource_pack_description">Description</string>
+    <string name="resource_pack_disable">Disable</string>
+    <string name="resource_pack_download">Download</string>
+    <string name="resource_pack_empty">No resource packs found</string>
+    <string name="resource_pack_enable">Enable</string>
+    <string name="resource_pack_import">Import</string>
+    <string name="resource_pack_incompatible">Incompatible</string>
+    <string name="resource_pack_pack_format">Pack format</string>
+    <string name="resource_pack_preview">Preview</string>
+
     <!-- screen -->
     <string name="screen_awt_title">AWT / Swing compatibility layer</string>
     <string name="screen_controller_title">Control mapping</string>
+    <string name="screen_file_manager_title">Files</string>
     <string name="screen_install_title">Install a new instance</string>
     <string name="screen_instance_detail_title">Instance details</string>
+    <string name="screen_resource_pack_title">Resource Pack Management</string>
+    <string name="screen_shader_pack_title">Shader Pack Management</string>
+    <string name="screen_world_manager_title">World Saves</string>
 
     <!-- settings -->
     <string name="settings_language_applied">Interface language switched to {language}</string>
@@ -172,11 +289,131 @@
     <string name="settings_section_network">Network optimisation (China mainland)</string>
     <string name="settings_section_renderer">Renderer &amp; display</string>
 
+    <!-- shader_pack -->
+    <string name="shader_pack_delete">Delete</string>
+    <string name="shader_pack_delete_confirm">Delete shader pack {name}?</string>
+    <string name="shader_pack_disable">Disable</string>
+    <string name="shader_pack_download">Download</string>
+    <string name="shader_pack_empty">No shader packs found</string>
+    <string name="shader_pack_enable">Enable</string>
+    <string name="shader_pack_import">Import</string>
+    <string name="shader_pack_invalid">Invalid</string>
+    <string name="shader_pack_preview">Preview</string>
+    <string name="shader_pack_valid">Valid</string>
+
+    <!-- skin -->
+    <string name="skin_cached_offline">Status: cached (available offline)</string>
+    <string name="skin_fetching">Fetching skin…</string>
+    <string name="skin_has_cape">Cape: owned</string>
+    <string name="skin_invalid_dimensions">Image dimensions {w}x{h} do not meet Minecraft skin requirements
+Supported sizes: 64x64, 64x32, 128x128, 128x64, 128x192, 256x256, 256x128</string>
+    <string name="skin_model_alex">Alex (Slim)</string>
+    <string name="skin_model_steve">Steve (Classic)</string>
+    <string name="skin_no_texture">No skin texture</string>
+    <string name="skin_offline_account">Offline accounts cannot fetch skins from Mojang</string>
+    <string name="skin_pick_local">Pick local image</string>
+    <string name="skin_preview_title">Skin preview</string>
+    <string name="skin_read_error">Cannot read image file</string>
+    <string name="skin_select_model">Please select skin model:</string>
+    <string name="skin_source_custom">Custom</string>
+    <string name="skin_source_official">Official</string>
+    <string name="skin_tutorial_finish">Done</string>
+    <string name="skin_tutorial_format_note">PNG format, dimensions must be 64x64, 64x32, or higher even dimensions</string>
+    <string name="skin_tutorial_link_task14">Linked with Task 14 onboarding: auto-prompted after first login</string>
+    <string name="skin_tutorial_next">Next</string>
+    <string name="skin_tutorial_official_note">Download official skins from your Minecraft profile page</string>
+    <string name="skin_tutorial_pick">Pick local image</string>
+    <string name="skin_tutorial_previous">Previous</string>
+    <string name="skin_tutorial_rewatch">Rewatch skin tutorial</string>
+    <string name="skin_tutorial_skip">Skip</string>
+    <string name="skin_tutorial_start">Start skin import tutorial</string>
+    <string name="skin_tutorial_step_apply_body">Choose the correct skin model (Steve/Classic or Alex/Slim), then tap &quot;Upload local skin&quot; to upload it to Mojang. The upload progress is shown in real time.</string>
+    <string name="skin_tutorial_step_apply_title">Apply to account</string>
+    <string name="skin_tutorial_step_done_body">The skin import tutorial is complete. You can revisit it at any time.</string>
+    <string name="skin_tutorial_step_done_title">Tutorial complete</string>
+    <string name="skin_tutorial_step_format_body">The skin must be in PNG format. Recommended size is 64x64 (Steve/Classic) or 64x32 (Alex/Slim). Supported sizes include: 64x64, 64x32, 128x128, 128x64, 128x192, 256x256, 256x128.</string>
+    <string name="skin_tutorial_step_format_title">File format</string>
+    <string name="skin_tutorial_step_get_body">You can get skins through official channels: log in to your Minecraft account on the official website and download the skin from your profile page. Third-party skin sites (e.g. TheSkindex, MinecraftSkins.com) also offer a wide variety of skins.</string>
+    <string name="skin_tutorial_step_get_title">Get a skin</string>
+    <string name="skin_tutorial_step_import_body">Open the skin preview dialog on the Accounts screen, tap &quot;Pick local image&quot;, select a PNG image from your gallery or files. The launcher will automatically validate the dimensions.</string>
+    <string name="skin_tutorial_step_import_title">Import the skin</string>
+    <string name="skin_tutorial_step_indicator">Step {current} of {total}</string>
+    <string name="skin_tutorial_thirdparty_note">Third-party skin sites offer more choices; watch for copyright and security</string>
+    <string name="skin_tutorial_title">Skin Import Tutorial</string>
+    <string name="skin_upload">Upload local skin</string>
+    <string name="skin_upload_cancel">Cancel</string>
+    <string name="skin_upload_confirm">Confirm upload</string>
+    <string name="skin_upload_note">Note: the skin will sync to Mojang after upload, which may take some time.</string>
+    <string name="skin_uploading">Uploading…</string>
+    <string name="skin_uploading_label">Uploading skin…</string>
+    <string name="skin_view_in_browser">View full skin in browser</string>
+
     <!-- theme -->
     <string name="theme_night_dark">Dark</string>
     <string name="theme_night_light">Light</string>
     <string name="theme_night_system">Follow system</string>
     <string name="theme_night_toggle">Toggle night mode</string>
+
+    <!-- translate -->
+    <string name="translate_batch">Batch translate</string>
+    <string name="translate_batch_summary">Translated {count} entries</string>
+    <string name="translate_cache_clear">Clear cache</string>
+    <string name="translate_cache_count">{count} translations cached</string>
+    <string name="translate_cache_size">{bytes} used</string>
+    <string name="translate_cache_title">Translation cache</string>
+    <string name="translate_cn_hint">Mainland-China network optimisation active (DoH / mirrors / resume)</string>
+    <string name="translate_empty">Nothing to translate</string>
+    <string name="translate_enable">Enable translation</string>
+    <string name="translate_gateway_auth">Auth token</string>
+    <string name="translate_gateway_model">Model</string>
+    <string name="translate_gateway_system_prompt">System prompt</string>
+    <string name="translate_gateway_title">Translation gateway</string>
+    <string name="translate_gateway_url">Gateway URL</string>
+    <string name="translate_language">Target language</string>
+    <string name="translate_language_auto">Auto-detect</string>
+    <string name="translate_language_en">English</string>
+    <string name="translate_language_zh_cn">Simplified Chinese</string>
+    <string name="translate_language_zh_hant">Traditional Chinese</string>
+    <string name="translate_mode">Translation mode</string>
+    <string name="translate_mode_hybrid">Dictionary + online</string>
+    <string name="translate_mode_offline">Dictionary only</string>
+    <string name="translate_mode_online">Online only</string>
+    <string name="translate_network_fallback">Fall back to dictionary on network failure</string>
+    <string name="translate_network_fallback_summary">Common mods and jargon are still translated when the network is down</string>
+    <string name="translate_refresh">Re-translate</string>
+    <string name="translate_show_original">Show original</string>
+    <string name="translate_show_translated">Show translated</string>
+    <string name="translate_source">Source</string>
+    <string name="translate_source_cache">Cache</string>
+    <string name="translate_source_dictionary">Dictionary</string>
+    <string name="translate_source_gateway">Online</string>
+    <string name="translate_source_passthrough">No translation needed</string>
+    <string name="translate_source_unavailable">Translation failed</string>
+    <string name="translate_subtitle">Auto-translate mod names, summaries and changelogs</string>
+    <string name="translate_title">Translation</string>
+
+    <!-- tutorial -->
+    <string name="tutorial_finish">Done</string>
+    <string name="tutorial_next">Next</string>
+    <string name="tutorial_previous">Previous</string>
+    <string name="tutorial_replay_button">Replay onboarding tutorial</string>
+    <string name="tutorial_replay_summary">Available after the first run, so newcomers can revisit new features anytime</string>
+    <string name="tutorial_rewatch">Rewatch tutorial</string>
+    <string name="tutorial_skip">Skip</string>
+    <string name="tutorial_step_account_body">Start by adding a Microsoft / Xbox account in &quot;Accounts&quot;. If Mojang is unreachable, enable a mirror or a third-party auth service in Settings.</string>
+    <string name="tutorial_step_account_title">Add an account</string>
+    <string name="tutorial_step_done_body">Onboarding complete. You can rewatch this tutorial anytime from &quot;Settings → Help&quot;, or reset it to start from the first step again.</string>
+    <string name="tutorial_step_done_title">You are all set</string>
+    <string name="tutorial_step_import_body">The &quot;Downloads&quot; tab imports CurseForge / Modrinth packs and local .zip modpacks. Skin import walkthrough is on the &quot;Accounts&quot; screen.</string>
+    <string name="tutorial_step_import_title">Import modpacks &amp; skins</string>
+    <string name="tutorial_step_instance_body">Use the &quot;Instances&quot; tab to install a new version or import a modpack. Forge, NeoForge, Fabric and Quilt are all supported.</string>
+    <string name="tutorial_step_instance_title">Create an instance</string>
+    <string name="tutorial_step_renderer_body">GL4ES is the default for the broadest compatibility. If you see visual glitches, switch to Zink / ANGLE / VirGL under &quot;Settings → Renderer&quot;.</string>
+    <string name="tutorial_step_renderer_title">Pick a renderer</string>
+    <string name="tutorial_step_indicator">Step {current} of {total}</string>
+    <string name="tutorial_title">Onboarding</string>
+    <string name="tutorial_welcome_body">RC Launcher is built for Minecraft Java Edition and optimised for mainland-China networks. The next few steps will get you started.</string>
+    <string name="tutorial_welcome_title">Welcome to RC Launcher</string>
 
     <!-- unit -->
     <string name="unit_byte">B</string>
@@ -185,4 +422,37 @@
     <string name="unit_mib">MB</string>
     <string name="unit_pib">PB</string>
     <string name="unit_tib">TB</string>
+
+    <!-- world -->
+    <string name="world_backup">Backup</string>
+    <string name="world_backup_done">Backup complete</string>
+    <string name="world_backup_failed">Backup failed</string>
+    <string name="world_confirm_delete_body">Delete save {name} and its backups? This cannot be undone.</string>
+    <string name="world_confirm_delete_title">Confirm Delete</string>
+    <string name="world_confirm_rename_label">New name</string>
+    <string name="world_confirm_rename_title">Rename Save</string>
+    <string name="world_delete">Delete</string>
+    <string name="world_delete_done">Deleted</string>
+    <string name="world_delete_failed">Delete failed</string>
+    <string name="world_empty">No saves found</string>
+    <string name="world_export">Export</string>
+    <string name="world_export_done">Exported</string>
+    <string name="world_export_failed">Export failed</string>
+    <string name="world_game_mode">Game Mode</string>
+    <string name="world_has_backup">Has backup</string>
+    <string name="world_import">Import</string>
+    <string name="world_import_done">Imported</string>
+    <string name="world_import_failed">Import failed</string>
+    <string name="world_last_modified">Last Modified</string>
+    <string name="world_play_time">Play Time</string>
+    <string name="world_recover">Recover</string>
+    <string name="world_recover_done">Recovery complete</string>
+    <string name="world_recover_failed">Recovery failed</string>
+    <string name="world_rename">Rename</string>
+    <string name="world_rename_done">Renamed</string>
+    <string name="world_rename_failed">Rename failed</string>
+    <string name="world_thumbnail">Thumbnail</string>
+    <string name="auth_login_microsoft_blocked">Cannot reach the Microsoft authentication server. Check proxy/mirror settings.</string>
+    <string name="auth_login_xbl_blocked">Cannot reach Xbox Live services. Configure a proxy in Settings and retry.</string>
+    <string name="auth_login_minecraft_blocked">Cannot reach Mojang/Minecraft services. Switch to a mirror source and retry.</string>
 </resources>

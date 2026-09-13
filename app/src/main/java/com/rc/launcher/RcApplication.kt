@@ -12,6 +12,8 @@ import com.rc.launcher.ui.awt.AwtBridges
 import com.rc.launcher.ui.awt.RustAwtCanvasBridge
 import com.rc.launcher.ui.i18n.LocaleEngine
 import com.rc.launcher.ui.theme.ThemeEngine
+import com.rc.launcher.ui.model.SharedPreferencesTutorialStateRepository
+import com.rc.launcher.ui.model.TutorialStateRepositories
 
 /**
  * Application entry point. Initialises the shared [ThemeEngine] from the saved
@@ -33,6 +35,8 @@ class RcApplication : Application() {
         AccountRepositories.install(RustAccountRepository(this))
         // Wire the controller / input-mapping layouts (task 15) to on-disk persistence.
         ControlLayoutRepositories.install(SharedPreferencesControlLayoutRepository(this))
+        // Wire the onboarding tutorial state (task 14) to on-disk persistence.
+        TutorialStateRepositories.install(SharedPreferencesTutorialStateRepository(this))
         // Wire the AWT/Swing compatibility layer (task 18) to the Rust core.
         AwtBridges.install(RustAwtCanvasBridge())
         // The native core may be absent in some builds; never let that crash

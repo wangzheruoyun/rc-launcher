@@ -17,6 +17,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 
 use crate::error::{RcError, RcResult};
+use crate::net::ProxyConfig;
 
 /// A single HTTP response returned by an [`AuthTransport`].
 #[derive(Debug, Clone)]
@@ -62,6 +63,18 @@ pub trait AuthTransport: Send + Sync {
     async fn post_json(&self, url: &str, body: &Value) -> RcResult<AuthResponse>;
     /// GET with an optional bearer token and return the response.
     async fn get_json(&self, url: &str, bearer: Option<&str>) -> RcResult<AuthResponse>;
+    /// POST a multipart/form request with a single file upload and return the
+    /// response (including non-2xx statuses). Used by skin/cape upload (task 22).
+    async fn post_multipart(
+        &self,
+        url: &str,
+        text_fields: &[(&str, &str)],
+        file_field: &str,
+        file_name: &str,
+        file_content_type: &str,
+        file_data: &[u8],
+        bearer: Option<&str>,
+    ) -> RcResult<AuthResponse>;
 }
 
 /// Production transport backed by a `reqwest::Client`. Prefer constructing it
@@ -91,6 +104,29 @@ impl ReqwestTransport {
             .user_agent(concat!("RC-Launcher/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(15))
             .timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|e| RcError::Auth(format!("failed to build http client: {e}")))?;
+        Ok(Self { client })
+    }
+
+    /// Build a transport that honours a proxy configuration (task 28).
+    ///
+    /// This is the entry point for the China-mainland proxy / mirror fallback:
+    /// when the user has configured an HTTP / HTTPS / SOCKS5 proxy in Settings,
+    /// the auth transport (token exchange with Microsoft / Xbox / Mojang) uses
+    /// it so the XBL/XSTS/Minecraft calls can punch through the Great Firewall.
+    /// When `proxy` is [`ProxyConfig::None`] this is equivalent to
+    /// [`Self::with_defaults`].
+    pub fn with_proxy(proxy: &ProxyConfig) -> RcResult<Self> {
+        let prox = proxy.to_reqwest()?;
+        let mut builder = reqwest::Client::builder()
+            .user_agent(concat!("RC-Launcher/", env!("CARGO_PKG_VERSION")))
+            .connect_timeout(Duration::from_secs(15))
+            .timeout(Duration::from_secs(60));
+        if let Some(p) = prox {
+            builder = builder.proxy(p);
+        }
+        let client = builder
             .build()
             .map_err(|e| RcError::Auth(format!("failed to build http client: {e}")))?;
         Ok(Self { client })
@@ -129,6 +165,36 @@ impl ReqwestTransport {
             .map_err(|e| RcError::Auth(format!("GET {url}: {e}")))?;
         parse(resp, url).await
     }
+
+    async fn send_multipart(
+        &self,
+        url: &str,
+        text_fields: &[(&str, &str)],
+        file_field: &str,
+        file_name: &str,
+        file_content_type: &str,
+        file_data: &[u8],
+        bearer: Option<&str>,
+    ) -> RcResult<AuthResponse> {
+        let mut form = reqwest::multipart::Form::new();
+        for (k, v) in text_fields {
+            form = form.text(k.to_string(), v.to_string());
+        }
+        let part = reqwest::multipart::Part::bytes(file_data.to_vec())
+            .file_name(file_name.to_string())
+            .mime_str(file_content_type)
+            .map_err(|e| RcError::Auth(format!("multipart part: {e}")))?;
+        form = form.part(file_field.to_string(), part);
+        let mut req = self.client.put(url).multipart(form);
+        if let Some(tok) = bearer {
+            req = req.bearer_auth(tok);
+        }
+        let resp = req
+            .send()
+            .await
+            .map_err(|e| RcError::Auth(format!("PUT {url}: {e}")))?;
+        parse(resp, url).await
+    }
 }
 
 async fn parse(resp: reqwest::Response, url: &str) -> RcResult<AuthResponse> {
@@ -151,6 +217,27 @@ impl AuthTransport for ReqwestTransport {
     }
     async fn get_json(&self, url: &str, bearer: Option<&str>) -> RcResult<AuthResponse> {
         self.send_get(url, bearer).await
+    }
+    async fn post_multipart(
+        &self,
+        url: &str,
+        text_fields: &[(&str, &str)],
+        file_field: &str,
+        file_name: &str,
+        file_content_type: &str,
+        file_data: &[u8],
+        bearer: Option<&str>,
+    ) -> RcResult<AuthResponse> {
+        self.send_multipart(
+            url,
+            text_fields,
+            file_field,
+            file_name,
+            file_content_type,
+            file_data,
+            bearer,
+        )
+        .await
     }
 }
 
@@ -210,6 +297,18 @@ impl AuthTransport for MockTransport {
         self.dispatch(url)
     }
     async fn get_json(&self, url: &str, _bearer: Option<&str>) -> RcResult<AuthResponse> {
+        self.dispatch(url)
+    }
+    async fn post_multipart(
+        &self,
+        url: &str,
+        _text_fields: &[(&str, &str)],
+        _file_field: &str,
+        _file_name: &str,
+        _file_content_type: &str,
+        _file_data: &[u8],
+        _bearer: Option<&str>,
+    ) -> RcResult<AuthResponse> {
         self.dispatch(url)
     }
 }

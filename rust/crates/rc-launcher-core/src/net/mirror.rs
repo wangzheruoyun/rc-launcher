@@ -194,7 +194,12 @@ impl Clone for MirrorProvider {
         Self {
             mirrors: self.mirrors.clone(),
             best: Mutex::new(self.best.lock().expect("MirrorProvider poisoned").clone()),
-            latencies: Mutex::new(self.latencies.lock().expect("MirrorProvider poisoned").clone()),
+            latencies: Mutex::new(
+                self.latencies
+                    .lock()
+                    .expect("MirrorProvider poisoned")
+                    .clone(),
+            ),
         }
     }
 }

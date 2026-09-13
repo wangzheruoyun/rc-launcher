@@ -22,7 +22,7 @@ use crate::game::assets::AssetsIndex;
 use crate::game::manifest::VersionManifest;
 use crate::game::platform::{Features, Platform};
 use crate::game::version::{fetch_json_with_mirrors, ResolvedVersion, VersionJson};
-use crate::net::MirrorProvider;
+use crate::net::{MirrorProvider, NetworkClient};
 
 /// What kind of artifact a [`DownloadItem`] represents (for progress grouping).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -360,7 +360,7 @@ impl DependencyResolver {
     /// Resolve a version (walking `inheritsFrom`) and return the merged view.
     pub async fn resolve_version(
         &self,
-        client: &reqwest::Client,
+        client: &NetworkClient,
         manifest: &VersionManifest,
         version_id: &str,
     ) -> RcResult<ResolvedVersion> {
@@ -377,8 +377,7 @@ impl DependencyResolver {
             let entry = manifest.find(&current).ok_or_else(|| {
                 RcError::Other(format!("version `{}` not found in manifest", current))
             })?;
-            let json: VersionJson =
-                fetch_json_with_mirrors(client, &self.mirror, &entry.url).await?;
+            let json: VersionJson = fetch_json_with_mirrors(client, &entry.url).await?;
             chain.push(json);
             match &chain.last().unwrap().inherits_from {
                 Some(parent) => current = parent.clone(),
@@ -392,10 +391,10 @@ impl DependencyResolver {
     /// Fetch an assets index given its reference URL.
     pub async fn fetch_assets_index(
         &self,
-        client: &reqwest::Client,
+        client: &NetworkClient,
         url: &str,
     ) -> RcResult<AssetsIndex> {
-        fetch_json_with_mirrors(client, &self.mirror, url).await
+        fetch_json_with_mirrors(client, url).await
     }
 
     /// Resolve a version (walking `inheritsFrom`), fetch its asset index and
@@ -409,7 +408,7 @@ impl DependencyResolver {
     /// from the [`crate::net::MirrorProvider`] held by this resolver.
     pub async fn resolve_full_plan(
         &self,
-        client: &reqwest::Client,
+        client: &NetworkClient,
         manifest: &VersionManifest,
         version_id: &str,
     ) -> RcResult<DownloadPlan> {
@@ -731,9 +730,11 @@ mod tests {
             p if p.ends_with("/1.20.json") => (200, asset_index_json.to_string()),
             _ => (404, "not found".to_string()),
         });
-        let provider = MirrorProvider::new(vec![MirrorSource::new("local", "Local", &base)]);
-        let client = reqwest::Client::new();
-
+        let client = crate::net::NetworkClient::builder()
+            .mirrors(vec![crate::net::MirrorSource::new("local", "Local", &base)])
+            .build()
+            .await
+            .unwrap();
         let manifest = VersionManifest {
             latest: Latest {
                 release: String::new(),
@@ -748,7 +749,11 @@ mod tests {
                 release_time: None,
             }],
         };
-        let r = DependencyResolver::new(Platform::android(), Arc::new(provider), "/data");
+        let r = DependencyResolver::new(
+            Platform::android(),
+            Arc::new(client.mirror_provider().clone()),
+            "/data",
+        );
         let plan = r
             .resolve_full_plan(&client, &manifest, "1.20.4")
             .await

@@ -28,6 +28,10 @@ pub struct AccountManager {
     storage: Box<dyn TokenStorage>,
     transport: Arc<dyn AuthTransport>,
     client_id: String,
+    /// Optional custom callback/redirect address for the Microsoft browser
+    /// redirect (task 28). When set, it is passed to the device-code request
+    /// and included in the returned challenge.
+    redirect_uri: Option<String>,
     accounts: Vec<Account>,
 }
 
@@ -43,8 +47,27 @@ impl AccountManager {
             storage,
             transport,
             client_id: client_id.into(),
+            redirect_uri: None,
             accounts,
         })
+    }
+
+    /// Override the OAuth client id (e.g. a self-registered Azure app).
+    pub fn set_client_id(&mut self, client_id: impl Into<String>) {
+        self.client_id = client_id.into();
+    }
+
+    /// Set a custom callback/redirect address for the Microsoft browser redirect
+    /// (task 28). The `microsoft_auth.html` embedded callback page can serve as
+    /// this address so users can complete sign-in even when the system browser
+    /// is restricted.
+    pub fn set_redirect_uri(&mut self, redirect_uri: impl Into<String>) {
+        self.redirect_uri = Some(redirect_uri.into());
+    }
+
+    /// Clear any previously configured redirect URI.
+    pub fn clear_redirect_uri(&mut self) {
+        self.redirect_uri = None;
     }
 
     /// Build a manager with a standalone (network) transport and the default
@@ -54,13 +77,13 @@ impl AccountManager {
         Self::new(storage, transport, DEFAULT_CLIENT_ID)
     }
 
-    /// Override the OAuth client id (e.g. a self-registered Azure app).
-    pub fn set_client_id(&mut self, client_id: impl Into<String>) {
-        self.client_id = client_id.into();
-    }
-
     pub fn client_id(&self) -> &str {
         &self.client_id
+    }
+
+    /// The configured callback/redirect address, if any (task 28).
+    pub fn redirect_uri(&self) -> Option<&str> {
+        self.redirect_uri.as_deref()
     }
 
     /// All accounts (with secrets — use [`AccountManager::summaries`] for UI).
@@ -107,10 +130,18 @@ impl AccountManager {
     }
 
     /// Step 1 of Microsoft login: obtain a device-code challenge for the UI.
+    /// If a custom `redirect_uri` was configured (task 28) it is forwarded to
+    /// the Microsoft device-code endpoint so the embedded callback page can
+    /// intercept the browser redirect.
     pub async fn begin_microsoft(&self) -> RcResult<DeviceCodeChallenge> {
-        let c =
-            microsoft::request_device_code(self.transport.as_ref(), &self.client_id, DEFAULT_SCOPE)
-                .await?;
+        let redirect = self.redirect_uri.as_deref();
+        let c = microsoft::request_device_code(
+            self.transport.as_ref(),
+            &self.client_id,
+            DEFAULT_SCOPE,
+            redirect,
+        )
+        .await?;
         Ok(c)
     }
 
@@ -203,6 +234,52 @@ impl AccountManager {
         } else {
             Ok(self.find(uuid).unwrap().clone())
         }
+    }
+
+    /// Fetch skin metadata (URLs + model type) for the given account UUID.
+    /// The account must exist and have a valid Minecraft access token.
+    /// The returned [`crate::auth::model::SkinModel`] carries download URLs the
+    /// UI can use to fetch + cache the PNG bytes offline (task 22).
+    pub async fn fetch_skin(&self, uuid: &str) -> RcResult<crate::auth::model::SkinModel> {
+        let account = self.find(uuid);
+        let mc_token = match account {
+            Some(Account::Microsoft(m)) => &m.access_token,
+            _ => {
+                return Err(crate::error::RcError::Auth(format!(
+                    "no Microsoft account with uuid {uuid}"
+                )));
+            }
+        };
+        if mc_token.is_empty() {
+            return Err(crate::error::RcError::Auth(
+                "account has no access token (use ensure_fresh first)".into(),
+            ));
+        }
+        microsoft::fetch_skin_data(self.transport.as_ref(), uuid, mc_token)
+            .await
+            .map_err(|e| e.into())
+    }
+
+    /// Upload a custom skin for the given Microsoft account. `model` is
+    /// "slim" or "classic"; `skin_data` is raw PNG bytes.
+    pub async fn upload_skin(&mut self, uuid: &str, model: &str, skin_data: &[u8]) -> RcResult<()> {
+        let account = self.find(uuid);
+        let mc_token = match account {
+            Some(Account::Microsoft(m)) => &m.access_token,
+            _ => {
+                return Err(crate::error::RcError::Auth(format!(
+                    "no Microsoft account with uuid {uuid}"
+                )));
+            }
+        };
+        if mc_token.is_empty() {
+            return Err(crate::error::RcError::Auth(
+                "account has no access token (use ensure_fresh first)".into(),
+            ));
+        }
+        microsoft::upload_skin(self.transport.as_ref(), mc_token, model, skin_data)
+            .await
+            .map_err(|e| e.into())
     }
 
     /// Convenience predicate: is the account a Microsoft account whose token is
@@ -441,5 +518,59 @@ mod tests {
         let rt = tokio::runtime::Runtime::new().unwrap();
         let err = rt.block_on(mg.refresh(a.uuid()));
         assert!(err.is_err());
+    }
+
+    /// redirect_uri is stored and surfaced through begin_microsoft (task 28).
+    #[tokio::test]
+    async fn redirect_uri_is_passed_to_device_code() {
+        let m = MockTransport::new();
+        m.script_ok(
+            microsoft::DEVICE_CODE_URL,
+            serde_json::json!({
+                "user_code": "RD",
+                "device_code": "dc-rd",
+                "verification_uri": "https://microsoft.com/devicelogin",
+                "expires_in": 900,
+                "interval": 1,
+                "message": "go"
+            }),
+        );
+        let mut mg = AccountManager::new(
+            Box::new(MemoryTokenStorage::new()),
+            Arc::new(m),
+            DEFAULT_CLIENT_ID,
+        )
+        .unwrap();
+        mg.set_redirect_uri("file:///android_asset/microsoft_auth.html");
+        let challenge = mg.begin_microsoft().await.unwrap();
+        assert_eq!(
+            challenge.redirect_uri.as_deref(),
+            Some("file:///android_asset/microsoft_auth.html")
+        );
+    }
+
+    /// Without a redirect_uri configured, the challenge has redirect_uri = None.
+    #[tokio::test]
+    async fn no_redirect_uri_is_none_by_default() {
+        let m = MockTransport::new();
+        m.script_ok(
+            microsoft::DEVICE_CODE_URL,
+            serde_json::json!({
+                "user_code": "X",
+                "device_code": "dc",
+                "verification_uri": "https://x",
+                "expires_in": 1,
+                "interval": 1,
+                "message": "go"
+            }),
+        );
+        let mg = AccountManager::new(
+            Box::new(MemoryTokenStorage::new()),
+            Arc::new(m),
+            DEFAULT_CLIENT_ID,
+        )
+        .unwrap();
+        let challenge = mg.begin_microsoft().await.unwrap();
+        assert_eq!(challenge.redirect_uri, None);
     }
 }

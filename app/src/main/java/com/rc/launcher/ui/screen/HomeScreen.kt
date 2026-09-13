@@ -38,6 +38,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.rc.launcher.ui.ProvideRcWindowInfo
 import com.rc.launcher.ui.component.FloatingHud
+import com.rc.launcher.ui.component.FloatingHudAction
+import com.rc.launcher.ui.component.FloatingHudConfig
+import com.rc.launcher.ui.component.GameFloatingHud
+import com.rc.launcher.ui.component.InputMode
 import com.rc.launcher.ui.component.InstanceCard
 import com.rc.launcher.ui.component.ResourceSummary
 import com.rc.launcher.ui.model.recentlyPlayed
@@ -82,6 +86,13 @@ fun HomeScreen(
     val usage by rememberResourceUsage()
     val showHud = hudOn || launchState is LaunchState.Running
 
+    // Task 20: collect HUD state outside conditionals (Compose rule).
+    val hudConfig by dashboard.hudConfig.collectAsStateWithLifecycle()
+    val hudInputMode by dashboard.inputMode.collectAsStateWithLifecycle()
+    val hudLogLines by dashboard.logLines.collectAsStateWithLifecycle()
+    val hudCrashSnapshot by dashboard.crashSnapshot.collectAsStateWithLifecycle()
+    val hudExportState by dashboard.exportState.collectAsStateWithLifecycle()
+
     val launchStateVal = launchState
     val launchingId = when (launchStateVal) {
         is LaunchState.Launching -> launchStateVal.instanceId
@@ -105,15 +116,15 @@ fun HomeScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(window.contentPaddingDp.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.Vertical.spacedBy(16.dp),
         ) {
             // Header (+ the resource panel beside it once the window is wide).
             val header: @Composable () -> Unit = {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Vertical.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Vertical.spacedBy(2.dp)) {
                         Text("主页", style = MaterialTheme.typography.headlineSmall)
                         val coreStateVal = coreState
                         Text(
@@ -141,7 +152,7 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Vertical.CenterVertically,
                 ) {
                     Box(modifier = Modifier.weight(1f)) { header() }
                     Box(modifier = Modifier.weight(1f)) { ResourceSummary(usage) }
@@ -165,6 +176,7 @@ fun HomeScreen(
                             launching = inst.id == launchingId,
                             onLaunch = { dashboard.launch(inst.id) },
                             onOpen = { openInstance(inst.id) },
+                            onToggleFavorite = { dashboard.toggleFavorite(inst.id) },
                             modifier = Modifier.fillMaxWidth().widthIn(min = 280.dp),
                         )
                     }
@@ -172,7 +184,7 @@ fun HomeScreen(
             }
 
             SectionTitle("游戏实例 (${instances.size})")
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.Vertical.spacedBy(10.dp)) {
                 // Chunked rows rather than a nested lazy grid: this screen is
                 // already inside a vertical scroller, so a lazy grid here would be
                 // measured with an infinite height.
@@ -184,6 +196,7 @@ fun HomeScreen(
                                 launching = inst.id == launchingId,
                                 onLaunch = { dashboard.launch(inst.id) },
                                 onOpen = { openInstance(inst.id) },
+                                onToggleFavorite = { dashboard.toggleFavorite(inst.id) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -214,18 +227,60 @@ fun HomeScreen(
             LaunchState.Idle -> {}
         }
 
-        // Floating frame-rate HUD (top-end overlay)
+        // Floating frame-rate / menu HUD (task 20).
+        // When the game is running we show the full GameFloatingHud with menu
+        // actions (log / input mode / screenshot / force-quit); otherwise we
+        // fall back to the compact dashboard badge.
         if (showHud) {
-            FloatingHud(
-                fps = fps,
-                usage = usage,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 8.dp, end = 16.dp),
-                onClose = {
-                    if (launchState !is LaunchState.Running) dashboard.toggleHud()
-                },
-            )
+
+            if (launchState is LaunchState.Running) {
+                GameFloatingHud(
+                    fps = fps,
+                    usage = usage,
+                    inputMode = hudInputMode,
+                    onInputModeChange = { dashboard.toggleInputMode() },
+                    config = hudConfig,
+                    onConfigChange = { dashboard.setHudConfig(it) },
+                    logLines = hudLogLines,
+                    crashSnapshot = hudCrashSnapshot,
+                    exportState = hudExportState,
+                    onExport = { dashboard.setExportInProgress(true) },
+                    onAction = { action ->
+                        when (action) {
+                            is FloatingHudAction.OpenLog -> { /* opens log overlay — handled by game surface */ }
+                            is FloatingHudAction.SwitchInputMode -> dashboard.toggleInputMode()
+                            is FloatingHudAction.Screenshot -> { /* captures frame — handled by game surface */ }
+                            is FloatingHudAction.ExportLog -> dashboard.setExportInProgress(true)
+                            is FloatingHudAction.TakeSnapshot -> dashboard.takeCrashSnapshot(
+                                exitCode = null,
+                                signal = null,
+                                categoryId = null,
+                                summary = "Game is running (snapshot taken)",
+                                advice = "",
+                                logTail = hudLogLines.lastOrNull()?.let { listOf(it.text) } ?: emptyList(),
+                            )
+                            is FloatingHudAction.ClearLog -> dashboard.clearLog()
+                            is FloatingHudAction.ForceQuit -> dashboard.forceQuit()
+                        }
+                    },
+                    onClose = {
+                        if (launchState is LaunchState.Running) dashboard.forceQuit()
+                        else dashboard.toggleHud()
+                    },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 16.dp),
+                )
+            } else {
+                FloatingHud(
+                    fps = fps,
+                    usage = usage,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 16.dp),
+                    onClose = { dashboard.toggleHud() },
+                )
+            }
         }
     }
 }
@@ -258,7 +313,7 @@ private fun LaunchBanner(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Vertical.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (showProgress) {

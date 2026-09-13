@@ -31,6 +31,42 @@ enum class AccountKind(val code: String, val label: String) {
     }
 }
 
+/** Source of a player skin texture (mirrors Rust `auth::model::SkinSource`). */
+enum class SkinSource(val code: String) {
+    OFFICIAL("official"),
+    CUSTOM("custom");
+
+    companion object {
+        fun fromCode(code: String?): SkinSource =
+            entries.firstOrNull { it.code == code } ?: OFFICIAL
+    }
+}
+
+/**
+ * Skin (and cape) metadata for a Minecraft profile (task 22).
+ *
+ * Mirrors the Rust core's `crate::auth::model::SkinModel`. The `skinUrl` and
+ * `capeUrl` point at Mojang's texture servers; the UI downloads the PNG and
+ * caches it for offline display. `cachedAt` (epoch seconds) tracks when the
+ * bytes were last written to the image cache.
+ */
+data class SkinModel(
+    val uuid: String = "",
+    val skinUrl: String = "",
+    val capeUrl: String? = null,
+    val fetchedAt: Long = 0,
+    val cachedAt: Long = 0,
+    val source: SkinSource = SkinSource.OFFICIAL,
+    val hash: String? = null,
+    val model: String = "",
+) {
+    /** True when the skin PNG bytes have been cached locally (offline displayable). */
+    fun isCached(): Boolean = cachedAt > 0 && skinUrl.isNotBlank()
+
+    /** Cache key for the on-disk PNG cache, derived from the UUID. */
+    fun cacheKey(): String = "skin_" + uuid.replace("-", "")
+}
+
 /** Token health for a Microsoft account, visualised in the UI (task 16). */
 enum class TokenStatus(val label: String) {
     VALID("有效"),
@@ -130,6 +166,11 @@ data class ThirdPartyAccount(
  * (task 16). The `message` is a ready-to-display instruction string from the
  * identity provider; `userCode` / `verificationUrl` are surfaced as copyable
  * fields.
+ *
+ * `redirectUri` (task 28) carries an optional custom callback address set via
+ * `authInit("redirect_uri")` or the Settings screen. When non-null the UI can
+ * open the embedded `microsoft_auth.html` callback page at this address and
+ * pass it through to `authCompleteMicrosoft`.
  */
 data class DeviceCodeChallenge(
     val userCode: String = "",
@@ -138,18 +179,25 @@ data class DeviceCodeChallenge(
     val expiresIn: Long = 0,
     val interval: Long = 5,
     val message: String = "",
+    /** Optional custom redirect URI for the OAuth browser redirect (task 28). */
+    val redirectUri: String? = null,
 ) {
-    /** Serialize back to the Rust core's challenge JSON (for `authCompleteMicrosoft`). */
-    fun toJsonString(): String = JsonValue.Obj(
-        mapOf(
-            "user_code" to JsonValue.Str(userCode),
-            "device_code" to JsonValue.Str(deviceCode),
-            "verification_uri" to JsonValue.Str(verificationUrl),
-            "expires_in" to JsonValue.Num(expiresIn.toDouble()),
-            "interval" to JsonValue.Num(interval.toDouble()),
-            "message" to JsonValue.Str(message),
-        ),
-    ).toJsonString()
+    /**
+     * Serialize back to the Rust core's challenge JSON (for `authCompleteMicrosoft`).
+     * `redirect_uri` is omitted when null so the JSON matches the 3.6 / 3.7+
+     * challenge shapes without it.
+     */
+    fun toJsonString(): String {
+        val entries = LinkedHashMap<String, JsonValue>(7)
+        entries["user_code"] = JsonValue.Str(userCode)
+        entries["device_code"] = JsonValue.Str(deviceCode)
+        entries["verification_uri"] = JsonValue.Str(verificationUrl)
+        entries["expires_in"] = JsonValue.Num(expiresIn.toDouble())
+        entries["interval"] = JsonValue.Num(interval.toDouble())
+        entries["message"] = JsonValue.Str(message)
+        redirectUri?.let { entries["redirect_uri"] = JsonValue.Str(it) }
+        return JsonValue.Obj(entries).toJsonString()
+    }
 }
 
 
@@ -259,7 +307,50 @@ fun parseDeviceCode(text: String): DeviceCodeChallenge? {
         expiresIn = root.num("expires_in")?.toLong() ?: 0,
         interval = root.num("interval")?.toLong() ?: 5,
         message = root.str("message").orEmpty(),
+        // redirect_uri is optional (task 28); null when absent.
+        redirectUri = root.str("redirect_uri"),
     )
+}
+
+/** Parse a [SkinModel] from JSON text (e.g. `authFetchSkin` result), or null on error. */
+fun parseSkinModel(text: String): SkinModel? {
+    val root = parseJson(text) as? JsonValue.Obj ?: return null
+    // Error objects from the core should not be parsed as skin data.
+    if (root.entries["error"] != null) return null
+    return SkinModel(
+        uuid = root.str("uuid").orEmpty(),
+        skinUrl = root.str("skin_url").orEmpty(),
+        capeUrl = root.str("cape_url"),
+        fetchedAt = root.num("fetched_at")?.toLong() ?: 0,
+        cachedAt = root.num("cached_at")?.toLong() ?: 0,
+        source = SkinSource.fromCode(root.str("source")),
+        hash = root.str("hash"),
+        model = root.str("model").orEmpty(),
+    )
+}
+
+/**
+ * Error returned by a login / refresh / skin operation against the Rust core.
+ * Carries the optional `cn_fallback_hint` (task 28) so the UI can surface a
+ * mainland-China proxy / mirror suggestion instead of a bare "login failed"
+ * toast. The original native error message (if any) is preserved as `cause`.
+ */
+class AuthLoginException(
+    override val message: String,
+    val cnFallbackHint: String? = null,
+) : IllegalStateException(message) {
+    companion object {
+        /** Parse a Rust auth error JSON (`{"error":"...","cn_fallback_hint":"..."}`)
+         *  into an [AuthLoginException], or null when [json] is not an error. */
+        fun fromErrorJson(json: String): AuthLoginException? {
+            val root = parseJson(json) as? JsonValue.Obj ?: return null
+            val err = root.str("error") ?: return null
+            return AuthLoginException(
+                message = err,
+                cnFallbackHint = root.str("cn_fallback_hint"),
+            )
+        }
+    }
 }
 
 /** Current unix epoch seconds (mirrors Rust `auth::model::now_secs`). */

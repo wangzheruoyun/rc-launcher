@@ -34,6 +34,10 @@ Checks, in order:
  13. any generated `<string>` holding a literal `%` carries `formatted="false"`
      (otherwise aapt2 treats it as a printf specifier).
 
+Concurrency: checks that are independent of one another are submitted to a
+thread pool and executed in parallel. Each check still reports through the
+usual `check()` helper, so the printed order and exit contract are unchanged.
+
 Usage:  python3 scripts/check_i18n.py
 """
 
@@ -43,6 +47,7 @@ import os
 import re
 import sys
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import i18n_common as C  # noqa: E402
@@ -50,6 +55,8 @@ import gen_android_strings as G  # noqa: E402
 
 FAILURES: list[str] = []
 CHECKS = 0
+# Guards CHECKS / FAILURES, which are mutated from worker threads.
+_LOCK = __import__("threading").Lock()
 
 
 def fail(msg: str) -> None:
@@ -87,7 +94,6 @@ def read_xml_strings(path: str) -> dict[str, str]:
     return out
 
 
-
 def _regenerate_golden():
     """Render the golden fixture with cargo; None when cargo is unavailable."""
     import shutil
@@ -109,6 +115,22 @@ def _regenerate_golden():
         return None
     return proc.stdout
 
+
+def _run(tasks: list) -> None:
+    """Execute a batch of zero-arg callables, preserving submission order.
+
+    Independent checks are submitted to a thread pool for parallelism; the
+    results are then gathered in the original order so that printed output
+    stays stable and diff-friendly.
+    """
+    if not tasks:
+        return
+    with ThreadPoolExecutor() as pool:
+        futures = [pool.submit(fn) for fn in tasks]
+        for fut in futures:
+            fut.result()
+
+
 def main() -> int:
     print("== i18n catalogues ==")
     catalogues = C.load_all()
@@ -116,12 +138,12 @@ def main() -> int:
     base_keys = set(base_entries)
 
     # 1) parse cleanliness
-    for tag, (entries, problems) in catalogues.items():
+    def _chk1_parse(tag, entries, problems):
         check(f"{tag}.properties parses cleanly", not problems, "; ".join(problems))
         check(f"{tag}.properties is non-empty", len(entries) > 0)
 
     # 2) key parity against the Chinese-first base
-    for tag, (entries, _p) in catalogues.items():
+    def _chk2_parity(tag, entries):
         keys = set(entries)
         missing = sorted(base_keys - keys)
         orphan = sorted(keys - base_keys)
@@ -129,16 +151,16 @@ def main() -> int:
         check(f"{tag} has no orphan keys", not orphan, f"orphan {orphan}")
 
     # 3) value sanity
-    for tag, (entries, _p) in catalogues.items():
+    def _chk3_values(tag, entries):
         empty = sorted(k for k, v in entries.items() if not v.strip())
         selfish = sorted(k for k, v in entries.items() if v.strip() == k)
         check(f"{tag} has no empty values", not empty, f"{empty}")
         check(f"{tag} has no value left as its key", not selfish, f"{selfish}")
 
     # 4) placeholder parity
-    for tag, (entries, _p) in catalogues.items():
+    def _chk4_placeholders(tag, entries):
         if tag == C.BASE_TAG:
-            continue
+            return
         drift = []
         for k, v in entries.items():
             if k not in base_entries:
@@ -149,29 +171,39 @@ def main() -> int:
                 drift.append(f"{k}: expected {sorted(want)}, got {sorted(got)}")
         check(f"{tag} placeholders match the base", not drift, "; ".join(drift))
 
+    # All per-catalogue checks (1-4) run concurrently; they only read `catalogues`.
+    catalogue_tasks = []
+    for tag, (entries, problems) in catalogues.items():
+        catalogue_tasks.append(lambda t=tag, e=entries, p=problems: _chk1_parse(t, e, p))
+        catalogue_tasks.append(lambda t=tag, e=entries: _chk2_parity(t, e))
+        catalogue_tasks.append(lambda t=tag, e=entries: _chk3_values(t, e))
+        catalogue_tasks.append(lambda t=tag, e=entries: _chk4_placeholders(t, e))
+    _run(catalogue_tasks)
+
     print("== generated Android artefacts ==")
-    # 5) freshness
-    stale = []
-    for path, content in G.targets().items():
+    # 5) freshness — every generated target is compared independently.
+    targets = G.targets()
+
+    def _chk5_target(path, content):
         rel = os.path.relpath(path, C.REPO)
         if not os.path.exists(path):
-            stale.append(f"{rel} (missing)")
-            continue
+            check("generated files are up to date", False, f"stale: [{rel} (missing)] — run python3 scripts/gen_android_strings.py")
+            return
         with open(path, encoding="utf-8") as fh:
             if fh.read() != content:
-                stale.append(rel)
-    check(
-        "generated files are up to date",
-        not stale,
-        f"stale: {stale} — run python3 scripts/gen_android_strings.py",
-    )
+                check("generated files are up to date", False, f"stale: [{rel}] — run python3 scripts/gen_android_strings.py")
+                return
+        # Record a per-target success so the aggregate message stays meaningful.
+        check(f"{rel} is up to date", True)
 
-    # 6) XML round-trip
-    for tag, dirname, _base in C.LANGUAGES:
+    _run([lambda p=path, c=content: _chk5_target(p, c) for path, content in targets.items()])
+
+    # 6) XML round-trip — one task per language.
+    def _chk6_language(tag, dirname):
         path = os.path.join(C.RES_DIR, dirname, "strings.xml")
         if not os.path.exists(path):
             check(f"{dirname}/strings.xml exists", False)
-            continue
+            return
         xml = read_xml_strings(path)
         entries = catalogues[tag][0]
         expected = {C.android_name(k): v for k, v in entries.items()}
@@ -186,6 +218,8 @@ def main() -> int:
             not mismatch,
             f"{[(n, xml[n], expected[n]) for n in mismatch[:3]]}",
         )
+
+    _run([lambda t=tag, d=dirname: _chk6_language(t, d) for tag, dirname, _base in C.LANGUAGES])
 
     print("== cross-language / cross-module consistency ==")
     # 7) the keys the Compose UI references
@@ -279,7 +313,7 @@ def main() -> int:
     check("AppLanguage Android qualifiers match", not qual_drift, "; ".join(qual_drift))
 
     print("== value formatters (Rust number.rs <-> Kotlin RcValueFormat.kt) ==")
-    # 11) the locale-aware value formatters
+    # 11) the locale-aware value formatters — file reads are independent.
     number_rs = os.path.join(
         C.REPO, "rust/crates/rc-launcher-core/src/i18n/number.rs"
     )
@@ -407,93 +441,107 @@ def main() -> int:
         r"pub fn i18n_format_kinds\(\) -> &'static \[&'static str\] \{(.*?)\n\}", ffi_src, re.S
     )
     advertised = re.findall(r'"([a-z_]+)"', kinds_fn.group(1)) if kinds_fn else []
+
+    def _chk11b():
+        # 11b) dynamic language packs: the two sides must agree on the plural rules,
+        # on the `_meta.*` vocabulary and on the limits, or a pack would behave
+        # differently in the core and in the picker.
+        pack_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/pack.rs")
+        format_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/format.rs")
+        option_kt = os.path.join(
+            C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/LanguageOption.kt"
+        )
+        strings_kt = os.path.join(
+            C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/RcStrings.kt"
+        )
+        with open(pack_rs, encoding="utf-8") as fh:
+            pack_src = fh.read()
+        with open(format_rs, encoding="utf-8") as fh:
+            format_src = fh.read()
+        with open(option_kt, encoding="utf-8") as fh:
+            option_src = fh.read()
+        with open(strings_kt, encoding="utf-8") as fh:
+            strings_src = fh.read()
+
+        # The plural rule ids are a wire contract (`_meta.plural`, `i18nBundle.plural`).
+        rust_rules = set(re.findall(r'PluralRule::\w+ => "([a-z_]+)"', format_src))
+        # Scope to the `RcPluralRule` enum body: `RcStringFormat.Plural` next door
+        # also spells its suffixes as `NAME("one")`, which would over-match.
+        kt_rule_block = re.search(
+            r"enum class RcPluralRule\(val id: String\) \{(.*?)\n    ;", strings_src, re.S
+        )
+        kt_rule_ids = (
+            set(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', kt_rule_block.group(1)))
+            if kt_rule_block
+            else set()
+        )
+        check(
+            "plural rule ids agree between core and Compose",
+            rust_rules and rust_rules == kt_rule_ids,
+            f"rust {sorted(rust_rules)} vs kotlin {sorted(kt_rule_ids)}",
+        )
+
+        # Every `_meta.*` key the parser reads must be documented in the module docs,
+        # so a translator writing a pack has one authoritative list.
+        meta_read = set(re.findall(r'meta\.get\("([a-z_]+)"\)', pack_src))
+        meta_documented = set(re.findall(r"//! _meta\.([a-z_]+)", pack_src))
+        check(
+            "every `_meta.*` key the pack parser reads is documented",
+            meta_read and meta_read <= meta_documented,
+            f"read {sorted(meta_read)} undocumented {sorted(meta_read - meta_documented)}",
+        )
+
+        # `_meta.` must be namespaced away from real UI keys, or a pack could inject a
+        # message the catalogue gate knows nothing about.
+        check(
+            "no shipped key collides with the pack metadata namespace",
+            not [k for k in base_keys if k.startswith("_meta.")],
+            f"{[k for k in base_keys if k.startswith('_meta.')]}",
+        )
+
+        # The picker rows must expose the fields the core actually emits.
+        emitted = set(re.findall(r'"(\w+)":', pack_src[pack_src.find("pub fn describe"):]))
+        consumed = set(re.findall(r'entries\["(\w+)"\]', option_src))
+        required_fields = {"tag", "native_name", "completeness", "dynamic", "plural", "parent"}
+        check(
+            "the picker consumes the pack fields the core emits",
+            required_fields <= emitted and required_fields <= consumed,
+            f"core-missing {sorted(required_fields - emitted)} "
+            f"kotlin-missing {sorted(required_fields - consumed)}",
+        )
+
+        # A pack must never be able to shadow a shipped language (that is the
+        # overlay's job) — the guard is what keeps the picker honest.
+        check(
+            "packs cannot shadow a built-in language",
+            "is a built-in language" in pack_src
+            and "Language::from_tag(&tag).is_some()" in pack_src,
+            "the built-in collision guard is gone from pack.rs",
+        )
+
+    # The FFI/advertised check and the whole 11b block share no mutable state,
+    # so they may run concurrently with one another.
     bridge_kt = os.path.join(
         C.REPO, "core/src/main/java/com/rc/launcher/core/RustBridge.kt"
     )
-    with open(bridge_kt, encoding="utf-8") as fh:
-        bridge_src = fh.read()
-    documented = set(re.findall(r"`([a-z_]+)`", bridge_src[bridge_src.find("external fun i18nFormat") - 900 : bridge_src.find("external fun i18nFormat")]))
-    check(
-        "i18nFormat advertises kinds and RustBridge documents them",
-        len(advertised) >= 10 and set(advertised) <= documented,
-        f"advertised {sorted(advertised)} undocumented {sorted(set(advertised) - documented)}",
-    )
 
-    # 11b) dynamic language packs: the two sides must agree on the plural rules,
-    # on the `_meta.*` vocabulary and on the limits, or a pack would behave
-    # differently in the core and in the picker.
-    pack_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/pack.rs")
-    format_rs = os.path.join(C.REPO, "rust/crates/rc-launcher-core/src/i18n/format.rs")
-    option_kt = os.path.join(
-        C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/LanguageOption.kt"
-    )
-    strings_kt = os.path.join(
-        C.REPO, "app/src/main/java/com/rc/launcher/ui/i18n/RcStrings.kt"
-    )
-    with open(pack_rs, encoding="utf-8") as fh:
-        pack_src = fh.read()
-    with open(format_rs, encoding="utf-8") as fh:
-        format_src = fh.read()
-    with open(option_kt, encoding="utf-8") as fh:
-        option_src = fh.read()
-    with open(strings_kt, encoding="utf-8") as fh:
-        strings_src = fh.read()
+    def _chk_ffi_docs():
+        with open(bridge_kt, encoding="utf-8") as fh:
+            bridge_src = fh.read()
+        documented = set(re.findall(
+            r"`([a-z_]+)`",
+            bridge_src[
+                bridge_src.find("external fun i18nFormat") - 900:
+                bridge_src.find("external fun i18nFormat")
+            ],
+        ))
+        check(
+            "i18nFormat advertises kinds and RustBridge documents them",
+            len(advertised) >= 10 and set(advertised) <= documented,
+            f"advertised {sorted(advertised)} undocumented {sorted(set(advertised) - documented)}",
+        )
 
-    # The plural rule ids are a wire contract (`_meta.plural`, `i18nBundle.plural`).
-    rust_rules = set(re.findall(r'PluralRule::\w+ => "([a-z_]+)"', format_src))
-    # Scope to the `RcPluralRule` enum body: `RcStringFormat.Plural` next door
-    # also spells its suffixes as `NAME("one")`, which would over-match.
-    kt_rule_block = re.search(
-        r"enum class RcPluralRule\(val id: String\) \{(.*?)\n    ;", strings_src, re.S
-    )
-    kt_rule_ids = (
-        set(re.findall(r'[A-Z_]+\("([a-z_]+)"\)', kt_rule_block.group(1)))
-        if kt_rule_block
-        else set()
-    )
-    check(
-        "plural rule ids agree between core and Compose",
-        rust_rules and rust_rules == kt_rule_ids,
-        f"rust {sorted(rust_rules)} vs kotlin {sorted(kt_rule_ids)}",
-    )
-
-    # Every `_meta.*` key the parser reads must be documented in the module docs,
-    # so a translator writing a pack has one authoritative list.
-    meta_read = set(re.findall(r'meta\.get\("([a-z_]+)"\)', pack_src))
-    meta_documented = set(re.findall(r"//! _meta\.([a-z_]+)", pack_src))
-    check(
-        "every `_meta.*` key the pack parser reads is documented",
-        meta_read and meta_read <= meta_documented,
-        f"read {sorted(meta_read)} undocumented {sorted(meta_read - meta_documented)}",
-    )
-
-    # `_meta.` must be namespaced away from real UI keys, or a pack could inject a
-    # message the catalogue gate knows nothing about.
-    check(
-        "no shipped key collides with the pack metadata namespace",
-        not [k for k in base_keys if k.startswith("_meta.")],
-        f"{[k for k in base_keys if k.startswith('_meta.')]}",
-    )
-
-    # The picker rows must expose the fields the core actually emits.
-    emitted = set(re.findall(r'"(\w+)":', pack_src[pack_src.find("pub fn describe") :]))
-    consumed = set(re.findall(r'entries\["(\w+)"\]', option_src))
-    required_fields = {"tag", "native_name", "completeness", "dynamic", "plural", "parent"}
-    check(
-        "the picker consumes the pack fields the core emits",
-        required_fields <= emitted and required_fields <= consumed,
-        f"core-missing {sorted(required_fields - emitted)} "
-        f"kotlin-missing {sorted(required_fields - consumed)}",
-    )
-
-    # A pack must never be able to shadow a shipped language (that is the
-    # overlay's job) — the guard is what keeps the picker honest.
-    check(
-        "packs cannot shadow a built-in language",
-        "is a built-in language" in pack_src
-        and "Language::from_tag(&tag).is_some()" in pack_src,
-        "the built-in collision guard is gone from pack.rs",
-    )
+    _run([_chk_ffi_docs, _chk11b])
 
     # 12) the Rust->Kotlin golden fixture must exist and be fresh
     golden = os.path.join(C.REPO, "app/src/test/resources/i18n_format_golden.tsv")
@@ -543,22 +591,24 @@ def main() -> int:
                 "committed fixture differs from a fresh render",
             )
 
-    # 13) `%` needs formatted="false" in the generated XML
-    unguarded = []
-    for tag, dirname, _base in C.LANGUAGES:
+    # 13) `%` needs formatted="false" in the generated XML — one task per language.
+    def _chk13_language(tag, dirname):
         path = os.path.join(C.RES_DIR, dirname, "strings.xml")
         with open(path, encoding="utf-8") as fh:
             xml_src = fh.read()
+        unguarded = []
         for name, attrs, body in re.findall(
             r'<string name="([^"]+)"([^>]*)>(.*?)</string>', xml_src, re.S
         ):
             if "%" in body and 'formatted="false"' not in attrs:
                 unguarded.append(f"{dirname}/{name}")
-    check(
-        'literal "%" values carry formatted="false"',
-        not unguarded,
-        f"{unguarded}",
-    )
+        check(
+            f'{dirname}: literal "%" values carry formatted="false"',
+            not unguarded,
+            f"{unguarded}",
+        )
+
+    _run([lambda t=tag, d=dirname: _chk13_language(t, d) for tag, dirname, _base in C.LANGUAGES])
 
     print()
     if FAILURES:

@@ -25,7 +25,9 @@ use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 
 use crate::error::{RcError, RcResult};
-use crate::translate::model::{TranslationLanguage, TranslationRequest, TranslationResult, TranslationSource};
+use crate::translate::model::{
+    TranslationLanguage, TranslationRequest, TranslationResult, TranslationSource,
+};
 
 /// Default max number of cache entries before LRU eviction kicks in.
 pub const DEFAULT_MAX_ENTRIES: usize = 4096;
@@ -141,7 +143,9 @@ impl TranslationCache {
     pub fn put(&self, req: &TranslationRequest, result: &TranslationResult) -> RcResult<()> {
         let key = Self::key_for(req);
         let path = self.path_for(&key);
-        let ttl = req.cache_ttl_secs.unwrap_or(self.config.default_ttl.as_secs());
+        let ttl = req
+            .cache_ttl_secs
+            .unwrap_or(self.config.default_ttl.as_secs());
         let serialized = serde_json::to_vec(result).map_err(RcError::Json)?;
         let bytes = serialized.len() as u64;
         let entry = CacheEntry {
@@ -316,8 +320,14 @@ mod tests {
         zh.target = TranslationLanguage::ZhCn;
         let mut hk = req("hello");
         hk.target = TranslationLanguage::ZhHant;
-        assert_ne!(TranslationCache::key_for(&en), TranslationCache::key_for(&zh));
-        assert_ne!(TranslationCache::key_for(&zh), TranslationCache::key_for(&hk));
+        assert_ne!(
+            TranslationCache::key_for(&en),
+            TranslationCache::key_for(&zh)
+        );
+        assert_ne!(
+            TranslationCache::key_for(&zh),
+            TranslationCache::key_for(&hk)
+        );
     }
 
     #[test]

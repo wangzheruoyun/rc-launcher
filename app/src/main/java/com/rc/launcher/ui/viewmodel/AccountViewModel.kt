@@ -8,6 +8,7 @@ import com.rc.launcher.ui.model.Account
 import com.rc.launcher.ui.model.AccountRepositories
 import com.rc.launcher.ui.model.AccountRepository
 import com.rc.launcher.ui.model.DeviceCodeChallenge
+import com.rc.launcher.ui.model.SkinModel
 import com.rc.launcher.ui.model.MicrosoftAccount
 import com.rc.launcher.ui.model.ThirdPartyLogin
 import com.rc.launcher.ui.model.ThirdPartyServerInfo
@@ -100,18 +101,33 @@ class AccountViewModel(
         }
     }
 
-    /** Step 1 of the Microsoft login: fetch a device-code challenge. */
-    suspend fun beginMicrosoftLogin() {
+    /**
+     * Step 1 of the Microsoft login: fetch a device-code challenge.
+     * `redirectUri` (task 28) optionally specifies a custom callback address,
+     * e.g. pointing to the embedded `microsoft_auth.html` asset.
+     */
+    suspend fun beginMicrosoftLogin(redirectUri: String? = null) {
         _loginState.value = LoginState.SigningIn
         try {
-            val challenge = repository.beginMicrosoft()
+            val challenge = repository.beginMicrosoft(redirectUri)
             _loginState.value = LoginState.AwaitingDeviceCode(challenge)
         } catch (e: Throwable) {
-            _loginState.value = LoginState.Error(e.message ?: "获取设备码失败")
+            // Surface the mainland-China network fallback hint (task 28) when the
+            // device-code request fails due to a network-level error.
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "获取设备码失败"
+            _loginState.value = LoginState.Error(
+                if (hint != null) "$msg\n\n$hint" else msg
+            )
         }
     }
 
-    /** Step 2 of the Microsoft login: complete the flow for the pending challenge. */
+    /**
+     * Step 2 of the Microsoft login: complete the flow for the pending challenge.
+     * If the failure is a network-level error, the [AuthLoginException]'s
+     * `cn_fallbackHint` is appended to the message so the user sees a proxy /
+     * mirror suggestion (task 28).
+     */
     suspend fun completeMicrosoftLogin() {
         val challenge = (_loginState.value as? LoginState.AwaitingDeviceCode)?.challenge ?: return
         _loginState.value = LoginState.SigningIn
@@ -121,7 +137,11 @@ class AccountViewModel(
             selectAccount(account.uuid)
             loadAccounts()
         } catch (e: Throwable) {
-            _loginState.value = LoginState.Error(e.message ?: "微软登录失败")
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "微软登录失败"
+            _loginState.value = LoginState.Error(
+                if (hint != null) "$msg\n\n$hint" else msg
+            )
         }
     }
 
@@ -132,7 +152,11 @@ class AccountViewModel(
             val info = repository.beginThirdParty(serverUrl)
             _loginState.value = LoginState.ThirdPartyServer(info)
         } catch (e: Throwable) {
-            _loginState.value = LoginState.Error(e.message ?: "获取第三方验证服务器信息失败")
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "获取第三方验证服务器信息失败"
+            _loginState.value = LoginState.Error(
+                if (hint != null) "$msg\n\n$hint" else msg
+            )
         }
     }
 
@@ -149,7 +173,11 @@ class AccountViewModel(
                 _loginState.value = LoginState.Error("第三方登录失败")
             }
         } catch (e: Throwable) {
-            _loginState.value = LoginState.Error(e.message ?: "第三方登录失败")
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "第三方登录失败"
+            _loginState.value = LoginState.Error(
+                if (hint != null) "$msg\n\n$hint" else msg
+            )
         }
     }
 
@@ -175,7 +203,9 @@ class AccountViewModel(
             repository.refresh(uuid)
             loadAccounts()
         } catch (e: Throwable) {
-            _error.value = e.message ?: "刷新令牌失败"
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "刷新令牌失败"
+            _error.value = if (hint != null) "$msg\n\n$hint" else msg
         }
     }
 
@@ -185,7 +215,9 @@ class AccountViewModel(
             repository.ensureFresh(uuid)
             loadAccounts()
         } catch (e: Throwable) {
-            _error.value = e.message ?: "更新令牌失败"
+            val hint = (e as? com.rc.launcher.ui.model.AuthLoginException)?.cnFallbackHint
+            val msg = e.message ?: "更新令牌失败"
+            _error.value = if (hint != null) "$msg\n\n$hint" else msg
         }
     }
 
@@ -204,6 +236,75 @@ class AccountViewModel(
     /** Clear the last [error] message. */
     fun clearError() {
         _error.value = null
+    }
+
+    // === Skin preview state (task 22) =======================================
+
+    /** Current skin model for the selected account, or null when not loaded. */
+    private val _skinModel = MutableStateFlow<SkinModel?>(null)
+    val skinModel: StateFlow<SkinModel?> = _skinModel.asStateFlow()
+
+    /** Error message for skin fetch/upload operations. */
+    private val _skinError = MutableStateFlow<String?>(null)
+    val skinError: StateFlow<String?> = _skinError.asStateFlow()
+
+    /** Whether a skin upload is in flight. */
+    private val _isUploading = MutableStateFlow(false)
+    val isUploading: StateFlow<Boolean> = _isUploading.asStateFlow()
+
+    /** Whether skin data is being fetched from the network. */
+    private val _isFetchingSkin = MutableStateFlow(false)
+    val isFetchingSkin: StateFlow<Boolean> = _isFetchingSkin.asStateFlow()
+
+    /**
+     * Fetch the skin model for [uuid] from Mojang's session profile API.
+     * Runs on [Dispatchers.IO]; the result is cached in the ViewModel's
+     * state so the UI can show it immediately on the next load (offline).
+     */
+    suspend fun loadSkin(uuid: String) {
+        _isFetchingSkin.value = true
+        _skinError.value = null
+        try {
+            val model = repository.fetchSkin(uuid)
+            _skinModel.value = model
+        } catch (e: Throwable) {
+            _skinError.value = e.message ?: "获取皮肤失败"
+        } finally {
+            _isFetchingSkin.value = false
+        }
+    }
+
+    /**
+     * Upload a custom skin for [uuid]. `model` is "slim" or "classic";
+     * `skinBase64` is the PNG bytes base64-encoded.
+     */
+    suspend fun uploadSkin(uuid: String, model: String, skinBase64: String) {
+        _isUploading.value = true
+        _skinError.value = null
+        try {
+            val ok = repository.uploadSkin(uuid, model, skinBase64)
+            if (!ok) {
+                _skinError.value = "皮肤上传失败"
+            } else {
+                // Re-fetch the updated skin model after upload.
+                loadSkin(uuid)
+            }
+        } catch (e: Throwable) {
+            _skinError.value = e.message ?: "皮肤上传失败"
+        } finally {
+            _isUploading.value = false
+        }
+    }
+
+    /** Clear the skin-specific error message. */
+    fun clearSkinError() {
+        _skinError.value = null
+    }
+
+    /** Clear the skin model (e.g. when switching accounts). */
+    fun clearSkin() {
+        _skinModel.value = null
+        _skinError.value = null
     }
 }
 

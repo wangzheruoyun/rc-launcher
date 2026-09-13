@@ -46,6 +46,7 @@
     <string name="common_loading">加载中…</string>
     <string name="common_next">下一步</string>
     <string name="common_ok">确定</string>
+    <string name="common_open_in_browser">在浏览器中查看</string>
     <string name="common_previous">上一步</string>
     <string name="common_refresh">刷新</string>
     <string name="common_retry">重试</string>
@@ -53,12 +54,24 @@
     <string name="common_unavailable">不可用</string>
 
     <!-- crash -->
+    <string name="crash_action_copy_details">复制详情</string>
+    <string name="crash_action_export_report">导出报告</string>
+    <string name="crash_action_retry_launch">重试启动</string>
+    <string name="crash_action_submit_report">上报反馈</string>
+    <string name="crash_action_switch_renderer">切换渲染器</string>
     <string name="crash_authentication_failure_advice">账号会话失效：请重新登录账号；仅单人游戏可改用离线账号。</string>
     <string name="crash_authentication_failure_summary">账号会话被拒绝</string>
     <string name="crash_clean_exit_advice">游戏正常退出，无需处理。</string>
     <string name="crash_clean_exit_summary">游戏正常退出</string>
     <string name="crash_corrupted_file_advice">文件损坏或不完整：请重新下载该版本（及报错的模组/依赖库），通常是下载中断导致。</string>
     <string name="crash_corrupted_file_summary">游戏文件损坏或不完整</string>
+    <string name="crash_device_info_abi">ABI</string>
+    <string name="crash_device_info_gles">OpenGL ES</string>
+    <string name="crash_device_info_java_version">Java 版本</string>
+    <string name="crash_device_info_lwjgl_version">LWJGL</string>
+    <string name="crash_device_info_model">设备</string>
+    <string name="crash_device_info_opengl">OpenGL</string>
+    <string name="crash_device_info_renderer">渲染器</string>
     <string name="crash_disk_full_advice">存储空间不足：请清理空间后重新启动。</string>
     <string name="crash_disk_full_summary">设备存储空间不足</string>
     <string name="crash_game_error_advice">游戏抛出未处理异常：请查看日志堆栈；通常移除最近新增的模组或资源包即可恢复。</string>
@@ -79,6 +92,9 @@
     <string name="crash_out_of_memory_summary">游戏内存耗尽</string>
     <string name="crash_permission_denied_advice">没有文件访问权限：请授予存储权限，或将游戏目录迁移到应用私有目录。</string>
     <string name="crash_permission_denied_summary">启动器缺少文件系统权限</string>
+    <string name="crash_recovery_re_download_natives">请通过镜像源重新下载 LWJGL / 渲染器原生库，然后重试。如果镜像源无法访问，请在设置 → 网络中配置代理。</string>
+    <string name="crash_recovery_re_download_version">请通过镜像源重新下载版本文件（下载可能已中断），然后重试。如果镜像源无法访问，请在设置 → 网络中配置代理。</string>
+    <string name="crash_recovery_switch_renderer">请在设置 → 渲染器中切换 OpenGL/ES 翻译器，然后重试。如果问题仍未解决，请通过镜像源重新下载运行时原生库。</string>
     <string name="crash_unknown_advice">崩溃原因不明：请导出完整日志反馈；可先在无模组状态下启动以缩小范围。</string>
     <string name="crash_unknown_summary">游戏因未知原因崩溃</string>
     <string name="crash_unsupported_java_version_advice">Java 版本不匹配：请切换到该版本所需的 Java（1.16 及更早用 Java 8，1.17-1.20.4 用 Java 17，1.20.5+ 用 Java 21）。</string>
@@ -117,6 +133,35 @@
     <string name="error_timeout">请求超时：{detail}</string>
     <string name="error_unknown">未知错误：{detail}</string>
 
+    <!-- file_manager -->
+    <string name="file_manager_back">返回</string>
+    <string name="file_manager_confirm_delete_body">将删除 {count} 项，合计 {bytes}。</string>
+    <string name="file_manager_confirm_delete_body_dirs">将删除 {count} 项（含子目录），合计 {bytes}。</string>
+    <string name="file_manager_confirm_delete_irreversible">此操作不可撤销。</string>
+    <string name="file_manager_confirm_delete_title">确认删除？</string>
+    <string name="file_manager_confirm_overwrite_body">目标 {path} 已存在，合计 {bytes}。继续操作将覆盖原文件。</string>
+    <string name="file_manager_confirm_overwrite_title">覆盖目标？</string>
+    <string name="file_manager_copy">复制…</string>
+    <string name="file_manager_delete">删除</string>
+    <string name="file_manager_dialog_copy_label">新名称</string>
+    <string name="file_manager_dialog_copy_title">复制到…</string>
+    <string name="file_manager_dialog_create_label">名称</string>
+    <string name="file_manager_dialog_create_title">新建文件夹</string>
+    <string name="file_manager_dialog_rename_label">新名称</string>
+    <string name="file_manager_dialog_rename_title">重命名</string>
+    <string name="file_manager_empty">此目录为空。点击「新建文件夹」或「导入」开始。</string>
+    <string name="file_manager_extract_here">解压到当前目录</string>
+    <string name="file_manager_import">导入</string>
+    <string name="file_manager_kind_dir">文件夹</string>
+    <string name="file_manager_kind_file">文件</string>
+    <string name="file_manager_kind_link">链接</string>
+    <string name="file_manager_more">更多</string>
+    <string name="file_manager_new_folder">新建文件夹</string>
+    <string name="file_manager_open">打开</string>
+    <string name="file_manager_refresh">刷新</string>
+    <string name="file_manager_rename">重命名</string>
+    <string name="file_manager_up">上一级</string>
+
     <!-- format -->
     <string name="format_decimal_separator">.</string>
     <string name="format_duration_join">{first} {second}</string>
@@ -127,6 +172,53 @@
     <string name="format_progress_of">{done} / {total}</string>
     <string name="format_rate">{value} {unit}/秒</string>
     <string name="format_size">{value} {unit}</string>
+
+    <!-- hud -->
+    <string name="hud_action_force_quit">强制退出</string>
+    <string name="hud_action_log_passthrough">允许穿透操作</string>
+    <string name="hud_action_open_log">实时日志</string>
+    <string name="hud_action_screenshot">截图</string>
+    <string name="hud_action_switch_input">切换输入模式</string>
+    <string name="hud_close_content_description">关闭 HUD</string>
+    <string name="hud_collapse_content_description">收起悬浮菜单</string>
+    <string name="hud_crash_exit_code">退出码</string>
+    <string name="hud_crash_na">N/A</string>
+    <string name="hud_crash_signal">信号</string>
+    <string name="hud_drag_content_description">拖拽移动 HUD</string>
+    <string name="hud_expand_content_description">展开悬浮菜单</string>
+    <string name="hud_input_mode_mouse">鼠标模式</string>
+    <string name="hud_input_mode_touch">触摸模式</string>
+    <string name="hud_log_clear">清空日志</string>
+    <string name="hud_log_export">导出日志</string>
+    <string name="hud_log_export_done">已导出到 {path}</string>
+    <string name="hud_log_export_failed">导出失败：{error}</string>
+    <string name="hud_log_exporting">导出中…</string>
+    <string name="hud_log_filter_all">全部</string>
+    <string name="hud_log_filter_errors">错误</string>
+    <string name="hud_log_filter_stderr">错误输出</string>
+    <string name="hud_log_filter_stdout">标准输出</string>
+    <string name="hud_log_filter_warn">警告</string>
+    <string name="hud_log_level_debug">调试</string>
+    <string name="hud_log_level_error">错误</string>
+    <string name="hud_log_level_fatal">致命</string>
+    <string name="hud_log_level_info">信息</string>
+    <string name="hud_log_level_stderr">标准错误</string>
+    <string name="hud_log_level_stdout">标准输出</string>
+    <string name="hud_log_level_trace">追踪</string>
+    <string name="hud_log_level_unknown">未知</string>
+    <string name="hud_log_level_warn">警告</string>
+    <string name="hud_log_overlay_title">实时日志</string>
+    <string name="hud_log_passthrough">穿透到游戏</string>
+    <string name="hud_log_passthrough_summary">允许触摸穿透日志面板到达游戏下方</string>
+    <string name="hud_log_search_placeholder">搜索日志…</string>
+    <string name="hud_log_snapshot">崩溃快照</string>
+    <string name="hud_menu_title">游戏内悬浮菜单</string>
+    <string name="hud_setting_anti_misoperation">防误触区域</string>
+    <string name="hud_setting_anti_misoperation_summary">触摸 HUD 周围时不传递给游戏</string>
+    <string name="hud_setting_auto_hide">自动隐藏</string>
+    <string name="hud_setting_auto_hide_summary">菜单空闲后自动收起</string>
+    <string name="hud_setting_opacity">透明度</string>
+    <string name="hud_setting_title">HUD 设置</string>
 
     <!-- language -->
     <string name="language_en">English</string>
@@ -142,6 +234,13 @@
     <string name="launch_state_running">运行中</string>
     <string name="launch_state_stopped">已停止</string>
 
+    <!-- mod -->
+    <string name="mod_collapse">收起</string>
+    <string name="mod_dependencies">依赖</string>
+    <string name="mod_description">描述</string>
+    <string name="mod_expand">展开</string>
+    <string name="mod_version">版本</string>
+
     <!-- nav -->
     <string name="nav_accounts">账户</string>
     <string name="nav_downloads">下载</string>
@@ -154,11 +253,29 @@
     <string name="relative_now">刚刚</string>
     <string name="relative_past">{duration}前</string>
 
+    <!-- resource_pack -->
+    <string name="resource_pack_compatible">兼容</string>
+    <string name="resource_pack_delete">删除</string>
+    <string name="resource_pack_delete_confirm">确认删除资源包 {name}？</string>
+    <string name="resource_pack_description">描述</string>
+    <string name="resource_pack_disable">停用</string>
+    <string name="resource_pack_download">下载</string>
+    <string name="resource_pack_empty">暂无资源包</string>
+    <string name="resource_pack_enable">启用</string>
+    <string name="resource_pack_import">导入</string>
+    <string name="resource_pack_incompatible">不兼容</string>
+    <string name="resource_pack_pack_format">格式</string>
+    <string name="resource_pack_preview">预览</string>
+
     <!-- screen -->
     <string name="screen_awt_title">AWT / Swing 兼容层</string>
     <string name="screen_controller_title">按键映射</string>
+    <string name="screen_file_manager_title">文件管理</string>
     <string name="screen_install_title">安装新实例</string>
     <string name="screen_instance_detail_title">实例详情</string>
+    <string name="screen_resource_pack_title">资源包管理</string>
+    <string name="screen_shader_pack_title">光影包管理</string>
+    <string name="screen_world_manager_title">世界存档</string>
 
     <!-- settings -->
     <string name="settings_language_applied">界面语言已切换为{language}</string>
@@ -174,11 +291,131 @@
     <string name="settings_section_network">网络优化（国内加速）</string>
     <string name="settings_section_renderer">渲染器与画面</string>
 
+    <!-- shader_pack -->
+    <string name="shader_pack_delete">删除</string>
+    <string name="shader_pack_delete_confirm">确认删除光影包 {name}？</string>
+    <string name="shader_pack_disable">停用</string>
+    <string name="shader_pack_download">下载</string>
+    <string name="shader_pack_empty">暂无光影包</string>
+    <string name="shader_pack_enable">启用</string>
+    <string name="shader_pack_import">导入</string>
+    <string name="shader_pack_invalid">无效</string>
+    <string name="shader_pack_preview">预览</string>
+    <string name="shader_pack_valid">有效</string>
+
+    <!-- skin -->
+    <string name="skin_cached_offline">状态：已缓存（离线可用）</string>
+    <string name="skin_fetching">正在获取皮肤…</string>
+    <string name="skin_has_cape">抛羽翎：已拥有</string>
+    <string name="skin_invalid_dimensions">图片尺寸 {w}x{h} 不符合 Minecraft 皮肤规范
+支持的尺寸：64x64, 64x32, 128x128, 128x64, 128x192, 256x256, 256x128</string>
+    <string name="skin_model_alex">Alex（Slim）</string>
+    <string name="skin_model_steve">Steve（Classic）</string>
+    <string name="skin_no_texture">无皮肤纹理</string>
+    <string name="skin_offline_account">离线账户无法从 Mojang 获取皮肤</string>
+    <string name="skin_pick_local">选择本地图片</string>
+    <string name="skin_preview_title">皮肤预览</string>
+    <string name="skin_read_error">无法读取图片文件</string>
+    <string name="skin_select_model">请选择皮肤类型：</string>
+    <string name="skin_source_custom">自定义</string>
+    <string name="skin_source_official">官方</string>
+    <string name="skin_tutorial_finish">完成</string>
+    <string name="skin_tutorial_format_note">PNG 格式，尺寸必须为 64x64、64x32 或更高偶数尺寸</string>
+    <string name="skin_tutorial_link_task14">与任务 14 新手教程联动：首次登录后会自动提示</string>
+    <string name="skin_tutorial_next">下一步</string>
+    <string name="skin_tutorial_official_note">在 Minecraft 官网个人资料页下载官方皮肤</string>
+    <string name="skin_tutorial_pick">选择本地图片</string>
+    <string name="skin_tutorial_previous">上一步</string>
+    <string name="skin_tutorial_rewatch">重看皮肤教程</string>
+    <string name="skin_tutorial_skip">跳过</string>
+    <string name="skin_tutorial_start">开始皮肤导入教程</string>
+    <string name="skin_tutorial_step_apply_body">选择正确的皮肤类型（Steve/Classic 或 Alex/Slim），点击「上传本地皮肤」即可上传到 Mojang，对话框会实时显示上传进度。</string>
+    <string name="skin_tutorial_step_apply_title">应用到账户</string>
+    <string name="skin_tutorial_step_done_body">皮肤导入教程已完成。你可以在随时查看此教程。</string>
+    <string name="skin_tutorial_step_done_title">教程完成</string>
+    <string name="skin_tutorial_step_format_body">皮肤必须为 PNG 格式，推荐尺寸 64x64（Steve 经典）或 64x32（Alex 版）。支持的尺寸包括：64x64、64x32、128x128、128x64、128x192、256x256、256x128。</string>
+    <string name="skin_tutorial_step_format_title">文件格式</string>
+    <string name="skin_tutorial_step_get_body">可通过官方途径获取皮肤：登录 Minecraft 官网账户，在个人资料页下载皮肤。第三方皮肤站（如 TheSkindex、Minecraft Skins 等）也提供丰富的皮肤资源。</string>
+    <string name="skin_tutorial_step_get_title">获取皮肤</string>
+    <string name="skin_tutorial_step_import_body">在账户页面打开皮肤预览对话框，点击「选择本地图片」，从相册或文件中选择一张 PNG 图片，启动器会自动校验尺寸。</string>
+    <string name="skin_tutorial_step_import_title">导入皮肤</string>
+    <string name="skin_tutorial_step_indicator">第 {current} / {total} 步</string>
+    <string name="skin_tutorial_thirdparty_note">第三方皮肤站提供更多选择，注意版权和安全</string>
+    <string name="skin_tutorial_title">皮肤导入教程</string>
+    <string name="skin_upload">上传本地皮肤</string>
+    <string name="skin_upload_cancel">取消</string>
+    <string name="skin_upload_confirm">确认上传</string>
+    <string name="skin_upload_note">注意：上传后皮肤将在 Mojang 官方同步，可能需要一些时间生效。</string>
+    <string name="skin_uploading">正在上传…</string>
+    <string name="skin_uploading_label">正在上传皮肤…</string>
+    <string name="skin_view_in_browser">在浏览器查看完整皮肤</string>
+
     <!-- theme -->
     <string name="theme_night_dark">深色</string>
     <string name="theme_night_light">浅色</string>
     <string name="theme_night_system">跟随系统</string>
     <string name="theme_night_toggle">切换夜间模式</string>
+
+    <!-- translate -->
+    <string name="translate_batch">批量翻译</string>
+    <string name="translate_batch_summary">已翻译 {count} 条</string>
+    <string name="translate_cache_clear">清空缓存</string>
+    <string name="translate_cache_count">已缓存 {count} 条翻译</string>
+    <string name="translate_cache_size">占 {bytes}</string>
+    <string name="translate_cache_title">翻译缓存</string>
+    <string name="translate_cn_hint">已使用中国大陆网络优化（DoH / 镜像 / 断点续传）</string>
+    <string name="translate_empty">没有可翻译的内容</string>
+    <string name="translate_enable">启用翻译</string>
+    <string name="translate_gateway_auth">授权令牌</string>
+    <string name="translate_gateway_model">模型</string>
+    <string name="translate_gateway_system_prompt">系统提示词</string>
+    <string name="translate_gateway_title">翻译网关</string>
+    <string name="translate_gateway_url">网关地址</string>
+    <string name="translate_language">目标语言</string>
+    <string name="translate_language_auto">跟随原文</string>
+    <string name="translate_language_en">English</string>
+    <string name="translate_language_zh_cn">简体中文</string>
+    <string name="translate_language_zh_hant">繁體中文</string>
+    <string name="translate_mode">翻译方式</string>
+    <string name="translate_mode_hybrid">字典 + 在线</string>
+    <string name="translate_mode_offline">仅字典</string>
+    <string name="translate_mode_online">仅在线</string>
+    <string name="translate_network_fallback">网络异常时降级到字典</string>
+    <string name="translate_network_fallback_summary">大陆网络不通时仍能翻译常见模组与术语</string>
+    <string name="translate_refresh">重新翻译</string>
+    <string name="translate_show_original">显示原文</string>
+    <string name="translate_show_translated">显示译文</string>
+    <string name="translate_source">来源</string>
+    <string name="translate_source_cache">缓存</string>
+    <string name="translate_source_dictionary">字典</string>
+    <string name="translate_source_gateway">在线</string>
+    <string name="translate_source_passthrough">无需翻译</string>
+    <string name="translate_source_unavailable">翻译失败</string>
+    <string name="translate_subtitle">自动翻译模组名称、简介与更新日志</string>
+    <string name="translate_title">翻译</string>
+
+    <!-- tutorial -->
+    <string name="tutorial_finish">完成</string>
+    <string name="tutorial_next">下一步</string>
+    <string name="tutorial_previous">上一步</string>
+    <string name="tutorial_replay_button">再次查看新手教程</string>
+    <string name="tutorial_replay_summary">完成首次引导后可随时重看，便于熟悉新增功能</string>
+    <string name="tutorial_rewatch">重看教程</string>
+    <string name="tutorial_skip">跳过</string>
+    <string name="tutorial_step_account_body">先去「账户」页添加一个微软 / Xbox 账号。无法直连时可在「设置」里启用镜像源或第三方验证服务。</string>
+    <string name="tutorial_step_account_title">添加账号</string>
+    <string name="tutorial_step_done_body">已完成引导。随时可在「设置 → 帮助」中重看本教程，或重置后从首步开始。</string>
+    <string name="tutorial_step_done_title">准备好了</string>
+    <string name="tutorial_step_import_body">「下载」页支持直接导入 CurseForge、Modrinth 与本地整合包；皮肤导入教程可在「账户」页查看。</string>
+    <string name="tutorial_step_import_title">导入整合包 / 皮肤</string>
+    <string name="tutorial_step_instance_body">「实例」页可一键安装新版或导入整合包，已支持 Forge、NeoForge、Fabric、Quilt。</string>
+    <string name="tutorial_step_instance_title">创建实例</string>
+    <string name="tutorial_step_renderer_body">默认使用 GL4ES，兼容性好。如遇画面异常可在「设置 → 渲染器」中切换到 Zink / ANGLE / VirGL。</string>
+    <string name="tutorial_step_renderer_title">选择渲染器</string>
+    <string name="tutorial_step_indicator">第 {current} / {total} 步</string>
+    <string name="tutorial_title">新手引导</string>
+    <string name="tutorial_welcome_body">RC 启动器专为 Minecraft Java 版打造，针对中国大陆网络环境深度优化。接下来的几步会带你快速上手。</string>
+    <string name="tutorial_welcome_title">欢迎使用 RC 启动器</string>
 
     <!-- unit -->
     <string name="unit_byte">B</string>
@@ -187,4 +424,37 @@
     <string name="unit_mib">MB</string>
     <string name="unit_pib">PB</string>
     <string name="unit_tib">TB</string>
+
+    <!-- world -->
+    <string name="world_backup">备份</string>
+    <string name="world_backup_done">备份完成</string>
+    <string name="world_backup_failed">备份失败</string>
+    <string name="world_confirm_delete_body">删除存档 {name} 及其备份，此操作不可撤销。</string>
+    <string name="world_confirm_delete_title">确认删除</string>
+    <string name="world_confirm_rename_label">新名称</string>
+    <string name="world_confirm_rename_title">重命名存档</string>
+    <string name="world_delete">删除</string>
+    <string name="world_delete_done">已删除</string>
+    <string name="world_delete_failed">删除失败</string>
+    <string name="world_empty">暂无存档</string>
+    <string name="world_export">导出</string>
+    <string name="world_export_done">导出完成</string>
+    <string name="world_export_failed">导出失败</string>
+    <string name="world_game_mode">游戏模式</string>
+    <string name="world_has_backup">已有备份</string>
+    <string name="world_import">导入</string>
+    <string name="world_import_done">导入完成</string>
+    <string name="world_import_failed">导入失败</string>
+    <string name="world_last_modified">最后修改</string>
+    <string name="world_play_time">游戏时间</string>
+    <string name="world_recover">恢复</string>
+    <string name="world_recover_done">恢复完成</string>
+    <string name="world_recover_failed">恢复失败</string>
+    <string name="world_rename">重命名</string>
+    <string name="world_rename_done">已重命名</string>
+    <string name="world_rename_failed">重命名失败</string>
+    <string name="world_thumbnail">缩略图</string>
+    <string name="auth_login_microsoft_blocked">无法连接到 Microsoft 身份验证服务。请检查代理或镜像设置。</string>
+    <string name="auth_login_xbl_blocked">无法连接到 Xbox Live 服务。请在设置中配置代理后重试。</string>
+    <string name="auth_login_minecraft_blocked">无法连接到 Mojang/Minecraft 服务。请在设置中更换镜像后重试。</string>
 </resources>

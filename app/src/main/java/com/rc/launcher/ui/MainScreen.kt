@@ -64,8 +64,7 @@ import com.rc.launcher.ui.theme.ThemeViewModel
  * lost and the game surface keeps its coordinate space.
  */
 @Composable
-fun MainScreen() {
-    val navController = rememberNavController()
+fun MainScreen(navController: NavHostController = rememberNavController()) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
 
     // Resolve the current destination to a type-safe route object.

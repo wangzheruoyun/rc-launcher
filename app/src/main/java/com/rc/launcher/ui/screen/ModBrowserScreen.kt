@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.rc.launcher.ui.i18n.RcStringKeys
 import com.rc.launcher.ui.i18n.rcString
+import com.rc.launcher.ui.component.ExpandableText
 import com.rc.launcher.ui.translate.TranslationViewModel
 import kotlinx.coroutines.launch
 
@@ -57,11 +57,19 @@ import kotlinx.coroutines.launch
  * One row in the mod browser. The text fields show the original and (when
  * translation is enabled) the translated copy side-by-side; a small badge
  * tells the player which source produced the translation.
+ *
+ * `version` and `dependencies` are kept out of [ExpandableText] so they
+ * remain visible even when the (potentially very long) summary is collapsed
+ * (task 25).
  */
 data class ModEntry(
     val id: String,
     val name: String,
     val summary: String,
+    /** Declared mod version (e.g. "0.4.4"); shown as a badge, never collapsed. */
+    val version: String? = null,
+    /** Short list of hard + soft dependency mod-ids for the info chip. */
+    val dependencies: List<String> = emptyList(),
 )
 
 /**
@@ -191,6 +199,10 @@ fun ModBrowserScreen(
 /**
  * One row of the browser. Shows the mod name, its summary, and (when
  * translation is enabled) the translated copy side-by-side.
+ *
+ * Version and dependency info are rendered **outside** [ExpandableText]
+ * so they are always visible regardless of the expand/collapse state
+ * (task 25: "preserve version content and dependency information").
  */
 @Composable
 private fun ModRow(
@@ -199,7 +211,13 @@ private fun ModRow(
     enabled: Boolean,
     showOriginal: Boolean,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+    ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -210,17 +228,55 @@ private fun ModRow(
                     SourceBadge(translation.source)
                 }
             }
+
+            // Version + dependencies are always visible (not collapsed)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                mod.version?.let { v ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Text(
+                            text = "${rcString(RcStringKeys.MOD_VERSION)}: $v",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+                }
+                if (mod.dependencies.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                    ) {
+                        Text(
+                            text = "${rcString(RcStringKeys.MOD_DEPENDENCIES)}: ${mod.dependencies.joinToString { it }}",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                        )
+                    }
+                }
+            }
+
+            // Summary / description via ExpandableText (task 25)
             if (showOriginal) {
-                Text(
+                ExpandableText(
                     text = translation?.original ?: mod.summary,
                     style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    collapsedMaxLines = 3,
                 )
             }
             if (enabled && translation != null && translation.translated != translation.original) {
-                Text(
+                ExpandableText(
                     text = translation.translated,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
+                    collapsedMaxLines = 3,
                 )
             }
         }
@@ -318,14 +374,13 @@ private fun ModePicker(
 
 /** A small fixed catalog for the screen's preview. */
 private fun sampleCatalog(): List<ModEntry> = listOf(
-    ModEntry("sodium", "Sodium", "A lightweight Minecraft mod that improves FPS by optimising chunk rendering and other client-side systems."),
-    ModEntry("iris", "Iris", "A modern shader pack loader for Sodium. Supports custom GLSL shaders and integrates seamlessly with OptiFine alternatives."),
-    ModEntry("fabric-api", "Fabric API", "The core API for Fabric Loader — provides hooks, registries and inter-mod compatibility."),
-    ModEntry("jei", "JEI", "Just Enough Items — an item and recipe viewer mod for Minecraft. Browse crafting recipes, smelting and more."),
-    ModEntry("lithium", "Lithium", "A server-side optimisation mod that improves tick rate and physics performance without changing vanilla behaviour."),
-    ModEntry("fabric-carpet", "Carpet", "A lightweight vanilla-quality mod for testing and debugging Minecraft mechanics on the client and server."),
-    ModEntry("create", "Create", "A Minecraft mod that adds mechanical automation, kinetic energy and decorative blocks powered by rotational force."),
-    ModEntry("tinkers-construct", "Tinkers' Construct", "A mod focused on tool crafting — build custom tools from modular parts with diverse materials and abilities."),
-    ModEntry("jei", "JEI", "Just Enough Items — an item and recipe viewer mod for Minecraft. Browse crafting recipes, smelting and more."),
-    ModEntry("lazydfu", "LazyDFU", "Speeds up game startup by deferring DataFixerUpper operations until they are actually needed."),
+    ModEntry("sodium", "Sodium", "A lightweight Minecraft mod that improves FPS by optimising chunk rendering and other client-side systems.", version = "0.4.4", dependencies = listOf("fabric-loader", "minecraft")),
+    ModEntry("iris", "Iris", "A modern shader pack loader for Sodium. Supports custom GLSL shaders and integrates seamlessly with OptiFine alternatives.", version = "1.8.2", dependencies = listOf("fabric-loader", "minecraft", "sodium")),
+    ModEntry("fabric-api", "Fabric API", "The core API for Fabric Loader — provides hooks, registries and inter-mod compatibility.", version = "0.102.0", dependencies = listOf("fabric-loader", "minecraft")),
+    ModEntry("jei", "JEI", "Just Enough Items — an item and recipe viewer mod for Minecraft. Browse crafting recipes, smelting and more.", version = "16.0.0", dependencies = listOf("minecraft", "forge")),
+    ModEntry("lithium", "Lithium", "A server-side optimisation mod that improves tick rate and physics performance without changing vanilla behaviour.", version = "0.14.0", dependencies = listOf("fabric-loader", "minecraft")),
+    ModEntry("fabric-carpet", "Carpet", "A lightweight vanilla-quality mod for testing and debugging Minecraft mechanics on the client and server.", version = "1.4.43", dependencies = listOf("fabric-loader", "minecraft")),
+    ModEntry("create", "Create", "A Minecraft mod that adds mechanical automation, kinetic energy and decorative blocks powered by rotational force.", version = "6.0.4", dependencies = listOf("minecraft", "forge", "registrate")),
+    ModEntry("tinkers-construct", "Tinkers' Construct", "A mod focused on tool crafting — build custom tools from modular parts with diverse materials and abilities.", version = "3.6.2", dependencies = listOf("minecraft", "forge", "mantle")),
+    ModEntry("lazydfu", "LazyDFU", "Speeds up game startup by deferring DataFixerUpper operations until they are actually needed.", version = "0.1.8", dependencies = listOf("fabric-loader", "minecraft")),
 )

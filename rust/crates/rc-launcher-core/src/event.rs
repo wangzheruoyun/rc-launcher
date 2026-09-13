@@ -126,6 +126,35 @@ impl Event {
         }
     }
 
+    /// Build a `progress` event with speed and status (task 30).
+    pub fn progress_with_meta(
+        scope: &str,
+        message: impl Into<String>,
+        downloaded: u64,
+        total: Option<u64>,
+        speed_bps: u64,
+        status: &str,
+    ) -> Self {
+        let fraction = total
+            .filter(|t| *t > 0)
+            .map(|t| downloaded as f64 / t as f64);
+        let data = json!({
+            "downloaded": downloaded,
+            "total": total,
+            "fraction": fraction,
+            "speed_bps": speed_bps,
+            "status": status,
+        });
+        Event {
+            seq: 0,
+            kind: EventKind::Progress,
+            message: message.into(),
+            scope: scope.to_string(),
+            code: Some("progress".to_string()),
+            data: Some(data),
+        }
+    }
+
     /// Build a `log` event with a `level` field in the payload.
     pub fn log(scope: &str, level: &str, line: impl Into<String>) -> Self {
         Event {
@@ -135,6 +164,24 @@ impl Event {
             scope: scope.to_string(),
             code: None,
             data: Some(json!({ "level": level })),
+        }
+    }
+
+    /// Build a `log` event that carries *both* the stream origin
+    /// (`stdout`/`stderr`) and a classified level (e.g. `INFO`, `WARN`,
+    /// `ERROR` from the log4j marker, or the stream type as a fallback).
+    ///
+    /// This is the event shape consumed by the in-game log viewer
+    /// (task 21): the Kotlin `GameLogLine` reads `level` for filtering
+    /// and `stream` for error colouring, so both travel in the payload.
+    pub fn game_log(scope: &str, stream: &str, level: &str, line: impl Into<String>) -> Self {
+        Event {
+            seq: 0,
+            kind: EventKind::Log,
+            message: line.into(),
+            scope: scope.to_string(),
+            code: None,
+            data: Some(json!({ "stream": stream, "level": level })),
         }
     }
 
@@ -322,9 +369,37 @@ impl EventBus {
         self.publish(Event::progress(scope, message, downloaded, total));
     }
 
+    /// Convenience: build and publish a `progress` event with speed + status
+    /// (task 30 — enhanced download progress).
+    pub fn publish_progress_with_meta(
+        &self,
+        scope: &str,
+        message: impl Into<String>,
+        downloaded: u64,
+        total: Option<u64>,
+        speed_bps: u64,
+        status: &str,
+    ) {
+        self.publish(Event::progress_with_meta(
+            scope, message, downloaded, total, speed_bps, status,
+        ));
+    }
+
     /// Convenience: build and publish a `log` event.
     pub fn publish_log(&self, scope: &str, level: &str, line: impl Into<String>) {
         self.publish(Event::log(scope, level, line));
+    }
+
+    /// Convenience: build and publish a `game_log` event with both
+    /// stream and level (task 21 in-game log viewer).
+    pub fn publish_game_log(
+        &self,
+        scope: &str,
+        stream: &str,
+        level: &str,
+        line: impl Into<String>,
+    ) {
+        self.publish(Event::game_log(scope, stream, level, line));
     }
 
     /// Convenience: build and publish a `lifecycle` event.
@@ -384,9 +459,29 @@ pub fn publish_progress(
     event_bus().publish_progress(scope, message, downloaded, total);
 }
 
+/// Convenience: build and publish an enhanced `progress` event on the global
+/// bus (task 30 — includes `speed_bps` and `status` in the payload).
+pub fn publish_progress_with_meta(
+    scope: &str,
+    message: impl Into<String>,
+    downloaded: u64,
+    total: Option<u64>,
+    speed_bps: u64,
+    status: &str,
+) {
+    event_bus().publish_progress_with_meta(scope, message, downloaded, total, speed_bps, status);
+}
+
 /// Convenience: build and publish a `log` event on the global bus.
 pub fn publish_log(scope: &str, level: &str, line: impl Into<String>) {
     event_bus().publish_log(scope, level, line);
+}
+
+/// Convenience: build and publish a `game_log` event on the global bus
+/// (task 21: real-time in-game log viewer). Carries both the stream origin
+/// (`stdout`/`stderr`) and a classified level (e.g. `INFO`, `WARN`).
+pub fn publish_game_log(scope: &str, stream: &str, level: &str, line: impl Into<String>) {
+    event_bus().publish_game_log(scope, stream, level, line);
 }
 
 /// Convenience: build and publish a `lifecycle` event on the global bus.
@@ -509,6 +604,30 @@ mod tests {
         assert!(ej.contains("download_failed"));
         assert_eq!(g[1].kind, EventKind::Lifecycle);
         assert_eq!(g[1].data.as_ref().unwrap()["result"]["succeeded"], 1);
+    }
+
+    #[test]
+    fn game_log_carries_stream_and_level() {
+        let bus = EventBus::new();
+        let c = Arc::new(Collector::default());
+        bus.subscribe(c.clone());
+
+        bus.publish_game_log("game", "stdout", "INFO", "[14:23:45] [main/INFO]: hello");
+
+        let g = c.events.lock().unwrap();
+        assert_eq!(g.len(), 1);
+        let e = &g[0];
+        assert_eq!(e.kind, EventKind::Log);
+        assert_eq!(e.scope, "game");
+        assert_eq!(e.message, "[14:23:45] [main/INFO]: hello");
+        let data = e.data.as_ref().unwrap();
+        assert_eq!(data["stream"], "stdout");
+        assert_eq!(data["level"], "INFO");
+
+        // The JSON payload must round-trip across the JNI boundary as-is.
+        let json = e.to_json();
+        assert!(json.contains("stdout"));
+        assert!(json.contains("INFO"));
     }
 }
 

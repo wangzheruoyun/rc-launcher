@@ -38,6 +38,10 @@ import com.rc.launcher.ui.screen.ControlLayoutLibraryScreen
 import com.rc.launcher.ui.screen.AwtScreen
 import com.rc.launcher.ui.screen.InstallWizardScreen
 import com.rc.launcher.ui.screen.OnboardingScreen
+import com.rc.launcher.ui.screen.FileManagerScreen
+import com.rc.launcher.ui.screen.WorldManagerScreen
+import com.rc.launcher.ui.screen.ResourcePackManagerScreen
+import com.rc.launcher.ui.screen.ShaderPackManagerScreen
 import com.rc.launcher.ui.i18n.RcStringKeys
 import com.rc.launcher.ui.i18n.rcString
 
@@ -70,12 +74,45 @@ import com.rc.launcher.ui.i18n.rcString
 
 @Serializable data object InstallRoute
 
+/** Task 17: modpack import pipeline (CurseForge / Modrinth / MultiMC). */
+@Serializable data object ModpackImportRoute
+
 /** Task 14: first-run / rewatch onboarding flow. */
 @Serializable data object OnboardingRoute
 
 @Serializable data object TranslationRoute
 
 @Serializable data class InstanceDetailRoute(val id: String)
+
+/**
+ * Task 19: in-app small file manager. Carries the optional
+ * [instanceId] (so the screen can resolve the per-instance
+ * `effectiveGameDir`) and an optional [subdir] (so a deep-link like
+ * "open the saves folder" can land directly inside it).
+ */
+@Serializable data class FileManagerRoute(
+    val instanceId: String? = null,
+    val subdir: String? = null,
+)
+
+/**
+ * Task 26: world / save archive management screen.
+ * Carries the instance id so the screen can resolve the per-instance
+ *  directory through the version-isolation strategy.
+ */
+@Serializable data class WorldManagerRoute(val instanceId: String)
+
+/**
+ * Task 27: resource-pack browsing & management screen.
+ * Lists resource packs in the per-instance  directory.
+ */
+@Serializable data class ResourcePackManagerRoute(val instanceId: String)
+
+/**
+ * Task 27: shader-pack browsing & management screen.
+ * Lists shader packs in the per-instance  directory.
+ */
+@Serializable data class ShaderPackManagerRoute(val instanceId: String)
 
 /**
  * Legacy string-route table. Kept as the single source of truth for the
@@ -93,6 +130,10 @@ object RcRoutes {
     const val INSTALL = "install"
     const val ONBOARDING = "onboarding"
     const val INSTANCE_DETAIL = "instance/{id}"
+    const val FILE_MANAGER = "file-manager"
+    const val WORLD_MANAGER = "world-manager"
+    const val RESOURCE_PACK_MANAGER = "resource-pack-manager"
+    const val SHADER_PACK_MANAGER = "shader-pack-manager"
 
     /**
      * Builds the concrete serialised route string for the instance-detail screen
@@ -218,7 +259,7 @@ fun RcNavHost(
     ) {
         composable<HomeRoute> { HomeScreen(navController) }
         composable<InstancesRoute> { InstancesScreen(navController) }
-        composable<DownloadsRoute> { ModBrowserScreen() }
+        composable<DownloadsRoute> { DownloadsScreen() }
         composable<SettingsRoute> { SettingsScreen(navController = navController) }
         composable<AccountsRoute> { AccountsScreen() }
         composable<ControllerRoute> {
@@ -232,6 +273,7 @@ fun RcNavHost(
         }
         composable<AwtRoute> { AwtScreen(onBack = { navController.popBackStack() }) }
         composable<InstallRoute> { InstallWizardScreen(navController) }
+        composable<ModpackImportRoute> { ModpackImportScreen(navController) }
         // Task 14: first-run / rewatch onboarding. Pop back to home on finish
         // so the bottom-bar layout stays intact; navigating "forward" would
         // leave the onboarding on top of the home screen.
@@ -245,6 +287,43 @@ fun RcNavHost(
             val route = backStackEntry.toRoute<InstanceDetailRoute>()
             InstanceDetailScreen(
                 id = route.id,
+                navController = navController,
+            )
+        }
+        // Task 19: in-app small file manager. Both [instanceId] and
+        // [subdir] are optional: omitting them opens the default game
+        // root; supplying them lands the user on the per-instance
+        // effective game dir (and, optionally, on a sub-directory like
+        // "saves" / "mods" / "resourcepacks" / "shaderpacks").
+        composable<FileManagerRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<FileManagerRoute>()
+            FileManagerScreen(
+                navController = navController,
+                instanceId = route.instanceId,
+                initialSubdir = route.subdir,
+            )
+        }
+        // Task 26: world / save archive management.
+        composable<WorldManagerRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<WorldManagerRoute>()
+            WorldManagerScreen(
+                instanceId = route.instanceId,
+                navController = navController,
+            )
+        }
+        // Task 27: resource-pack management.
+        composable<ResourcePackManagerRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<ResourcePackManagerRoute>()
+            ResourcePackManagerScreen(
+                instanceId = route.instanceId,
+                navController = navController,
+            )
+        }
+        // Task 27: shader-pack management.
+        composable<ShaderPackManagerRoute> { backStackEntry ->
+            val route = backStackEntry.toRoute<ShaderPackManagerRoute>()
+            ShaderPackManagerScreen(
+                instanceId = route.instanceId,
                 navController = navController,
             )
         }

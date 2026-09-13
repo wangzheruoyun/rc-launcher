@@ -7,13 +7,18 @@
 
 use crate::error::RcResult;
 use crate::game::version::fetch_json_with_mirrors;
-use crate::net::MirrorProvider;
+use crate::net::NetworkClient;
 
 /// Canonical Mojang version-manifest URL. Mirrors rewrite the host onto their
 /// own path-preserving CDN (see [`crate::net::mirror`]), so the same URL works
 /// on the origin and on BMCLAPI/MCBBS/Aliyun.
 pub const VERSION_MANIFEST_URL: &str =
     "https://launchermeta.mojang.com/mc/game/version_manifest.json";
+
+/// Associated alias kept for ergonomics; identical to [`VERSION_MANIFEST_URL`].
+/// [`crate::game::version_list::VersionListCache`] and callers use this to make
+/// it explicit that the value is the canonical, mirrorable URL.
+pub const CANONICAL_URL: &str = VERSION_MANIFEST_URL;
 
 /// The full version manifest.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -70,8 +75,12 @@ impl VersionManifest {
     /// retrying against the China-mainland mirrors. This is the entry point of
     /// the dependency-resolution pipeline (task 4): callers then resolve a
     /// specific version and build a download plan from it.
-    pub async fn fetch(client: &reqwest::Client, mirror: &MirrorProvider) -> RcResult<Self> {
-        fetch_json_with_mirrors(client, mirror, VERSION_MANIFEST_URL).await
+    ///
+    /// The `NetworkClient` provides mirror ordering, DoH/proxy, connection
+    /// pooling, timeouts and exponential backoff — all the China-mainland
+    /// optimisation in one place.
+    pub async fn fetch(client: &NetworkClient) -> RcResult<Self> {
+        fetch_json_with_mirrors(client, VERSION_MANIFEST_URL).await
     }
 
     /// Resolve a user-typed alias (e.g. `1.20`) to the canonical version id using
@@ -107,7 +116,7 @@ mod tests {
     use std::net::TcpListener;
     use std::sync::Arc;
 
-    use crate::net::MirrorProvider;
+    use crate::net::NetworkClient;
 
     /// Minimal blocking HTTP/1.0 test server; `handler` returns `(status, body)`.
     fn start_json_server(
@@ -190,10 +199,13 @@ mod tests {
             ]
         }"#;
         let (base, _h) = start_json_server(move |_path| (200, manifest_json.to_string()));
-        let provider =
-            MirrorProvider::new(vec![crate::net::MirrorSource::new("local", "Local", &base)]);
-        let client = reqwest::Client::new();
-        let m = VersionManifest::fetch(&client, &provider).await.unwrap();
+        let client = NetworkClient::builder()
+            .mirrors(vec![crate::net::MirrorSource::new("local", "Local", &base)])
+            .mirror_mode(crate::net::MirrorMode::MirrorsOnly)
+            .build()
+            .await
+            .unwrap();
+        let m = VersionManifest::fetch(&client).await.unwrap();
         assert_eq!(m.latest.release, "1.20.4");
         assert_eq!(m.versions.len(), 1);
         assert_eq!(m.versions[0].id, "1.20.4");

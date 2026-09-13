@@ -232,6 +232,8 @@ data class LauncherSettings(
     val autoSelectFastestMirror: Boolean = true,
     val useDoh: Boolean = true,
     val dohServerUrl: String = DohCatalog.ALIYUN.url,
+    // --- Proxy for auth / downloads (task 28) ---
+    val proxyUrl: String = "",
 
     // --- Java / memory ---
     val javaHeapMb: Int = DEFAULT_HEAP_MB,

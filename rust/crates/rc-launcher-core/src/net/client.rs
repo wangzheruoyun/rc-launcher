@@ -247,17 +247,87 @@ impl NetworkClient {
         serde_json::from_str(&txt).map_err(RcError::Json)
     }
 
+    /// Fetch and parse JSON from a URL, trying each mirror candidate with
+    /// exponential backoff on transport errors and falling through to the next
+    /// candidate on HTTP errors or parse failures ("polluted mirrors").
+    ///
+    /// This is the most resilient path for metadata fetches (version manifest,
+    /// mod catalog, modpack index, translation gateway) on China-mainland
+    /// networks: a mirror may answer HTTP 200 with an HTML error page or a
+    /// half-cached stub, and we must treat that as "not this one" rather than
+    /// surfacing a parse error to the caller. Every candidate is retried with
+    /// exponential backoff on transport failures, and the mirror ordering /
+    /// DoH / proxy / connection-pool tuning from the [`NetworkConfig`] all
+    /// apply transparently.
+    pub async fn fetch_json_with_fallback<T: serde::de::DeserializeOwned>(
+        &self,
+        url: &str,
+    ) -> RcResult<T> {
+        let candidates = self.candidate_urls(url);
+        let mut last_err: Option<RcError> = None;
+        for cand in &candidates {
+            let mut attempt: u32 = 0;
+            loop {
+                let resp = match self.client.get(cand).send().await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        attempt += 1;
+                        if attempt > self.config.max_retries {
+                            last_err = Some(RcError::Network(format!("request to {cand}: {e}")));
+                            break;
+                        }
+                        let backoff = compute_backoff(
+                            attempt,
+                            self.config.retry_base,
+                            self.config.retry_max,
+                            self.config.retry_jitter,
+                        );
+                        tokio::time::sleep(backoff).await;
+                        continue;
+                    }
+                };
+                if !resp.status().is_success() {
+                    last_err = Some(RcError::Network(format!(
+                        "HTTP {} from {cand}",
+                        resp.status()
+                    )));
+                    break; // non-retryable HTTP error; try next candidate (mirror)
+                }
+                let text = match resp.text().await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        last_err = Some(RcError::Network(format!(
+                            "body read from {cand} failed: {e}"
+                        )));
+                        break;
+                    }
+                };
+                match serde_json::from_str::<T>(&text) {
+                    Ok(v) => return Ok(v),
+                    Err(e) => {
+                        // Polluted mirror: 200 OK but invalid JSON (captive portal,
+                        // CDN error page, half-cached stub). Fall through to the
+                        // next candidate instead of surfacing a parse error.
+                        last_err = Some(RcError::Other(format!(
+                            "parse from {cand} failed ({} bytes): {e}",
+                            text.len()
+                        )));
+                        break;
+                    }
+                }
+            }
+        }
+        Err(last_err
+            .unwrap_or_else(|| RcError::Other(format!("failed to fetch {url}: no candidates"))))
+    }
+
     /// Convenience: POST a JSON body to a URL and read the response as text.
     ///
     /// Inherits the full network optimisation layer (mirrors / DoH / proxy /
     /// connection reuse) — the request goes through the same retry /
     /// backoff path as [`Self::get`]. Used by the translation service
     /// (task 13) to call the OpenAI-compatible chat-completions gateway.
-    pub async fn post_json(
-        &self,
-        url: &str,
-        body: serde_json::Value,
-    ) -> RcResult<String> {
+    pub async fn post_json(&self, url: &str, body: serde_json::Value) -> RcResult<String> {
         let resp = self.post(url, body).await?;
         resp.text()
             .await
@@ -268,11 +338,7 @@ impl NetworkClient {
     /// response is returned as-is so the caller can inspect headers,
     /// status, etc. (used by the translation service to keep the raw
     /// chat-completions response for diagnostics).
-    pub async fn post(
-        &self,
-        url: &str,
-        body: serde_json::Value,
-    ) -> RcResult<reqwest::Response> {
+    pub async fn post(&self, url: &str, body: serde_json::Value) -> RcResult<reqwest::Response> {
         let candidates = self.candidate_urls(url);
         // POST probes need a body, so we can't reuse the cheap `Fetcher`
         // abstraction; issue once per candidate and retry transport failures
@@ -281,13 +347,7 @@ impl NetworkClient {
         for cand in &candidates {
             let mut attempt: u32 = 0;
             loop {
-                match self
-                    .client
-                    .post(cand)
-                    .json(&body)
-                    .send()
-                    .await
-                {
+                match self.client.post(cand).json(&body).send().await {
                     Ok(r) if r.status().is_success() => return Ok(r),
                     Ok(r) => {
                         last_err = Some(RcError::Network(format!(
@@ -313,9 +373,8 @@ impl NetworkClient {
                 tokio::time::sleep(delay).await;
             }
         }
-        Err(last_err.unwrap_or_else(|| {
-            RcError::Network(format!("POST {url}: no candidate answered"))
-        }))
+        Err(last_err
+            .unwrap_or_else(|| RcError::Network(format!("POST {url}: no candidate answered"))))
     }
 
     /// Measure mirrors and pin the fastest reachable one.

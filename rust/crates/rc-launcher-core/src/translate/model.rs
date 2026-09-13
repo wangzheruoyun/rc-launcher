@@ -44,10 +44,9 @@ impl serde::Serialize for TranslationLanguage {
 impl<'de> serde::Deserialize<'de> for TranslationLanguage {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let raw = String::deserialize(d)?;
-        TranslationLanguage::from_tag(&raw)
-            .ok_or_else(|| serde::de::Error::custom(format!(
-                "unknown TranslationLanguage tag: {raw:?}"
-            )))
+        TranslationLanguage::from_tag(&raw).ok_or_else(|| {
+            serde::de::Error::custom(format!("unknown TranslationLanguage tag: {raw:?}"))
+        })
     }
 }
 
@@ -171,7 +170,7 @@ impl TranslationSource {
 pub struct TranslationGateway {
     /// Gateway URL (default: `https://api.kilo.ai/api/gateway/chat/completions`).
     pub url: String,
-    /// Model name (default: `minimax/minimax-m3:free`).
+    /// Model name (default: `poolside/laguna-xs-2.1:free`).
     pub model: String,
     /// Optional bearer token (kept in memory only — never written to logs).
     pub auth_bearer: Option<String>,
@@ -196,7 +195,7 @@ impl Default for TranslationGateway {
     fn default() -> Self {
         Self {
             url: "https://api.kilo.ai/api/gateway/chat/completions".to_string(),
-            model: "minimax/minimax-m3:free".to_string(),
+            model: "poolside/laguna-xs-2.1:free".to_string(),
             auth_bearer: None,
             auth_header: None,
             auth_header_name: "Authorization".to_string(),

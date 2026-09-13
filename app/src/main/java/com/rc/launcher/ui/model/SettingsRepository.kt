@@ -59,6 +59,7 @@ class SharedPreferencesSettingsRepository(
             autoSelectFastestMirror = bool(KEY_AUTO_MIRROR, s.autoSelectFastestMirror),
             useDoh = bool(KEY_USE_DOH, s.useDoh),
             dohServerUrl = str(KEY_DOH_URL, s.dohServerUrl),
+            proxyUrl = str(KEY_PROXY_URL, s.proxyUrl),
             javaHeapMb = int(KEY_HEAP, s.javaHeapMb),
             javaMinHeapMb = intOrNull(KEY_MIN_HEAP),
             autoAllocateMemory = bool(KEY_AUTO_HEAP, s.autoAllocateMemory),
@@ -99,6 +100,7 @@ class SharedPreferencesSettingsRepository(
             putBoolean(KEY_AUTO_MIRROR, settings.autoSelectFastestMirror)
             putBoolean(KEY_USE_DOH, settings.useDoh)
             putString(KEY_DOH_URL, settings.dohServerUrl)
+            putString(KEY_PROXY_URL, settings.proxyUrl)
             putInt(KEY_HEAP, settings.javaHeapMb)
             if (settings.javaMinHeapMb != null) {
                 putInt(KEY_MIN_HEAP, settings.javaMinHeapMb)
@@ -178,6 +180,7 @@ class SharedPreferencesSettingsRepository(
         private const val KEY_RENDERER_ANGLE_BACKEND = "renderer_angle_backend"
         private const val KEY_RENDERER_GL4ES_NOSRGB = "renderer_gl4es_nosrgb"
         private const val KEY_RENDERER_VIRGL_SERVER = "renderer_virgl_server"
+        private const val KEY_PROXY_URL = "proxy_url"
     }
 }
 

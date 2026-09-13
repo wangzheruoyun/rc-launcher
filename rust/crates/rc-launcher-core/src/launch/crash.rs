@@ -29,6 +29,8 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::net::default_mirrors;
+
 /// Maximum length of a single evidence line kept in a report.
 const MAX_EVIDENCE_LEN: usize = 400;
 /// Maximum number of evidence lines kept (a crash log can be huge).
@@ -122,6 +124,105 @@ fn catalog_str(language: crate::i18n::Language, key: &str) -> &'static str {
         .unwrap_or("")
 }
 
+/// Device / renderer context aggregated into a crash report (task 24).
+///
+/// The launcher feeds this in from `LaunchOptions` (ABI, renderer, LWJGL
+/// version, Java version) and from the Android layer (device model). OpenGL /
+/// GLES versions are parsed from the game log when they appear there. An
+/// *empty* `DeviceInfo` is always valid — the report still stands, it simply
+/// lacks the hardware fingerprint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// Android device model (e.g. "Xiaomi 13"), empty when unknown.
+    pub device_model: String,
+    /// Device ABI (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`).
+    pub abi: String,
+    /// Java runtime version string (e.g. "Java 17").
+    pub java_version: String,
+    /// Active renderer id (see [`Renderer::id`](crate::launch::options::Renderer)).
+    pub renderer_id: String,
+    /// The `.so` LWJGL `dlopen`s for this renderer.
+    pub renderer_lib: String,
+    /// LWJGL bundle directory (`3.3.3` / `3.4.1`).
+    pub lwjgl_version: String,
+    /// OpenGL version string, parsed from the log if present.
+    pub opengl_version: Option<String>,
+    /// OpenGL ES version string, parsed from the log if present.
+    pub gles_version: Option<String>,
+}
+
+/// A user-facing operation the crash dialog can offer (task 24).
+///
+/// Each category selects the subset of actions that make sense for it — a
+/// `CleanExit` has no "switch renderer" button, while a `NativeCrash` offers
+/// every action including report submission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CrashAction {
+    /// Copy the full crash report text to the clipboard.
+    CopyDetails,
+    /// Export the report to a file / share intent.
+    ExportReport,
+    /// Submit the report to the launcher's crash / bug tracker.
+    SubmitReport,
+    /// Retry launching the game (possibly with a different renderer).
+    RetryLaunch,
+    /// Switch the OpenGL(ES) translation renderer and retry.
+    SwitchRenderer,
+}
+
+impl CrashAction {
+    /// Stable id used in JSON / the Kotlin `CrashAction` enum (task 24).
+    pub fn id(self) -> &'static str {
+        match self {
+            CrashAction::CopyDetails => "copy_details",
+            CrashAction::ExportReport => "export_report",
+            CrashAction::SubmitReport => "submit_report",
+            CrashAction::RetryLaunch => "retry_launch",
+            CrashAction::SwitchRenderer => "switch_renderer",
+        }
+    }
+
+    /// Localized label via the i18n catalogue (key `crash.action.<id>`).
+    pub fn label(self, language: crate::i18n::Language) -> String {
+        crate::i18n::t_in(language, &format!("crash.action.{}", self.id()))
+    }
+}
+
+/// A structured recovery suggestion: re-download from mirrors, switch renderer,
+/// enable a proxy (task 24 / task 3).
+///
+/// Built by [`CrashCategory::recovery`] and filled in by [`diagnose`] with the
+/// concrete mirror sources from [`crate::net::default_mirrors`], so the Compose
+/// UI can offer a one-tap "re-download via mirror" without parsing a log line.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoverySuggestion {
+    /// Localisation key for the description (i18n key `crash.recovery.<key>`).
+    pub description: String,
+    /// Mirror source ids the UI should try (e.g. `["bmclapi", "mcbbs"]`).
+    pub mirror_ids: Vec<String>,
+    /// Whether to suggest enabling a proxy.
+    pub suggest_proxy: bool,
+    /// Specific files to re-download (mirrors `CrashReport::evidence`).
+    pub re_download: Vec<String>,
+}
+
+impl RecoverySuggestion {
+    /// Localised description for the UI (task 20).
+    pub fn localized_description(&self, language: crate::i18n::Language) -> String {
+        crate::i18n::t_in(language, &format!("crash.recovery.{}", self.description))
+    }
+
+    /// Mirror source objects the UI can present as one-tap download targets.
+    pub fn mirrors(&self) -> Vec<crate::net::MirrorSource> {
+        let all = default_mirrors();
+        self.mirror_ids
+            .iter()
+            .filter_map(|id| all.iter().find(|m| &m.id == id).cloned())
+            .collect()
+    }
+}
+
 impl CrashCategory {
     /// Stable id used as the i18n key by the UI (task 20).
     pub fn id(self) -> &'static str {
@@ -189,6 +290,69 @@ impl CrashCategory {
     pub fn localized_advice(self, language: crate::i18n::Language) -> String {
         crate::i18n::t_in(language, &crate::i18n::crash_advice_key(self.id()))
     }
+
+    /// The user-facing actions the crash dialog should offer for this category
+    /// (task 24). `CleanExit` / `UserTerminated` offer fewer actions; `GraphicsFailure`
+    /// / `NativeCrash` add the renderer switch and a bug-report submission because
+    /// the GL stack is the prime suspect.
+    pub fn actions(self) -> &'static [CrashAction] {
+        match self {
+            CrashCategory::CleanExit => &[CrashAction::CopyDetails, CrashAction::ExportReport],
+            CrashCategory::UserTerminated | CrashCategory::KilledBySystem => &[
+                CrashAction::CopyDetails,
+                CrashAction::ExportReport,
+                CrashAction::RetryLaunch,
+            ],
+            CrashCategory::UnsupportedJavaVersion
+            | CrashCategory::CorruptedFile
+            | CrashCategory::MissingMainClass
+            | CrashCategory::MissingNativeLibrary => &[
+                CrashAction::CopyDetails,
+                CrashAction::ExportReport,
+                CrashAction::RetryLaunch,
+                CrashAction::SwitchRenderer,
+            ],
+            CrashCategory::GraphicsFailure | CrashCategory::NativeCrash => &[
+                CrashAction::CopyDetails,
+                CrashAction::ExportReport,
+                CrashAction::SubmitReport,
+                CrashAction::RetryLaunch,
+                CrashAction::SwitchRenderer,
+            ],
+            CrashCategory::OutOfMemory
+            | CrashCategory::ModLoaderFailure
+            | CrashCategory::GameError
+            | CrashCategory::Unknown => &[
+                CrashAction::CopyDetails,
+                CrashAction::ExportReport,
+                CrashAction::SubmitReport,
+                CrashAction::RetryLaunch,
+            ],
+            CrashCategory::AuthenticationFailure
+            | CrashCategory::DiskFull
+            | CrashCategory::PermissionDenied => &[
+                CrashAction::CopyDetails,
+                CrashAction::ExportReport,
+                CrashAction::RetryLaunch,
+            ],
+        }
+    }
+
+    /// Network-layer recovery suggestion for re-downloading missing / corrupt
+    /// files via mirror / proxy fallback (task 24 / task 3).
+    ///
+    /// Returns `None` for categories where re-downloading is not the fix
+    /// (clean exit, user stop, auth, disk, permissions, …).
+    pub fn recovery(self) -> Option<&'static str> {
+        match self {
+            CrashCategory::MissingNativeLibrary => Some("re_download_natives"),
+            CrashCategory::CorruptedFile => Some("re_download_version"),
+            CrashCategory::MissingMainClass => Some("re_download_version"),
+            CrashCategory::GraphicsFailure | CrashCategory::NativeCrash => Some("switch_renderer"),
+            _ => None,
+        }
+    }
+
     /// How serious this category is, for UI triage and automatic remediation.
     ///
     /// Mirrors FCL's `JVMCrashActivity` severity tiers but is computed in the
@@ -407,6 +571,19 @@ fn signal_name(sig: i32) -> Option<&'static str> {
     })
 }
 
+/// Build a `RecoverySuggestion` from the category, consulting the built-in
+/// mirror sources so the UI can offer a one-tap re-download (task 24 / 3).
+fn build_recovery(category: CrashCategory) -> Option<RecoverySuggestion> {
+    let key = category.recovery()?;
+    let mirrors = default_mirrors();
+    Some(RecoverySuggestion {
+        description: key.to_string(),
+        mirror_ids: mirrors.iter().map(|m| m.id.clone()).collect(),
+        suggest_proxy: true,
+        re_download: Vec::new(),
+    })
+}
+
 /// The verdict for one finished game process.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CrashReport {
@@ -423,6 +600,13 @@ pub struct CrashReport {
     pub exception: Option<String>,
     /// `hs_err_pid*.log` files referenced by the log.
     pub hs_err_files: Vec<PathBuf>,
+    /// Device / renderer context for the crash (task 24).
+    pub device_info: DeviceInfo,
+    /// User-facing actions the crash dialog should offer (task 24).
+    pub actions: Vec<CrashAction>,
+    /// Network-layer recovery suggestion: which mirrors / proxies to fall back to
+    /// when re-downloading the missing file (task 24).
+    pub recovery: Option<RecoverySuggestion>,
 }
 
 impl CrashReport {
@@ -436,6 +620,9 @@ impl CrashReport {
             evidence: Vec::new(),
             exception: None,
             hs_err_files: Vec::new(),
+            device_info: DeviceInfo::default(),
+            actions: CrashCategory::CleanExit.actions().to_vec(),
+            recovery: None,
         }
     }
 
@@ -478,6 +665,28 @@ impl CrashReport {
                 "advice_localized".into(),
                 self.category.localized_advice(language).into(),
             );
+            // Localised action labels (task 24).
+            let action_labels: Vec<serde_json::Value> = self
+                .actions
+                .iter()
+                .map(|a| {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert("id".into(), serde_json::Value::String(a.id().to_string()));
+                    obj.insert("label".into(), serde_json::Value::String(a.label(language)));
+                    serde_json::Value::Object(obj)
+                })
+                .collect();
+            obj.insert(
+                "actions_localized".into(),
+                serde_json::Value::Array(action_labels),
+            );
+            // Localised recovery description (task 24).
+            if let Some(ref r) = self.recovery {
+                obj.insert(
+                    "recovery_description_localized".into(),
+                    r.localized_description(language).into(),
+                );
+            }
         }
         v
     }
@@ -498,6 +707,9 @@ impl CrashReport {
             "signal_name": self.signal_name,
             "evidence": self.evidence,
             "exception": self.exception,
+            "device_info": self.device_info,
+            "actions": self.actions.iter().map(|a| a.id()).collect::<Vec<_>>(),
+            "recovery": self.recovery,
             "hs_err_files": self.hs_err_files
                 .iter()
                 .map(|p| p.to_string_lossy().to_string())
@@ -519,6 +731,7 @@ pub fn diagnose<'a, I>(
     signal: Option<i32>,
     lines: I,
     requested_stop: bool,
+    device_info: DeviceInfo,
 ) -> CrashReport
 where
     I: IntoIterator<Item = &'a str>,
@@ -531,6 +744,9 @@ where
         evidence: Vec::new(),
         exception: None,
         hs_err_files: Vec::new(),
+        device_info,
+        actions: Vec::new(),
+        recovery: None,
     };
 
     // Scan the log once: best (lowest) rule index wins.
@@ -551,6 +767,18 @@ where
                 report.hs_err_files.push(hs);
             }
         }
+        // Extract OpenGL / GLES version if present (task 24).
+        if report.device_info.opengl_version.is_none() {
+            if let Some(v) = extract_version_line(&lower, "opengl") {
+                report.device_info.opengl_version = Some(v);
+            }
+        }
+        if report.device_info.gles_version.is_none() {
+            if let Some(v) = extract_version_line(&lower, "gles") {
+                report.device_info.gles_version = Some(v);
+            }
+        }
+
         for (idx, rule) in RULES.iter().enumerate() {
             if rule.patterns.iter().any(|p| lower.contains(p)) {
                 if best.is_none_or(|b| idx < b) {
@@ -596,6 +824,10 @@ where
                 .unwrap_or(CrashCategory::Unknown),
         }
     };
+    // Populate user-facing actions and network-layer recovery (task 24).
+    report.actions = report.category.actions().to_vec();
+    report.recovery = build_recovery(report.category);
+
     if clean {
         // Keep the log evidence out of a "nothing happened" report.
         report.evidence.clear();
@@ -641,12 +873,37 @@ fn truncate(s: &str) -> String {
     format!("{cut}…")
 }
 
+/// Extract an OpenGL / GLES version string from a log line.
+///
+/// Looks for patterns like `opengl version: 3.0` or `gles version: 3.1`
+/// (case-insensitive) and returns the version token that follows the colon.
+fn extract_version_line(line_lower: &str, prefix: &str) -> Option<String> {
+    let marker = format!("{} version", prefix);
+    let idx = line_lower.find(&marker)?;
+    let rest = &line_lower[idx + marker.len()..];
+    // Skip `: ` / ` string: ` / etc.
+    let after = rest.trim_start_matches(|c: char| c == ':' || c.is_whitespace());
+    // The version is the first token; stop at the first space.
+    let ver: String = after.chars().take_while(|c| !c.is_whitespace()).collect();
+    if ver.is_empty() {
+        None
+    } else {
+        Some(ver)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn diag(code: Option<i32>, signal: Option<i32>, log: &[&str]) -> CrashReport {
-        diagnose(code, signal, log.iter().copied(), false)
+        diagnose(
+            code,
+            signal,
+            log.iter().copied(),
+            false,
+            DeviceInfo::default(),
+        )
     }
 
     #[test]
@@ -799,6 +1056,7 @@ mod tests {
                 "# An error report file ... hs_err_pid77.log",
             ],
             false,
+            DeviceInfo::default(),
         );
         assert_eq!(r.category, CrashCategory::OutOfMemory);
 
@@ -818,7 +1076,13 @@ mod tests {
             CrashCategory::UserTerminated
         );
         // an explicit launcher stop is never reported as a crash cause
-        let r = diagnose(Some(143), None, ["java.lang.OutOfMemoryError"], true);
+        let r = diagnose(
+            Some(143),
+            None,
+            ["java.lang.OutOfMemoryError"],
+            true,
+            DeviceInfo::default(),
+        );
         assert_eq!(r.category, CrashCategory::UserTerminated);
         assert!(r.terminated_by_user());
         assert!(diag(None, Some(9), &[])
@@ -908,7 +1172,7 @@ mod tests {
             log.push(format!("Mixin apply failed pack{i}.json"));
         }
         let refs: Vec<&str> = log.iter().map(|s| s.as_str()).collect();
-        let r = diagnose(Some(1), None, refs, false);
+        let r = diagnose(Some(1), None, refs, false, DeviceInfo::default());
         assert_eq!(r.category, CrashCategory::OutOfMemory);
         assert!(r.evidence.len() <= MAX_EVIDENCE_LINES);
         // duplicates collapsed
@@ -933,7 +1197,7 @@ mod tests {
         );
         assert_eq!(r.category, CrashCategory::OutOfMemory);
         let long: String = "中".repeat(1000);
-        let r = diagnose(Some(1), None, [long.as_str()], false);
+        let r = diagnose(Some(1), None, [long.as_str()], false, DeviceInfo::default());
         assert_eq!(r.category, CrashCategory::Unknown);
     }
 
@@ -1106,5 +1370,156 @@ mod tests {
             diag(Some(1), None, &["cannot allocate memory for thread-local"]).category,
             CrashCategory::OutOfMemory
         );
+    }
+
+    #[test]
+    fn actions_and_recovery_are_populated_per_category() {
+        // MissingNativeLibrary -> re-download natives via mirrors + switch renderer
+        let r = diag(
+            Some(1),
+            None,
+            &["java.lang.UnsatisfiedLinkError: no lwjgl in java.library.path"],
+        );
+        assert_eq!(r.category, CrashCategory::MissingNativeLibrary);
+        assert!(r.actions.contains(&CrashAction::RetryLaunch));
+        assert!(r.actions.contains(&CrashAction::SwitchRenderer));
+        assert!(!r.actions.contains(&CrashAction::SubmitReport));
+        let rec = r
+            .recovery
+            .expect("missing_native_library should have recovery");
+        assert_eq!(rec.description, "re_download_natives");
+        assert!(!rec.mirror_ids.is_empty());
+        assert!(rec.suggest_proxy);
+
+        // GraphicsFailure -> switch renderer + submit report
+        let r = diag(
+            Some(1),
+            None,
+            &["GLFW error 65542: EGL: Failed to initialize EGL"],
+        );
+        assert_eq!(r.category, CrashCategory::GraphicsFailure);
+        assert!(r.actions.contains(&CrashAction::SwitchRenderer));
+        assert!(r.actions.contains(&CrashAction::SubmitReport));
+
+        // CorruptedFile -> re-download version
+        let r = diag(
+            Some(1),
+            None,
+            &["java.util.zip.ZipException: error in opening zip file"],
+        );
+        assert_eq!(r.category, CrashCategory::CorruptedFile);
+        let rec = r.recovery.expect("corrupted_file should have recovery");
+        assert_eq!(rec.description, "re_download_version");
+
+        // CleanExit -> no recovery, no submit
+        let r = diag(Some(0), None, &[]);
+        assert_eq!(r.category, CrashCategory::CleanExit);
+        assert!(r.recovery.is_none());
+        assert!(!r.actions.contains(&CrashAction::SubmitReport));
+
+        // AuthenticationFailure -> no recovery
+        let r = diag(
+            Some(1),
+            None,
+            &["Invalid session (Try restarting your game)"],
+        );
+        assert_eq!(r.category, CrashCategory::AuthenticationFailure);
+        assert!(r.recovery.is_none());
+    }
+
+    #[test]
+    fn json_includes_actions_and_device_info() {
+        let r = diag(None, Some(11), &["# SIGSEGV", "# /tmp/hs_err_pid5.log"]);
+        let j = r.to_json();
+        assert_eq!(j["category"], "native_crash");
+        assert!(!j["actions"].as_array().unwrap().is_empty());
+        assert!(j["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a == "switch_renderer"));
+        assert!(j["device_info"].is_object());
+        assert!(j["device_info"]["abi"].is_string());
+        let rec = j["recovery"]
+            .as_object()
+            .expect("recovery should be an object");
+        assert_eq!(rec["description"], "switch_renderer");
+        assert!(rec["mirror_ids"].is_array());
+        assert_eq!(rec["suggest_proxy"], true);
+    }
+
+    #[test]
+    fn actions_are_localised() {
+        use crate::i18n::Language;
+        let r = diag(
+            Some(1),
+            None,
+            &["java.lang.OutOfMemoryError: Java heap space"],
+        );
+        assert_eq!(r.category, CrashCategory::OutOfMemory);
+        let j = r.to_json_in(Language::En);
+        let actions = j["actions_localized"].as_array().unwrap();
+        assert!(!actions.is_empty());
+        let copy_label = actions.iter().find(|a| a["id"] == "copy_details").unwrap();
+        assert!(!copy_label["label"].as_str().unwrap().is_empty());
+        assert_ne!(copy_label["label"].as_str().unwrap(), "copy_details");
+    }
+
+    #[test]
+    fn recovery_localised_description_resolves() {
+        let j = CrashCategory::MissingNativeLibrary.recovery();
+        assert_eq!(j, Some("re_download_natives"));
+        let r = diag(Some(1), None, &["UnsatisfiedLinkError: dlopen failed"]);
+        assert!(r.recovery.is_some());
+    }
+
+    #[test]
+    fn opengl_version_is_parsed_from_log() {
+        let r = diag(
+            Some(1),
+            None,
+            &[
+                "[main/INFO]: [RenderSystem] OpenGL version: 3.0",
+                "[main/INFO]: [RenderSystem] GLES version: 3.1",
+            ],
+        );
+        assert_eq!(r.device_info.opengl_version.as_deref(), Some("3.0"));
+        assert_eq!(r.device_info.gles_version.as_deref(), Some("3.1"));
+    }
+
+    #[test]
+    fn device_info_defaults_are_empty() {
+        let r = CrashReport::clean();
+        assert!(r.device_info.device_model.is_empty());
+        assert!(r.device_info.abi.is_empty());
+        assert!(!r.actions.is_empty());
+        assert!(r.recovery.is_none());
+    }
+
+    #[test]
+    fn crash_action_ids_are_stable() {
+        assert_eq!(CrashAction::CopyDetails.id(), "copy_details");
+        assert_eq!(CrashAction::ExportReport.id(), "export_report");
+        assert_eq!(CrashAction::SubmitReport.id(), "submit_report");
+        assert_eq!(CrashAction::RetryLaunch.id(), "retry_launch");
+        assert_eq!(CrashAction::SwitchRenderer.id(), "switch_renderer");
+    }
+
+    #[test]
+    fn action_labels_are_translated_in_all_languages() {
+        use crate::i18n::Language;
+        let actions = [
+            CrashAction::CopyDetails,
+            CrashAction::ExportReport,
+            CrashAction::SubmitReport,
+            CrashAction::RetryLaunch,
+            CrashAction::SwitchRenderer,
+        ];
+        for a in &actions {
+            for l in Language::ALL {
+                let label = a.label(l);
+                assert!(!label.is_empty(), "{:?} label empty in {:?}", a, l);
+            }
+        }
     }
 }

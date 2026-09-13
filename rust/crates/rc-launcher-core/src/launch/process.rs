@@ -41,7 +41,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
 use crate::error::{RcError, RcResult};
 use crate::launch::command::{redact_with, LaunchCommand};
-use crate::launch::crash::{diagnose, CrashReport};
+use crate::launch::crash::{diagnose, CrashReport, DeviceInfo};
 
 /// Default number of log lines retained for crash diagnosis.
 pub const DEFAULT_LOG_CAPACITY: usize = 2048;
@@ -101,6 +101,36 @@ impl LogLine {
     /// Did it come from stderr?
     pub fn is_error(&self) -> bool {
         self.stream == LogStream::Stderr
+    }
+
+    /// Classify the Minecraft log level from the text content.
+    ///
+    /// Minecraft's log4j lines look like `[14:23:45] [main/INFO]: message`,
+    /// so we look for the `/LEVEL]:` marker to extract INFO / WARN / ERROR /
+    /// DEBUG / TRACE / FATAL. Lines that do not match (raw stdout/stderr,
+    /// native crash dumps, mod output without a log4j wrapper) fall back to
+    /// the stream type (stdout / stderr).
+    ///
+    /// The returned string is suitable for both the event-bus `level` field
+    /// and direct display in the overlay, and is consumed by the Kotlin
+    /// `GameLogLevel` classification (task 21).
+    pub fn classify_level(&self) -> &'static str {
+        // log4j marker: `[thread/LEVEL]:`
+        let markers: &[(&str, &str)] = &[
+            ("/FATAL]:", "FATAL"),
+            ("/ERROR]:", "ERROR"),
+            ("/WARN]:", "WARN"),
+            ("/INFO]:", "INFO"),
+            ("/DEBUG]:", "DEBUG"),
+            ("/TRACE]:", "TRACE"),
+        ];
+        for (marker, level) in markers {
+            if self.text.contains(marker) {
+                return level;
+            }
+        }
+        // Not a log4j line — use the stream type as the level.
+        self.stream.as_str()
     }
 }
 
@@ -225,6 +255,8 @@ pub struct SpawnSpec {
     pub secrets: Vec<String>,
     /// Ring-buffer size for the captured log.
     pub log_capacity: usize,
+    /// Device / renderer context for the crash report (task 24).
+    pub device_info: DeviceInfo,
 }
 
 impl SpawnSpec {
@@ -238,6 +270,7 @@ impl SpawnSpec {
             clear_env: false,
             secrets: Vec::new(),
             log_capacity: DEFAULT_LOG_CAPACITY,
+            device_info: DeviceInfo::default(),
         }
     }
 
@@ -251,6 +284,7 @@ impl SpawnSpec {
             clear_env: false,
             secrets: cmd.secrets().to_vec(),
             log_capacity,
+            device_info: DeviceInfo::default(),
         }
     }
 }
@@ -264,6 +298,7 @@ pub struct GameProcess {
     secrets: Vec<String>,
     rx: UnboundedReceiver<LogLine>,
     stop_requested: bool,
+    device_info: DeviceInfo,
 }
 
 impl fmt::Debug for GameProcess {
@@ -273,6 +308,7 @@ impl fmt::Debug for GameProcess {
             .field("uptime", &self.uptime())
             .field("log_lines", &self.log.len())
             .field("stop_requested", &self.stop_requested)
+            .field("device_info", &self.device_info)
             .finish()
     }
 }
@@ -337,6 +373,7 @@ impl GameProcess {
             secrets: spec.secrets.clone(),
             rx,
             stop_requested: false,
+            device_info: spec.device_info.clone(),
         })
     }
 
@@ -469,7 +506,13 @@ impl GameProcess {
         let log = self.take_log();
         let crash = {
             let lines = log.texts();
-            diagnose(code, signal, lines, self.stop_requested)
+            diagnose(
+                code,
+                signal,
+                lines,
+                self.stop_requested,
+                self.device_info.clone(),
+            )
         };
         GameExit {
             pid: self.pid,
@@ -529,7 +572,18 @@ impl GameExit {
     }
 }
 
-/// Redact, buffer and forward one line.
+/// Redact, buffer, broadcast and forward one line.
+///
+/// Each line is redacted with the command's secrets, published to the
+/// process-wide event bus (task 21: low-latency push to the Compose
+/// in-game log viewer), handed to the UI callback, and finally appended
+/// to the bounded ring buffer for crash diagnosis.
+///
+/// The event-bus `publish` is designed to never block the publisher: the sink
+/// is cloned *before* `emit` is called (outside any lock), so a slow JNI
+/// callback or a missing sink cannot stall the pipe reader — the render
+/// thread and the game process keep running (task 21: avoid blocking the
+/// render thread).
 fn record<F>(log: &mut LogBuffer, secrets: &[String], line: LogLine, on_line: &mut F)
 where
     F: FnMut(&LogLine),
@@ -538,6 +592,12 @@ where
         stream: line.stream,
         text: redact_with(secrets, &line.text),
     };
+    let level = line.classify_level();
+    // Publish to the event bus for the in-game real-time log viewer (task 21).
+    // This is a best-effort, non-blocking call: the bus catches panics and
+    // never holds a lock during emit, so an absent or slow sink cannot stall
+    // the pipe reader.
+    crate::event::publish_game_log("game", line.stream.as_str(), level, &line.text);
     on_line(&line);
     log.push(line);
 }
@@ -604,6 +664,78 @@ mod tests {
         let mut spec = SpawnSpec::new("/bin/sh", vec!["-c".into(), script.into()]);
         spec.working_dir = dir.to_path_buf();
         spec
+    }
+
+    #[test]
+    fn classify_level_parses_log4j_markers() {
+        // Minecraft log4j format: [HH:MM:SS] [thread/LEVEL]: message
+        assert_eq!(
+            LogLine::out("[14:23:45] [main/INFO]: Starting minecraft server").classify_level(),
+            "INFO"
+        );
+        assert_eq!(
+            LogLine::out("[14:23:45] [main/WARN]: Warning message").classify_level(),
+            "WARN"
+        );
+        assert_eq!(
+            LogLine::err("[14:23:45] [main/ERROR]: Error message").classify_level(),
+            "ERROR"
+        );
+        assert_eq!(
+            LogLine::out("[14:23:45] [main/DEBUG]: Debug info").classify_level(),
+            "DEBUG"
+        );
+        assert_eq!(
+            LogLine::out("[14:23:45] [main/TRACE]: Trace info").classify_level(),
+            "TRACE"
+        );
+        assert_eq!(
+            LogLine::err("[14:23:45] [main/FATAL]: Fatal error").classify_level(),
+            "FATAL"
+        );
+    }
+
+    #[test]
+    fn classify_level_falls_back_to_stream() {
+        // Non-log4j lines fall back to the stream type.
+        assert_eq!(
+            LogLine::out("raw stdout line without log4j").classify_level(),
+            "stdout"
+        );
+        assert_eq!(
+            LogLine::err("--- Minecraft Crash Report ----").classify_level(),
+            "stderr"
+        );
+        assert_eq!(
+            LogLine::out("java.lang.NullPointerException").classify_level(),
+            "stdout"
+        );
+    }
+
+    #[test]
+    fn record_redacts_and_publishes_best_effort() {
+        // record() publishes to the global event bus best-effort: with no sink
+        // subscribed the publish is a no-op (the bus guards against panics and
+        // missing sinks). We verify the callback fires, the line is redacted,
+        // and the buffer captures it.
+        let mut log = LogBuffer::new(10);
+        let line = LogLine::out("[14:23:45] [main/INFO]: secret-token-value-in-args");
+        let mut called = false;
+        let mut on_line = |l: &LogLine| {
+            called = true;
+            // The secret must be redacted in the line delivered to the callback.
+            assert!(!l.text.contains("secret-token-value-in-args"));
+        };
+        record(
+            &mut log,
+            &["secret-token-value-in-args".to_string()],
+            line,
+            &mut on_line,
+        );
+        assert!(called);
+        assert_eq!(log.len(), 1);
+        // The classified level should be INFO (verified by classify_level tests).
+        assert_eq!(log.iter().next().unwrap().classify_level(), "INFO");
     }
 
     #[tokio::test]

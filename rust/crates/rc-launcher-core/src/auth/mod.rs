@@ -28,6 +28,7 @@
 //! unit tests without touching the network (mirroring the `HttpSource` mock
 //! pattern used by the `download` module).
 
+pub mod callback;
 pub mod manager;
 pub mod microsoft;
 pub mod model;
@@ -37,10 +38,12 @@ pub mod third_party;
 pub mod transport;
 pub mod vault;
 
+pub use callback::{callback_html, DEFAULT_REDIRECT_URI, MICROSOFT_AUTH_HTML};
 pub use manager::AccountManager;
 pub use microsoft::{DeviceCodeChallenge, MicrosoftTokens, PollOutcome};
 pub use model::{
-    Account, AccountKind, MicrosoftAccount, OfflineAccount, ThirdPartyAccount, ThirdPartyProvider,
+    Account, AccountKind, MicrosoftAccount, OfflineAccount, SkinModel, SkinSource,
+    ThirdPartyAccount, ThirdPartyProvider,
 };
 pub use offline::offline_uuid;
 pub use store::{FileTokenStorage, MemoryTokenStorage, TokenStorage};

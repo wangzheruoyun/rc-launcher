@@ -13,6 +13,7 @@ use jni::JavaVM;
 
 use crate::net::default_mirrors;
 use crate::{greet, net, VERSION};
+use std::path::PathBuf;
 
 /// `RustBridge.getVersion(): String`
 #[no_mangle]
@@ -111,7 +112,7 @@ use serde_json::json;
 use crate::auth::manager::AccountManager;
 use crate::auth::microsoft::{self, DeviceCodeChallenge};
 use crate::auth::store::{FileTokenStorage, MemoryTokenStorage, TokenStorage};
-use crate::auth::transport::ReqwestTransport;
+use crate::auth::transport::{AuthTransport, ReqwestTransport};
 use crate::auth::vault::{AesGcmVault, InsecureVault, SecretVault};
 use crate::error::{RcError, RcResult};
 
@@ -152,10 +153,7 @@ pub(crate) fn block_on_async<F: std::future::Future>(fut: F) -> F::Output {
             // `block_in_place` panics on a current-thread runtime;
             // detect the runtime flavour by introspecting metrics
             // (multi-thread runtimes expose worker counts).
-            let is_multi_thread = handle
-                .metrics()
-                .num_workers()
-                > 0;
+            let is_multi_thread = handle.metrics().num_workers() > 0;
             if is_multi_thread {
                 tokio::task::block_in_place(move || handle.block_on(fut))
             } else {
@@ -186,18 +184,42 @@ pub(crate) fn lock_manager() -> MutexGuard<'static, AccountManager> {
 /// Build an [`AccountManager`] from a config JSON value. Shared by the JNI
 /// `authInit` entry point and the C-ABI `rc_auth_init` so both surfaces expose
 /// exactly the same store-configuration contract. `cfg` accepts
-/// `{ "path"?: string, "key_hex"?: string, "client_id"?: string }`:
+/// `{ "path"?: string, "key_hex"?: string, "client_id"?: string,
+///   "redirect_uri"?: string }`:
 /// * with `path` the store is persisted on disk, and when `key_hex` is present
 ///   the on-disk JSON is sealed with AES-256-GCM (on Android `key_hex` is the
 ///   Keystore-held key surfaced by the FFI bridge);
 /// * without `path` an in-memory store is used.
+/// * `redirect_uri` (task 28) optionally sets a custom callback address for the
+///   Microsoft browser redirect; the embedded `microsoft_auth.html` page can
+///   serve as this address.
+/// * `proxy` (task 28) optionally configures an HTTP/HTTPS/SOCKS5 proxy for
+///   the auth transport so Microsoft/Xbox/Mojang calls can reach the network
+///   through the Great Firewall.
 pub(crate) fn auth_manager_from_config(cfg: &serde_json::Value) -> RcResult<AccountManager> {
-    let transport = ReqwestTransport::with_defaults()?;
+    // Task 28: build the auth transport with proxy support so that the
+    // Microsoft/Xbox/Mojang token-exchange calls (xbox_chain / minecraft_chain)
+    // can punch through the Great Firewall when the user has configured a proxy.
+    let transport: Arc<dyn AuthTransport> = if let Some(url) = cfg
+        .get("proxy")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        let proxy = parse_proxy_url(url);
+        Arc::new(ReqwestTransport::with_proxy(&proxy)?)
+    } else {
+        Arc::new(ReqwestTransport::with_defaults()?)
+    };
     let client_id = cfg
         .get("client_id")
         .and_then(|v| v.as_str())
         .unwrap_or(microsoft::DEFAULT_CLIENT_ID)
         .to_string();
+    let redirect_uri = cfg
+        .get("redirect_uri")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
     let storage: Box<dyn TokenStorage> =
         if let Some(path) = cfg.get("path").and_then(|v| v.as_str()) {
             let vault: Box<dyn SecretVault> =
@@ -216,7 +238,23 @@ pub(crate) fn auth_manager_from_config(cfg: &serde_json::Value) -> RcResult<Acco
         } else {
             Box::new(MemoryTokenStorage::new())
         };
-    AccountManager::new(storage, Arc::new(transport), client_id)
+    let mut mgr = AccountManager::new(storage, transport, client_id)?;
+    if let Some(ru) = redirect_uri {
+        mgr.set_redirect_uri(ru);
+    }
+    Ok(mgr)
+}
+
+/// Parse a proxy URL string into a [`crate::net::ProxyConfig`], inferring the
+/// variant from the URL scheme (task 28).
+fn parse_proxy_url(url: &str) -> crate::net::ProxyConfig {
+    if url.starts_with("socks5://") {
+        crate::net::ProxyConfig::socks5(url)
+    } else if url.starts_with("https://") {
+        crate::net::ProxyConfig::https(url)
+    } else {
+        crate::net::ProxyConfig::http(url)
+    }
 }
 
 fn jstr(env: &mut JNIEnv, s: &str) -> jstring {
@@ -353,6 +391,9 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authAddOfflineAccoun
 }
 
 /// `RustBridge.authBeginMicrosoft(): String` — JSON device-code challenge.
+/// Includes `redirect_uri` in the response when a custom callback address was
+/// configured via `authInit` (task 28), so the UI can pass it back to
+/// `authCompleteMicrosoft` if needed.
 #[no_mangle]
 pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authBeginMicrosoft(
     mut env: JNIEnv,
@@ -398,6 +439,42 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authCompleteMicrosof
             }),
         )
     })
+}
+
+/// `RustBridge.authGetCallbackHtml(): String` — returns the embedded
+/// `microsoft_auth.html` callback page (task 28). The caller can write this
+/// to `assets/microsoft_auth.html` at first launch to guarantee the callback
+/// asset exists even when the APK build omits it.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authGetCallbackHtml(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let lang = crate::i18n::current_language();
+        let html = crate::auth::callback_html(lang, true);
+        env.new_string(html)
+    }));
+    match built {
+        Ok(Ok(s)) => s.into_raw(),
+        _ => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.authDefaultRedirectUri(): String` — returns the default
+/// `redirect_uri` for the embedded callback page (task 28).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authDefaultRedirectUri(
+    env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        env.new_string(crate::auth::DEFAULT_REDIRECT_URI)
+    }));
+    match built {
+        Ok(Ok(s)) => s.into_raw(),
+        _ => std::ptr::null_mut(),
+    }
 }
 
 /// `RustBridge.authRemoveAccount(uuid): String` — `{"removed": bool}`.
@@ -543,6 +620,83 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authCompleteThirdPar
         )
     })
 }
+/// `RustBridge.authFetchSkin(uuid): String` — JSON `SkinModel` (or `{"error":...}`).
+///
+/// Fetches skin + cape metadata (download URLs, model type, cache state) for a
+/// Microsoft account from Mojang's session profile API. The PNG bytes are *not*
+/// downloaded here — the UI fetches them from `skin_url`/`cape_url` and caches
+/// them locally for offline display (task 22).
+///
+/// The account must have a valid Minecraft access token; call `authEnsureFresh`
+/// first so the token is not expired by the time the session-profile request is
+/// made. Blocks on network I/O — call from a background thread.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authFetchSkin(
+    mut env: JNIEnv,
+    _class: JClass,
+    uuid: JString,
+) -> jstring {
+    auth_ffi!({
+        let id = match read_input(&mut env, &uuid) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing uuid"),
+        };
+        let g = lock_manager();
+        let model = block_on_async(g.fetch_skin(&id));
+        drop(g);
+        rc_to_json(
+            &mut env,
+            model.and_then(|m| {
+                serde_json::to_value(&m).map_err(|e| crate::error::RcError::Auth(e.to_string()))
+            }),
+        )
+    })
+}
+
+/// `RustBridge.authUploadSkin(uuid, model, skinBase64): String` —
+/// `{"ok":true}` or `{"error":...}`.
+///
+/// Uploads a custom skin for a Microsoft account to Mojang. `model` is
+/// "slim" or "classic" (the format Mojang's PUT endpoint expects); `skin_base64`
+/// is the raw PNG bytes base64-encoded. The account must have a valid Minecraft
+/// access token (`authEnsureFresh` first). Blocks on network I/O — call from a
+/// background thread. On a network-level failure the error JSON carries
+/// `cn_fallback_hint` for mainland-China players (task 22 / task 10).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_authUploadSkin(
+    mut env: JNIEnv,
+    _class: JClass,
+    uuid: JString,
+    model: JString,
+    skin_base64: JString,
+) -> jstring {
+    auth_ffi!({
+        let id = match read_input(&mut env, &uuid) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing uuid"),
+        };
+        let model_str = match read_input(&mut env, &model) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing model"),
+        };
+        let b64 = match read_input(&mut env, &skin_base64) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing skin data"),
+        };
+        use base64::Engine;
+        let skin_data = match base64::engine::general_purpose::STANDARD.decode(&b64) {
+            Ok(b) => b,
+            Err(e) => return err_json(&mut env, &format!("base64: {e}")),
+        };
+        let mut g = lock_manager();
+        let result = block_on_async(g.upload_skin(&id, &model_str, &skin_data));
+        drop(g);
+        match result {
+            Ok(()) => jstr(&mut env, &serde_json::json!({ "ok": true }).to_string()),
+            Err(e) => auth_err_json(&mut env, &e),
+        }
+    })
+}
 
 // === JRE / JDK supply FFI (task 6) ===========================================
 //
@@ -667,7 +821,11 @@ pub fn launch_diagnose_json(request: &serde_json::Value) -> serde_json::Value {
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     let log = request.get("log").and_then(|v| v.as_str()).unwrap_or("");
-    let report = diagnose(code, signal, log.lines(), requested_stop);
+    let device_info: crate::launch::crash::DeviceInfo = request
+        .get("device_info")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    let report = diagnose(code, signal, log.lines(), requested_stop, device_info);
     // Task 20: an optional `language` tag localises the verdict for the UI. It
     // is negotiated (so `zh-Hant-TW` works) and defaults to the *current* UI
     // language, which is itself Chinese-first.
@@ -851,6 +1009,291 @@ pub fn display_layout_json(request: &serde_json::Value) -> serde_json::Value {
 // clear / status) plus `discordShutdown` for a full disconnect. Every entry
 // point is wrapped in `catch_unwind` so a panic never aborts the VM, and each
 // returns a JSON `DiscordStateInfo` snapshot the UI can render directly.
+
+async fn build_version_list_client(
+    request: &serde_json::Value,
+) -> RcResult<crate::net::NetworkClient> {
+    use crate::net::MirrorMode;
+    let mut builder =
+        crate::net::NetworkClientBuilder::default().mirrors(crate::net::default_mirrors());
+    if let Some(mode) = request.get("mirror_mode").and_then(|v| v.as_str()) {
+        let parsed = match mode {
+            "all" => MirrorMode::All,
+            "mirrors_only" => MirrorMode::MirrorsOnly,
+            "auto" => MirrorMode::Auto,
+            "off" => MirrorMode::Off,
+            _ => MirrorMode::All,
+        };
+        builder = builder.mirror_mode(parsed);
+    }
+    // DNS: a quick DoH/system choice that the caller may opt into. We never
+    // block on the DNS leg here - the network client already races
+    // IPv4/IPv6 and applies the static overrides.
+    let mut cfg = crate::net::NetworkConfig::default();
+    if let Some(dns) = request.get("dns_mode") {
+        if let Some(mode) = dns.get("mode").and_then(|v| v.as_str()) {
+            match mode {
+                "doh" => {
+                    let urls: Vec<String> = dns
+                        .get("servers")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_else(crate::net::default_doh_servers);
+                    cfg.dns = crate::net::DnsConfig::doh(urls);
+                }
+                "system" => cfg.dns = crate::net::DnsConfig::system(),
+                _ => {}
+            }
+        }
+    }
+    builder = builder.config(cfg);
+    builder.build().await
+}
+// === Task 16: complete and auto-updating game-version list ===========
+//
+// Three FFI entry points cover the UI side of task 16:
+//   * `gameFetchVersionList(request)`  - return the cached or freshly-fetched
+//     manifest, always augmented with the built-in unlisted DB.
+//   * `gameRefreshVersionList()`       - force a network refresh, ignoring TTL.
+//   * `gameVersionListCacheInfo()`     - return the [VersionListInfo] struct so
+//     the UI can render a "stale" / "offline-only" badge.
+//
+// The process-wide cache + mirror fallback lives in
+// [`crate::game::version_list::VersionListCache`]; the three FFI helpers are
+// thin wrappers that exchange JSON so the Compose layer never has to hold
+// native state beyond a single request/response.
+
+use crate::game::version_list::{VersionGroups, VersionListCache, VersionListSearch};
+
+/// Process-wide version-list cache. Cheap to clone (Arc-internal); the JNI
+/// helpers all share it via this single static.
+fn version_list_cache() -> &'static VersionListCache {
+    static CACHE: OnceLock<VersionListCache> = OnceLock::new();
+    CACHE.get_or_init(VersionListCache::new)
+}
+
+/// Build a one-shot network client honouring the caller's `mirror_mode` and
+/// `dns_mode` JSON. Falls back to the default (origin-first mirror list, no
+/// overrides) when `request` is empty or malformed.
+
+/// Helper: serialise a `VersionManifest` into the JSON envelope the Kotlin UI
+/// consumes. Includes the manifest itself, the [VersionListInfo] struct, and
+/// the pre-grouped buckets ([VersionGroups]) so the UI does not have to re-run
+/// grouping in Kotlin.
+fn version_list_envelope(
+    manifest: &crate::game::VersionManifest,
+    info: crate::game::version_list::VersionListInfo,
+    groups: &VersionGroups,
+) -> serde_json::Value {
+    serde_json::json!({
+        "manifest": manifest,
+        "info": info,
+        "groups": serde_json::json!({
+            "release": groups.release,
+            "snapshot": groups.snapshot,
+            "pre_release": groups.pre_release,
+            "old_alpha": groups.old_alpha,
+            "old_beta": groups.old_beta,
+            "special": groups.special,
+        }),
+    })
+}
+
+/// `RustBridge.gameFetchVersionList(request): String` -- return the cached or
+/// freshly-fetched version list.
+///
+/// `requestJson` = `{ "ttl_secs"?: uint, "force_refresh"?: bool,
+///   "query"?: string, "group"?: string, "mirror_mode"?: string, "dns_mode"?: { mode, servers? } }`.
+///
+/// * `force_refresh` - bypass TTL even when the cache is fresh.
+/// * `ttl_secs`     - override the cache TTL for this call only.
+/// * `query`        - case-insensitive substring filter applied to the result.
+/// * `group`        - one of `release / snapshot / pre_release / old_alpha /
+///   old_beta / special`; when present only that bucket is returned (the
+///   envelope still carries the others for completeness).
+///
+/// The reply envelope is
+/// `{ manifest, info, groups, filtered }` where `filtered` is the (optionally
+/// grouped, optionally searched) subset the UI is meant to render.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_gameFetchVersionList(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let ttl = value
+            .get("ttl_secs")
+            .and_then(|v| v.as_u64())
+            .map(std::time::Duration::from_secs);
+        let force_refresh = value
+            .get("force_refresh")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let query = value.get("query").and_then(|v| v.as_str()).unwrap_or("");
+        let group_filter = value
+            .get("group")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        // Build a one-shot network client. DNS / mirror overrides are applied
+        // before the very first request, so they affect *both* the initial
+        // manifest fetch and the auto-select mirror speed-test (task 3).
+        let build_result = block_on_async(async {
+            let client = match build_version_list_client(&value).await {
+                Ok(c) => c,
+                Err(e) => return Err(e),
+            };
+            let manifest = version_list_cache()
+                .fetch_or_load(&client, ttl, force_refresh)
+                .await;
+            Ok::<_, crate::error::RcError>(manifest)
+        });
+        let manifest = match build_result {
+            Ok(m) => m,
+            Err(e) => return auth_err_json(&mut env, &e),
+        };
+        let cache = version_list_cache();
+        let info = cache.info(ttl);
+        let groups = VersionGroups::from(&manifest);
+
+        // Apply the optional group + query filter to the *bucket* the caller
+        // asked for. When `group` is absent we return the entire manifest
+        // (groups still expose all six buckets for UI tabs).
+        let filtered: Vec<crate::game::VersionEntry> = if group_filter.is_some() {
+            VersionListSearch::new(&manifest)
+                .search(query)
+                .into_iter()
+                .filter(|e| match group_filter.as_deref() {
+                    Some("release") => groups.release.iter().any(|g| g.id == e.id),
+                    Some("snapshot") => groups.snapshot.iter().any(|g| g.id == e.id),
+                    Some("pre_release") => groups.pre_release.iter().any(|g| g.id == e.id),
+                    Some("old_alpha") => groups.old_alpha.iter().any(|g| g.id == e.id),
+                    Some("old_beta") => groups.old_beta.iter().any(|g| g.id == e.id),
+                    Some("special") => groups.special.iter().any(|g| g.id == e.id),
+                    _ => true,
+                })
+                .collect()
+        } else if !query.is_empty() {
+            VersionListSearch::new(&manifest).search(query)
+        } else {
+            manifest.versions.clone()
+        };
+        let _ = &group_filter; // keep the import warm when only `query` is used
+
+        let envelope = version_list_envelope(&manifest, info, &groups);
+        let out = serde_json::json!({
+            "manifest": envelope["manifest"],
+            "info": envelope["info"],
+            "groups": envelope["groups"],
+            "filtered": filtered,
+            "query": query,
+            "group": group_filter,
+        });
+        jstr(&mut env, &out.to_string())
+    })
+}
+
+/// `RustBridge.gameRefreshVersionList(request): String` -- force a network
+/// refresh of the version list. Same reply envelope as
+/// [Java_com_rc_launcher_core_RustBridge_gameFetchVersionList] but
+/// `force_refresh` is always true and the resulting manifest is freshly
+/// written through to the fresh + last-good slots.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_gameRefreshVersionList(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => "{}".to_string(),
+        };
+        let mut value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => serde_json::json!({}),
+        };
+        // Force a network refresh regardless of what the caller asked.
+        if let Some(obj) = value.as_object_mut() {
+            obj.insert("force_refresh".to_string(), serde_json::json!(true));
+        }
+        let build_result = block_on_async(async {
+            let client = match build_version_list_client(&value).await {
+                Ok(c) => c,
+                Err(e) => return Err(e),
+            };
+            let manifest = version_list_cache().refresh(&client).await;
+            Ok::<_, crate::error::RcError>(manifest)
+        });
+        let manifest = match build_result {
+            Ok(m) => m,
+            Err(e) => return auth_err_json(&mut env, &e),
+        };
+        let cache = version_list_cache();
+        let info = cache.info(None);
+        let groups = VersionGroups::from(&manifest);
+        let envelope = version_list_envelope(&manifest, info, &groups);
+        jstr(&mut env, &envelope.to_string())
+    })
+}
+
+/// `RustBridge.gameVersionListCacheInfo(request): String` -- inspect the
+/// cache without performing any IO. Returns the [VersionListInfo] JSON; the
+/// manifest itself is omitted (call [gameFetchVersionList] to retrieve it).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_gameVersionListCacheInfo(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    auth_ffi!({
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => "{}".to_string(),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(_) => serde_json::json!({}),
+        };
+        let ttl = value
+            .get("ttl_secs")
+            .and_then(|v| v.as_u64())
+            .map(std::time::Duration::from_secs);
+        let info = version_list_cache().info(ttl);
+        jstr(
+            &mut env,
+            &serde_json::to_string(&info).unwrap_or_else(|_| "{}".to_string()),
+        )
+    })
+}
+
+/// `RustBridge.gameVersionListClearCache(): String` -- drop both the fresh and
+/// last-good cache slots. Returns `{ "cleared": true }`. The next
+/// `gameFetchVersionList` call will re-fetch from the network (or fall back
+/// to the offline built-in DB).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_gameVersionListClearCache(
+    mut env: JNIEnv,
+    _class: JClass,
+) -> jstring {
+    auth_ffi!({
+        version_list_cache().clear();
+        jstr(&mut env, &serde_json::json!({"cleared": true}).to_string())
+    })
+}
 
 use crate::discord::{self, DiscordConfig, RichPresence};
 
@@ -1190,6 +1633,278 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_downloadAsync(
         Err(_) => std::ptr::null_mut(),
     }
 }
+
+// === Modpack import FFI (task 17) ============================================
+//
+// The Compose UI drives the modpack import pipeline through these entry
+// points. Each takes a JSON spec (so we stay forward-compatible) and returns
+// a JSON reply the Kotlin side parses with `org.json.JSONObject`.
+//
+// `modpackInspect`: parse a manifest (or archive) into the normalised
+//                  `ModpackSpec` JSON, without performing any I/O.
+// `modpackImport`:  run the full pipeline (parse → download → verify →
+//                  extract overrides) and return the per-file report.
+// `modpackExtractOverrides`: extract the `overrides/` directory out of an
+//                  archive already saved on disk.
+
+/// JSON wrapper around `ModpackImporter::new`. Keeps the JNI layer in charge
+/// of building the mirror-aware network client (DoH resolution is async).
+#[derive(Debug, Default)]
+#[allow(dead_code)]
+struct ModpackImporterState {
+    importer: std::sync::Mutex<Option<crate::mods::modpack::ModpackImporter>>,
+}
+
+static MODPACK_STATE: OnceLock<ModpackImporterState> = OnceLock::new();
+
+#[allow(dead_code)]
+fn modpack_state() -> &'static ModpackImporterState {
+    MODPACK_STATE.get_or_init(ModpackImporterState::default)
+}
+
+/// Internal helper: build a fresh importer from a JSON `config_json`. The
+/// caller hands us the `instances_root` (absolute path on the device) plus
+/// optional concurrency / chunk size / retry knobs.
+fn build_importer_from_config(
+    config_json: &str,
+) -> RcResult<crate::mods::modpack::ModpackImporter> {
+    #[derive(serde::Deserialize)]
+    struct Config {
+        #[serde(default)]
+        instances_root: Option<String>,
+        #[serde(default)]
+        concurrency: Option<usize>,
+        #[serde(default)]
+        chunk_size: Option<u64>,
+        #[serde(default)]
+        max_retries: Option<u32>,
+    }
+    let cfg: Config = serde_json::from_str(config_json)
+        .map_err(|e| RcError::Other(format!("bad modpack config: {e}")))?;
+    let instances_root = cfg
+        .instances_root
+        .ok_or_else(|| RcError::Other("config missing `instances_root`".into()))?;
+    let options = crate::mods::modpack::ImportOptions {
+        concurrency: cfg.concurrency.unwrap_or(4),
+        chunk_size: cfg.chunk_size.unwrap_or(4 * 1024 * 1024),
+        max_retries: cfg.max_retries.unwrap_or(3),
+        ..Default::default()
+    };
+    // We don't take a `MirrorProvider` from the Kotlin side today: the importer
+    // already wires up its own mirror-aware `NetworkClient` via the built-in
+    // mirror list. Callers wanting full China-network tuning can call
+    // `modpackSetMirror(json)` first.
+    let mirror = match get_active_mirror() {
+        Some(m) => Some(std::sync::Arc::new(m)),
+        None => None,
+    };
+    let instances_path = std::path::PathBuf::from(instances_root);
+    // Async construction: spin up a one-shot runtime so we can `await` it.
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| RcError::Other(format!("tokio runtime: {e}")))?;
+    rt.block_on(crate::mods::modpack::ModpackImporter::new(
+        instances_path,
+        mirror,
+        options,
+    ))
+}
+
+fn get_active_mirror() -> Option<crate::net::MirrorProvider> {
+    Some(crate::net::MirrorProvider::new(default_mirrors()))
+}
+
+/// `RustBridge.modpackInspect(textJson): String` — parse a modpack manifest
+/// (Modrinth / CurseForge / MMC) and return the normalised
+/// `ModpackSpec` JSON. Pure parse, no I/O. Input is the manifest *text*
+/// (`{"text": "...", "origin": "..."}`); origin is optional metadata the
+/// UI uses to display "loaded from ..."
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_modpackInspect(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &spec) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing spec"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad spec: {e}")),
+        };
+        let text = match parsed.get("text").and_then(|v| v.as_str()) {
+            Some(t) => t,
+            None => return err_json(&mut env, "spec missing `text`"),
+        };
+        let origin = parsed.get("origin").and_then(|v| v.as_str());
+        match crate::mods::modpack::detect_and_parse(text, origin) {
+            Ok(manifest) => match serde_json::to_string(&manifest) {
+                Ok(s) => jstr(&mut env, &s),
+                Err(e) => err_json(&mut env, &format!("serialise: {e}")),
+            },
+            Err(e) => err_json(&mut env, &e.to_string()),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.modpackInspectArchive(bytesJson): String` — same as
+/// [`modpackInspect`] but takes a base64-encoded archive body. Useful for
+/// Compose picking a `.zip` / `.mrpack` through the system file picker.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_modpackInspectArchive(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &spec) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing spec"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad spec: {e}")),
+        };
+        let bytes_b64 = match parsed.get("bytes_b64").and_then(|v| v.as_str()) {
+            Some(b) => b,
+            None => return err_json(&mut env, "spec missing `bytes_b64`"),
+        };
+        use base64::Engine;
+        let bytes = match base64::engine::general_purpose::STANDARD.decode(bytes_b64) {
+            Ok(b) => b,
+            Err(e) => return err_json(&mut env, &format!("base64: {e}")),
+        };
+        let origin = parsed.get("origin").and_then(|v| v.as_str());
+        match crate::mods::modpack::parse_archive_bytes(&bytes, origin) {
+            Ok(manifest) => match serde_json::to_string(&manifest) {
+                Ok(s) => jstr(&mut env, &s),
+                Err(e) => err_json(&mut env, &format!("serialise: {e}")),
+            },
+            Err(e) => err_json(&mut env, &e.to_string()),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.modpackImport(specJson): String` — fire-and-forget async
+/// modpack import. The actual work is run on the same event bus as
+/// `downloadAsync`; the reply is `{ "ok": bool, "scope": string, "report"?: ...}`.
+///
+/// `specJson` = `{"config": { ... }, "manifest": { ... } }`. `config` carries
+/// the importer settings (instances_root etc.); `manifest` is the output of
+/// `modpackInspect` (re-parsed here so the Kotlin side never holds raw JSON).
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_modpackImport(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &spec) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing spec"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad spec: {e}")),
+        };
+        // Build the importer once (sync helper), then hand the rest to the
+        // async job manager so the UI stays responsive.
+        let config_json = match parsed.get("config") {
+            Some(v) => v.to_string(),
+            None => return err_json(&mut env, "spec missing `config`"),
+        };
+        let manifest_json = match parsed.get("manifest") {
+            Some(v) => v.to_string(),
+            None => return err_json(&mut env, "spec missing `manifest`"),
+        };
+        let instance_id = match parsed.get("instance_id").and_then(|v| v.as_str()) {
+            Some(s) => s.to_string(),
+            None => return err_json(&mut env, "spec missing `instance_id`"),
+        };
+        let allow_overwrite = parsed
+            .get("allow_overwrite")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let importer = match build_importer_from_config(&config_json) {
+            Ok(i) => i,
+            Err(e) => return err_json(&mut env, &e.to_string()),
+        };
+        let manifest: crate::mods::modpack::Manifest = match serde_json::from_str(&manifest_json) {
+            Ok(m) => m,
+            Err(e) => return err_json(&mut env, &format!("bad manifest: {e}")),
+        };
+        let reply =
+            jobs::spawn_modpack_import_job(importer, manifest, instance_id, allow_overwrite);
+        jstr(&mut env, &reply.to_string())
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.modpackExtractOverrides(reqJson): String` — synchronously
+/// extract the `overrides/` directory out of an already-imported archive.
+/// `reqJson` = `{"bytes_b64": "...", "instance_root": "/data/..."}`.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_modpackExtractOverrides(
+    mut env: JNIEnv,
+    _class: JClass,
+    spec: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &spec) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing spec"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad spec: {e}")),
+        };
+        let bytes_b64 = match parsed.get("bytes_b64").and_then(|v| v.as_str()) {
+            Some(b) => b,
+            None => return err_json(&mut env, "spec missing `bytes_b64`"),
+        };
+        let root = match parsed.get("instance_root").and_then(|v| v.as_str()) {
+            Some(r) => r,
+            None => return err_json(&mut env, "spec missing `instance_root`"),
+        };
+        use base64::Engine;
+        let bytes = match base64::engine::general_purpose::STANDARD.decode(bytes_b64) {
+            Ok(b) => b,
+            Err(e) => return err_json(&mut env, &format!("base64: {e}")),
+        };
+        match crate::mods::modpack::extract_overrides(&bytes, std::path::Path::new(root)) {
+            Ok(written) => {
+                let paths: Vec<String> = written
+                    .iter()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .collect();
+                let reply = serde_json::json!({ "ok": true, "written": paths });
+                jstr(&mut env, &reply.to_string())
+            }
+            Err(e) => err_json(&mut env, &e.to_string()),
+        }
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+// === AWT / Swing bridge FFI (task 18) ========================================
 
 // === AWT / Swing bridge FFI (task 18) ========================================
 //
@@ -2147,7 +2862,6 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_calibrateStick(
 // directory; the path is configurable through `translateInit` so the
 // UI can pass the canonical Android cache dir at startup.
 
-
 use crate::translate::{
     TranslationGateway, TranslationMode, TranslationRequest, TranslationResult, TranslationService,
     TranslationServiceBuilder,
@@ -2178,15 +2892,14 @@ fn ensure_translation_service(network: crate::net::NetworkClient) -> Translation
 }
 
 fn shared_network() -> crate::net::NetworkClient {
-    use std::sync::OnceLock;
     static NET: OnceLock<crate::net::NetworkClient> = OnceLock::new();
     if let Some(c) = NET.get() {
         return c.clone();
     }
     // Best-effort: if the network client cannot build (no mirrors, no
     // DNS, etc.), fall back to a plain offline-friendly client.
-    let client = block_on_async(crate::net::NetworkClient::builder().build())
-        .unwrap_or_else(|_| {
+    let client =
+        block_on_async(crate::net::NetworkClient::builder().build()).unwrap_or_else(|_| {
             block_on_async(
                 crate::net::NetworkClient::builder()
                     .config(crate::net::NetworkConfig::default())
@@ -2258,8 +2971,7 @@ pub fn translate_batch_json(request: &serde_json::Value) -> RcResult<serde_json:
     let reqs: Vec<TranslationRequest> = serde_json::from_value(request.clone())
         .map_err(|e| RcError::Other(format!("bad translateBatch request: {e}")))?;
     let svc = ensure_translation_service(shared_network());
-    let results: Vec<TranslationResult> =
-        block_on_async(svc.translate_batch(reqs))?;
+    let results: Vec<TranslationResult> = block_on_async(svc.translate_batch(reqs))?;
     Ok(serde_json::to_value(&results).map_err(RcError::Json)?)
 }
 
@@ -2392,9 +3104,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateLanguages(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jstring {
-    auth_ffi!({
-        jstr(&mut env, &translate_languages_json().to_string())
-    })
+    auth_ffi!({ jstr(&mut env, &translate_languages_json().to_string()) })
 }
 
 /// `RustBridge.translateCacheStats(): String`
@@ -2403,9 +3113,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateCacheStats(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jstring {
-    auth_ffi!({
-        jstr(&mut env, &translate_cache_stats_json().to_string())
-    })
+    auth_ffi!({ jstr(&mut env, &translate_cache_stats_json().to_string()) })
 }
 
 /// `RustBridge.translateClearCache(): String`
@@ -2414,9 +3122,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateClearCache(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jstring {
-    auth_ffi!({
-        jstr(&mut env, &translate_clear_cache_json().to_string())
-    })
+    auth_ffi!({ jstr(&mut env, &translate_clear_cache_json().to_string()) })
 }
 
 /// `RustBridge.translateGateway(): String` — current gateway config.
@@ -2425,9 +3131,7 @@ pub extern "system" fn Java_com_rc_launcher_core_RustBridge_translateGateway(
     mut env: JNIEnv,
     _class: JClass,
 ) -> jstring {
-    auth_ffi!({
-        jstr(&mut env, &translate_gateway_json().to_string())
-    })
+    auth_ffi!({ jstr(&mut env, &translate_gateway_json().to_string()) })
 }
 
 #[cfg(test)]
@@ -4457,7 +5161,6 @@ mod i18n_tests {
     }
 }
 
-
 #[cfg(test)]
 mod translate_tests {
     use super::*;
@@ -4548,5 +5251,757 @@ mod translate_tests {
         let raw = serde_json::json!({ "text": 42 });
         let res = translate_json(&raw);
         assert!(res.is_err(), "a number in `text` must be rejected");
+    }
+
+    // === Task 16: complete and auto-updating game-version list ===============
+    //
+    // The JNI exports are thin wrappers around [`crate::game::version_list`];
+    // the heavy lifting is unit-tested in `version_list.rs` already. Here we
+    // only cover the few pure helpers that bridge the JSON envelopes.
+
+    #[test]
+    fn version_list_envelope_carries_manifest_groups_and_info() {
+        // Build a tiny manifest and confirm the envelope serialises every
+        // documented key. This is the shape the Compose UI consumes.
+        let manifest = crate::game::VersionManifest {
+            latest: crate::game::manifest::Latest {
+                release: "1.20.4".to_string(),
+                snapshot: "24w03a".to_string(),
+            },
+            versions: vec![
+                crate::game::manifest::VersionEntry {
+                    id: "1.20.4".to_string(),
+                    kind: "release".to_string(),
+                    url: "https://x/1.20.4.json".to_string(),
+                    sha1: None,
+                    time: None,
+                    release_time: None,
+                },
+                crate::game::manifest::VersionEntry {
+                    id: "24w03a".to_string(),
+                    kind: "snapshot".to_string(),
+                    url: "https://x/24w03a.json".to_string(),
+                    sha1: None,
+                    time: None,
+                    release_time: None,
+                },
+            ],
+        };
+        let groups = crate::game::version_list::VersionGroups::from(&manifest);
+        let info = crate::game::version_list::VersionListInfo {
+            fresh: true,
+            fetched_at_unix: Some(1_700_000_000),
+            stale_fallback: false,
+            offline_only: false,
+            total: 2,
+            groups: groups.counts(),
+        };
+        let env = version_list_envelope(&manifest, info.clone(), &groups);
+        assert!(env.get("manifest").is_some());
+        assert!(env.get("info").is_some());
+        assert!(env.get("groups").is_some());
+        // Every bucket key is present even when empty.
+        for k in [
+            "release",
+            "snapshot",
+            "pre_release",
+            "old_alpha",
+            "old_beta",
+            "special",
+        ] {
+            assert!(env["groups"].get(k).is_some(), "missing group {k}");
+        }
+        // Counts match the manifest length.
+        let info_obj = &env["info"];
+        assert_eq!(info_obj["fresh"], serde_json::json!(true));
+        assert_eq!(info_obj["total"], serde_json::json!(2));
+        assert_eq!(info_obj["stale_fallback"], serde_json::json!(false));
+    }
+
+    #[test]
+    fn version_list_info_serialises_to_expected_keys() {
+        // The Kotlin typed wrapper reads `info` directly; make sure every
+        // field is serialisable and round-trips back to the same struct.
+        let info = crate::game::version_list::VersionListInfo {
+            fresh: false,
+            fetched_at_unix: None,
+            stale_fallback: true,
+            offline_only: false,
+            total: 10,
+            groups: std::collections::BTreeMap::new(),
+        };
+        let s = serde_json::to_string(&info).expect("serialise info");
+        let back: crate::game::version_list::VersionListInfo =
+            serde_json::from_str(&s).expect("parse info");
+        assert_eq!(info, back);
+    }
+
+    #[test]
+    fn version_list_cache_offline_manifest_is_nonempty() {
+        // The Kotlin UI's offline path starts from this manifest, so the
+        // built-in DB must always provide enough entries to populate the
+        // picker (release/snapshot/special buckets all need at least one row).
+        let offline = crate::game::version_list::VersionListCache::offline_manifest();
+        let groups = crate::game::version_list::VersionGroups::from(&offline);
+        assert!(!groups.release.is_empty(), "offline list lacks releases");
+        assert!(
+            !groups.special.is_empty(),
+            "offline list lacks special / modded entries"
+        );
+        assert!(
+            offline.versions.len() > 100,
+            "offline list should be populated from FCL parity DB"
+        );
+    }
+}
+
+#[cfg(test)]
+mod modpack_ffi_tests {
+    use super::*;
+
+    /// Round-trip the modpack inspector: a Modrinth index text goes in,
+    /// the normalised spec JSON comes out with the right flavour.
+    #[test]
+    fn modpack_inspect_returns_normalised_spec() {
+        let json = r#"{"formatVersion":1,"game":"minecraft","name":"Sample","dependencies":{"minecraft":"1.20.1","fabric-loader":"0.16.0"},"files":[]}"#;
+        let manifest = crate::mods::modpack::detect_and_parse(json, Some("https://e/x")).unwrap();
+        let serialised = serde_json::to_string(&manifest).unwrap();
+        assert!(serialised.contains("\"fabric\""));
+        assert!(serialised.contains("\"1.20.1\""));
+    }
+
+    /// Detect+parse from raw manifest text returns the same envelope.
+    #[test]
+    fn modpack_detect_handles_all_three_flavours() {
+        let modrinth = r#"{"formatVersion":1,"game":"minecraft","name":"x","dependencies":{"minecraft":"1.20.1"},"files":[]}"#;
+        let curse = r#"{"manifestType":"minecraftModpack","manifestVersion":1,"name":"x","minecraft":{"version":"1.20.1","modLoaders":[]},"files":[]}"#;
+        let mmc = r#"{"formatVersion":1,"name":"x","mcVersion":"1.20.1","mods":[]}"#;
+
+        let a = crate::mods::modpack::detect_and_parse(modrinth, None).unwrap();
+        let b = crate::mods::modpack::detect_and_parse(curse, None).unwrap();
+        let c = crate::mods::modpack::detect_and_parse(mmc, None).unwrap();
+        assert_eq!(
+            a.spec().flavour,
+            crate::mods::modpack::ModpackFlavour::Modrinth
+        );
+        assert_eq!(
+            b.spec().flavour,
+            crate::mods::modpack::ModpackFlavour::CurseForge
+        );
+        assert_eq!(
+            c.spec().flavour,
+            crate::mods::modpack::ModpackFlavour::MultiMc
+        );
+    }
+
+    /// Helper: build a `build_importer_from_config` from a config JSON.
+    #[tokio::test(flavor = "current_thread")]
+    async fn build_importer_rejects_missing_instances_root() {
+        let result = build_importer_from_config("{}");
+        assert!(result.is_err());
+    }
+}
+
+// === File manager FFI (task 19) ============================================
+//
+// JSON-in / JSON-out bridge for the in-app small file manager. Every entry
+// point:
+//   * unwraps a single `String` argument containing a JSON object,
+//   * delegates to a pure-Rust helper in `crate::fs_ops`,
+//   * returns either the typed JSON success payload or
+//     `{"error": "...", "kind": "..."}` on failure.
+//
+// Path-traversal is prevented by `fs_ops::resolve_under_roots`, which
+// canonicalises both the target path and the configured allowed roots and
+// rejects anything that escapes them. The UI therefore only ever sees
+// operations that were *explicitly* allowed for the current screen (the
+// per-instance file manager, the world manager, the resource browser, ...).
+
+use crate::fs_ops as file_ops;
+
+/// `RustBridge.fsListDir(requestJson): String`
+///
+/// `requestJson` = `{ "path": String, "roots": [String] }`.
+/// Returns the [`fs_ops::FsListing`] JSON, or an error envelope.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsListDir(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::list_dir(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsMkdir(requestJson): String`
+///
+/// `requestJson` = `{ "parent": String, "name": String, "roots": [String] }`.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsMkdir(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::mkdir(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsCopy(requestJson): String`
+///
+/// `requestJson` = `{ "source": String, "destination": String, "roots":
+/// [String] }`. Both paths must resolve under an allowed root; the
+/// destination must not already exist.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsCopy(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::copy_path(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsMove(requestJson): String`
+///
+/// `requestJson` = `{ "source": String, "destination": String, "roots":
+/// [String], "confirm": Bool }`. With `confirm: false` and an existing
+/// destination, returns an `FsOpPreview` JSON so the UI can show a
+/// confirmation dialog before applying the move.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsMove(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::move_path(parsed);
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsRename(requestJson): String`
+///
+/// `requestJson` = `{ "path": String, "new_name": String, "roots":
+/// [String] }`. The new name is checked for `..` / absolute / drive-prefix
+/// components.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsRename(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::rename_path(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsDelete(requestJson): String`
+///
+/// `requestJson` = `{ "paths": [String], "roots": [String], "confirm":
+/// Bool }`. Without `confirm: true`, returns an `FsOpPreview` so the UI can
+/// ask the user to confirm the deletion.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsDelete(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::delete_paths(parsed);
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsExtractZip(requestJson): String`
+///
+/// `requestJson` = `{ "archive": String, "destination": String, "roots":
+/// [String] }`. Used by the import buttons on the mod / resource-pack /
+/// shader-pack browsers.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsExtractZip(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::extract_zip(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.fsImportBytes(requestJson): String`
+///
+/// `requestJson` = `{ "destination": String, "data_b64": String, "roots":
+/// [String] }`. Used to import a file from a `content://` URI: the Android
+/// side streams the bytes, base64-encodes them, and hands them to the core
+/// to write under the allowed root.
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_fsImportBytes(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        let out = file_ops::import_bytes(parsed)
+            .map(serde_json::to_value)
+            .and_then(|v| v.map_err(RcError::from));
+        rc_to_json(&mut env, out)
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[cfg(test)]
+mod fs_ops_ffi_tests {
+    use super::*;
+    use std::io::Write as _;
+    use tempfile::tempdir;
+
+    /// Each public fs_ops helper round-trips through the same JSON shape the
+    /// JNI surface produces. The Kotlin side parses the same field names, so a
+    /// drift here would break the Compose file manager.
+    #[test]
+    fn list_dir_round_trip() {
+        let dir = tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        let mut f = std::fs::File::create(dir.path().join("a.txt")).unwrap();
+        f.write_all(b"x").unwrap();
+        let req = serde_json::json!({
+            "path": dir.path().to_string_lossy(),
+            "roots": [dir.path().to_string_lossy()],
+        });
+        let v: serde_json::Value = file_ops::list_dir(req)
+            .map(serde_json::to_value)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            v["path"].as_str().unwrap(),
+            dir.path()
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy()
+                .as_ref()
+        );
+        assert_eq!(v["entries"].as_array().unwrap().len(), 2);
+        assert_eq!(v["dir_count"], 1);
+        assert_eq!(v["file_count"], 1);
+        // The Kotlin side reads `kind` as one of file/dir/link/other.
+        let kinds: Vec<&str> = v["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap())
+            .collect();
+        assert!(kinds.contains(&"dir"));
+        assert!(kinds.contains(&"file"));
+    }
+
+    #[test]
+    fn delete_preview_shape() {
+        let dir = tempdir().unwrap();
+        let f = dir.path().join("a.txt");
+        std::fs::write(&f, b"x").unwrap();
+        let req = serde_json::json!({
+            "paths": [f.to_string_lossy()],
+            "roots": [dir.path().to_string_lossy()],
+        });
+        let v: serde_json::Value = file_ops::delete_paths(req).unwrap();
+        assert_eq!(v["op"], "delete");
+        assert_eq!(v["has_directories"], false);
+        assert_eq!(v["targets"].as_array().unwrap().len(), 1);
+        assert_eq!(v["total_bytes"], 1);
+        assert!(f.exists(), "preview must not delete");
+    }
+}
+
+// === Crash report management FFI (task 24) ===================================
+//
+// Pure JSON helpers + panic-safe JNI wrappers that give the Compose UI access to
+// the persisted crash-log store and the process-wide log ring that backs it.
+// These complete the crash-report pipeline: `launchDiagnose` (above) classifies
+// a single finished session, and `crashListLogs` / `crashInstallReporter` /
+// `crashPruneLogs` let the crash history screen enumerate, persist and prune
+// the accumulated reports while `crashRecentLogs` feeds the live diagnostics
+// panel.
+
+/// `RustBridge.crashListLogs(requestJson): String`
+///
+/// `requestJson` = `{ "dir": String }` — the crash directory (usually
+/// `<data_root>/crash/`). Returns `{ "ok": true, "logs": [CrashLog, ...],
+/// "count": N }` or `{ "ok": false, "error": "..." }`.
+///
+/// Each `CrashLog` serialises to `{ id, timestamp, kind, message, backtrace?,
+/// logs: [{ts, level, line}], context? }`. The `context` field already carries
+/// the full `CrashReport` verdict (category, evidence, recovery, device_info)
+/// produced by `LaunchEngine`, so the Kotlin screen can render a compact list
+/// without a second JNI call.
+pub fn crash_list_logs_json(request: &serde_json::Value) -> RcResult<serde_json::Value> {
+    let dir = match request.get("dir").and_then(|v| v.as_str()) {
+        Some(p) => PathBuf::from(p),
+        None => return Err(crate::RcError::Launch("missing `dir`".into())),
+    };
+    let logs = crate::robust::list_crash_logs(&dir)?;
+    let json_logs: Vec<serde_json::Value> = serde_json::to_value(&logs)
+        .map(|v| v.as_array().unwrap_or(&Vec::new()).clone())
+        .unwrap_or_default();
+    Ok(json!({
+        "ok": true,
+        "count": json_logs.len(),
+        "logs": json_logs,
+    }))
+}
+
+/// `RustBridge.crashRecentLogs(requestJson): String`
+///
+/// `requestJson` = `{ "n": Int? }` (default 200). Returns
+/// `{ "ok": true, "logs": [{ts, level, line}, ...] }` — the most recent `n`
+/// lines captured by the process-wide log ring, newest first. Used by the
+/// diagnostics card and the crash snapshot (tasks 10, 19, 24).
+pub fn crash_recent_logs_json(request: &serde_json::Value) -> serde_json::Value {
+    let n = request.get("n").and_then(|v| v.as_u64()).unwrap_or(200) as usize;
+    let logs = crate::robust::recent_logs(n);
+    json!({
+        "ok": true,
+        "n": logs.len(),
+        "logs": logs,
+    })
+}
+
+/// `RustBridge.crashInstallReporter(requestJson): String`
+///
+/// `requestJson` = `{ "data_root": String }`. Installs the process-wide panic
+/// hook that writes crash logs under `<data_root>/crash/` and emits an
+/// `error` event on the bus (task 10). Idempotent — a second call returns
+/// `{"ok": true, "installed": false, "already_installed": true}`.
+pub fn crash_install_reporter_json(request: &serde_json::Value) -> serde_json::Value {
+    let data_root = match request.get("data_root").and_then(|v| v.as_str()) {
+        Some(p) => PathBuf::from(p),
+        None => return json!({ "ok": false, "error": "missing `data_root`", "installed": false }),
+    };
+    let installed = crate::robust::install_crash_reporter(data_root);
+    json!({
+        "ok": true,
+        "installed": installed,
+        "already_installed": !installed,
+    })
+}
+
+/// `RustBridge.crashPruneLogs(requestJson): String`
+///
+/// `requestJson` = `{ "dir": String, "keep": Int? }` (default 50). Deletes the
+/// oldest crash logs beyond `keep`, returning `{"ok": true, "removed": N}`.
+pub fn crash_prune_logs_json(request: &serde_json::Value) -> RcResult<serde_json::Value> {
+    let dir = match request.get("dir").and_then(|v| v.as_str()) {
+        Some(p) => PathBuf::from(p),
+        None => return Err(crate::RcError::Launch("missing `dir`".into())),
+    };
+    let keep = request.get("keep").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+    let removed = crate::robust::prune_crash_logs(&dir, keep)?;
+    Ok(json!({
+        "ok": true,
+        "removed": removed,
+        "remaining": crate::robust::list_crash_logs(&dir)?.len() as u64,
+    }))
+}
+
+/// `RustBridge.crashListLogs(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_crashListLogs(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        rc_to_json(&mut env, crash_list_logs_json(&value))
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.crashRecentLogs(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_crashRecentLogs(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
+        jstr(&mut env, &crash_recent_logs_json(&value).to_string())
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.crashInstallReporter(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_crashInstallReporter(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
+        jstr(&mut env, &crash_install_reporter_json(&value).to_string())
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// `RustBridge.crashPruneLogs(requestJson): String`
+#[no_mangle]
+pub extern "system" fn Java_com_rc_launcher_core_RustBridge_crashPruneLogs(
+    mut env: JNIEnv,
+    _class: JClass,
+    request: JString,
+) -> jstring {
+    let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let raw = match read_input(&mut env, &request) {
+            Some(s) => s,
+            None => return err_json(&mut env, "missing request"),
+        };
+        let value: serde_json::Value = match serde_json::from_str(&raw) {
+            Ok(v) => v,
+            Err(e) => return err_json(&mut env, &format!("bad request: {e}")),
+        };
+        rc_to_json(&mut env, crash_prune_logs_json(&value))
+    }));
+    match built {
+        Ok(s) => s,
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+#[cfg(test)]
+mod crash_ffi_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    /// `crashListLogs` round-trips a persisted CrashLog as JSON with all the
+    /// fields the Compose crash-history screen needs.
+    #[test]
+    fn crash_list_logs_round_trips() {
+        let dir = tempdir().unwrap();
+        let report = crate::robust::CrashLog::new("out_of_memory", "the game ran out of memory")
+            .with_context(serde_json::json!({
+                "category": "out_of_memory",
+                "evidence": ["java.lang.OutOfMemoryError: Java heap space"],
+                "device_info": { "abi": "arm64-v8a", "renderer": "gl4es" },
+                "actions": ["copy_details", "switch_renderer"],
+                "recovery": { "description": "re_download_natives", "suggest_proxy": true },
+            }));
+        crate::robust::write_crash_log(dir.path(), &report).unwrap();
+
+        let req = json!({ "dir": dir.path().to_string_lossy() });
+        let out = crash_list_logs_json(&req).unwrap();
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["count"], 1);
+        let first = out["logs"].as_array().unwrap().first().unwrap();
+        assert_eq!(first["kind"], "out_of_memory");
+        assert_eq!(first["message"], "the game ran out of memory");
+        // The context carries the full crash verdict.
+        assert_eq!(first["context"]["category"], "out_of_memory");
+        assert!(first["context"]["recovery"]["suggest_proxy"]
+            .as_bool()
+            .unwrap());
+    }
+
+    /// `crashRecentLogs` degrades gracefully when the ring is empty.
+    #[test]
+    fn crash_recent_logs_empty_degrades_gracefully() {
+        // The global ring may have content from other tests; we just assert
+        // the shape is correct and never panics.
+        let out = crash_recent_logs_json(&json!({}));
+        assert_eq!(out["ok"], true);
+        assert!(out["logs"].is_array());
+    }
+
+    /// `crashInstallReporter` without `data_root` reports a clean error.
+    /// (We deliberately do not test the *success* path here: `install_crash_reporter`
+    /// uses a process-global `OnceLock` that the `robust::reporter` test suite
+    /// already exercises; calling it twice from different modules causes
+    /// nondeterministic failures.)
+    #[test]
+    fn crash_install_reporter_missing_dir_is_error() {
+        let out = crash_install_reporter_json(&json!({}));
+        assert_eq!(out["ok"], false);
+        assert!(out["error"].as_str().unwrap().contains("data_root"));
+    }
+
+    /// `crashListLogs` without `dir` is a Launch error.
+    #[test]
+    fn crash_list_logs_missing_dir_is_error() {
+        let result = crash_list_logs_json(&json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("missing `dir`"));
+    }
+
+    /// `crashPruneLogs` removes the oldest reports beyond `keep`.
+    #[test]
+    fn crash_prune_logs_removes_oldest() {
+        let dir = tempdir().unwrap();
+        // Write three crash logs.
+        for i in 0..3 {
+            let mut r = crate::robust::CrashLog::new("panic", format!("crash {i}"));
+            r.timestamp = 1000 + i as u64;
+            crate::robust::write_crash_log(dir.path(), &r).unwrap();
+        }
+        let req = json!({ "dir": dir.path().to_string_lossy(), "keep": 1 });
+        let out = crash_prune_logs_json(&req).unwrap();
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["removed"], 2);
+        assert_eq!(out["remaining"], 1);
+    }
+
+    /// `crashListLogs` on a non-existent directory returns an IO error,
+    /// not a panic.
+    #[test]
+    fn crash_list_logs_missing_dir_is_error_not_panic() {
+        let req = json!({ "dir": "/no/such/crash/dir/here" });
+        let result = crash_list_logs_json(&req);
+        assert!(result.is_err());
+    }
+
+    /// `crashRecentLogs` with an explicit `n` honours the limit.
+    #[test]
+    fn crash_recent_logs_honours_n() {
+        crate::robust::record_log("error", "marker-line-for-recent-logs-test");
+        let out = crash_recent_logs_json(&json!({ "n": 3 }));
+        assert!(out["logs"].as_array().unwrap().len() <= 3);
     }
 }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +28,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
@@ -33,6 +37,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,13 +61,17 @@ import com.rc.launcher.ui.model.Account
 import com.rc.launcher.ui.model.AccountKind
 import com.rc.launcher.ui.model.InMemoryAccountRepository
 import com.rc.launcher.ui.model.MicrosoftAccount
+import com.rc.launcher.ui.model.SkinModel
+import com.rc.launcher.ui.model.SkinSource
 import com.rc.launcher.ui.model.OfflineAccount
 import com.rc.launcher.ui.model.TokenStatus
 import com.rc.launcher.ui.model.ThirdPartyLogin
 import com.rc.launcher.ui.model.ThirdPartyServerInfo
 import com.rc.launcher.ui.model.nowSecs
+import com.rc.launcher.ui.model.SkinTutorialStep
 import com.rc.launcher.ui.model.offlineUuid
 import com.rc.launcher.ui.viewmodel.AccountViewModel
+import com.rc.launcher.ui.viewmodel.TutorialViewModel
 import com.rc.launcher.ui.viewmodel.LoginState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -71,7 +83,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import android.content.Intent
 import android.net.Uri
+import android.graphics.BitmapFactory
+import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.delay
+import com.rc.launcher.ui.i18n.RcStringKeys
+import com.rc.launcher.ui.i18n.RcStrings
+import com.rc.launcher.ui.i18n.LocalRcStrings
+import com.rc.launcher.ui.i18n.rcString
 import com.rc.launcher.ui.model.formatDuration
 import com.rc.launcher.ui.model.remainingSecs
 
@@ -99,6 +119,11 @@ fun AccountsScreen(
     val activeId by viewModel.activeId.collectAsStateWithLifecycle()
     val activeAccount by viewModel.activeAccount.collectAsStateWithLifecycle()
     val loginState by viewModel.loginState.collectAsStateWithLifecycle()
+    val skinModel by viewModel.skinModel.collectAsStateWithLifecycle()
+    val tutorialViewModel: TutorialViewModel = viewModel()
+    val skinError by viewModel.skinError.collectAsStateWithLifecycle()
+    val isFetchingSkin by viewModel.isFetchingSkin.collectAsStateWithLifecycle()
+    val isUploading by viewModel.isUploading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
 
     val scope = rememberCoroutineScope()
@@ -106,6 +131,16 @@ fun AccountsScreen(
     var showThirdParty by remember { mutableStateOf(false) }
     var previewAccount by remember { mutableStateOf<Account?>(null) }
     var pendingRemove by remember { mutableStateOf<Account?>(null) }
+
+    // Load the skin model when the preview account changes (task 22).
+    LaunchedEffect(previewAccount?.uuid) {
+        val acc = previewAccount
+        if (acc != null && acc is MicrosoftAccount) {
+            viewModel.loadSkin(acc.uuid)
+        } else {
+            viewModel.clearSkin()
+        }
+    }
 
     // Load the account list as soon as the screen appears (the ViewModel keeps
     // the list in a StateFlow; this just seeds it from the repository).
@@ -137,7 +172,16 @@ fun AccountsScreen(
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = { scope.launch(Dispatchers.IO) { viewModel.beginMicrosoftLogin() } },
+                    onClick = {
+                        // Task 28: the redirect_uri is already registered with the
+                        // Rust core via authInit (pointing to the dynamically written
+                        // callback page in the cache directory). Query authDefaultRedirectUri()
+                        // so the UI and the core always agree on the address.
+                        val redirectUri = runCatching {
+                            com.rc.launcher.core.RustBridge.authDefaultRedirectUri()
+                        }.getOrDefault("file:///android_asset/microsoft_auth.html")
+                        scope.launch(Dispatchers.IO) { viewModel.beginMicrosoftLogin(redirectUri) }
+                    },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.AccountCircle, contentDescription = null)
@@ -235,7 +279,16 @@ fun AccountsScreen(
     }
 
     previewAccount?.let { acct ->
-        SkinPreviewDialog(account = acct, onDismiss = { previewAccount = null })
+        SkinPreviewDialog(
+            account = acct,
+            skinModel = skinModel,
+            isFetching = isFetchingSkin,
+            isUploading = isUploading,
+            skinError = skinError,
+            viewModel = viewModel,
+            tutorialViewModel = tutorialViewModel,
+            onDismiss = { previewAccount = null },
+        )
     }
 
     pendingRemove?.let { acc ->
@@ -423,6 +476,90 @@ private fun EmptyAccounts() {
 
 @Composable
 private fun SkinAvatar(
+    skinUrl: String,
+    capeUrl: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    var skinBmp by remember(skinUrl) { mutableStateOf<ImageBitmap?>(null) }
+    var capeBmp by remember(capeUrl) { mutableStateOf<ImageBitmap?>(null) }
+    var loadError by remember { mutableStateOf(false) }
+
+    LaunchedEffect(skinUrl) {
+        launch(Dispatchers.IO) {
+            runCatching {
+                val conn = java.net.URL(skinUrl).openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                conn.inputStream.use { stream ->
+                    android.graphics.BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                }
+            }.onSuccess { b ->
+                if (b != null) {
+                    skinBmp = b
+                } else {
+                    loadError = true
+                }
+            }.onFailure {
+                loadError = true
+            }
+        }
+    }
+    if (capeUrl.isNotBlank()) {
+        LaunchedEffect(capeUrl) {
+            launch(Dispatchers.IO) {
+                runCatching {
+                    val conn = java.net.URL(capeUrl).openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 8000
+                    conn.readTimeout = 8000
+                    conn.inputStream.use { stream ->
+                        android.graphics.BitmapFactory.decodeStream(stream)?.asImageBitmap()
+                    }
+                }.onSuccess { b ->
+                    if (b != null) capeBmp = b
+                }
+            }
+        }
+    }
+
+    val bmp = skinBmp
+    val decorated = if (onClick != null) modifier.clickable { onClick() } else modifier
+    if (bmp != null) {
+        Box(modifier = decorated) {
+            Image(bitmap = bmp, contentDescription = null, modifier = Modifier.matchParentSize())
+            if (capeBmp != null) {
+                // Overlay the cape as a small badge in the top-right corner.
+                Image(
+                    bitmap = capeBmp!!,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .align(Alignment.TopEnd),
+                )
+            }
+        }
+    } else if (loadError) {
+        Surface(modifier = decorated, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+            Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "!",
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        }
+    } else {
+        Surface(modifier = decorated, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+            Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkinAvatar(
     uuid: String,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
@@ -490,7 +627,7 @@ private fun MicrosoftLoginDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
+            TextButton(onClick = onDismiss) { Text(rcString(RcStringKeys.COMMON_CANCEL)) }
         },
         title = { Text("微软账户登录") },
         text = {
@@ -554,17 +691,40 @@ private fun MicrosoftLoginDialog(
                             }
                         }
                         OutlinedButton(
-                            onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(challenge.verificationUrl))) } },
+                            onClick = {
+                                // Task 28: when a custom callback address is configured,
+                                // append it as a redirect_uri param so Microsoft
+                                // redirects to the embedded callback page after sign-in.
+                                val url = if (!challenge.redirectUri.isNullOrBlank()) {
+                                    val sep = if (challenge.verificationUrl.contains("?")) "&" else "?"
+                                    "${challenge.verificationUrl}${sep}redirect_uri=${Uri.encode(challenge.redirectUri)}"
+                                } else {
+                                    challenge.verificationUrl
+                                }
+                                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
                             Text("在浏览器中打开")
                         }
-                        Text(
-                            "在浏览器中打开上述网址并输入验证码，然后返回此处点击“我已登录”。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        // Task 28: show the callback address hint when configured.
+                        challenge.redirectUri?.let { uri ->
+                            if (uri.isNotBlank()) {
+                                Text(
+                                    "浏览器将在完成登录后跳转到嵌入式回调页。如跳转失败，请在设置中更换代理或镜像后重试。",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        if (challenge.redirectUri.isNullOrBlank()) {
+                            Text(
+                                "在浏览器中打开上述网址并输入验证码，然后返回此处点击\"我已登录\"。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -575,40 +735,291 @@ private fun MicrosoftLoginDialog(
 @Composable
 private fun SkinPreviewDialog(
     account: Account,
+    skinModel: SkinModel?,
+    isFetching: Boolean,
+    isUploading: Boolean,
+    skinError: String?,
+    viewModel: AccountViewModel,
+    tutorialViewModel: TutorialViewModel,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var localBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    var localUri by remember { mutableStateOf<Uri?>(null) }
+    var showUploadDialog by remember { mutableStateOf(false) }
+    var uploadModel by remember { mutableStateOf("default") }
+    var validationError by remember { mutableStateOf<String?>(null) }
+    // Task 23: skin import tutorial toggle.
+    var showSkinTutorial by remember { mutableStateOf(false) }
+
+    // File picker for local image selection (task 22).
+    val pickLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent(),
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        localUri = uri
+        validationError = null
+        localBitmap = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
+        }.getOrNull()
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(rcString(RcStringKeys.COMMON_CLOSE)) }
+        },
         title = { Text(account.username.ifBlank { "(无名)" }) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 520.dp, max = 720.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                SkinAvatar(account.uuid, Modifier.size(120.dp).clip(CircleShape))
-                KindBadge(account.kind)
-                if (account is MicrosoftAccount) {
-                    TokenBadge(account.tokenStatus)
+                // Fetch / upload progress banner
+                if (isFetching) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(rcString(RcStringKeys.SKIN_FETCHING), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                if (isUploading) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(rcString(RcStringKeys.SKIN_UPLOADING), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                skinError?.let { msg ->
+                    Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+                validationError?.let { msg ->
+                    Text(msg, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+
+                // Skin + cape 2D preview (lightweight rendering).
+                if (localBitmap != null) {
+                    // Show the locally selected image.
+                    Box(
+                        modifier = Modifier
+                            .size(160.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    ) {
+                        Image(
+                            bitmap = localBitmap!!,
+                            contentDescription = rcString(RcStringKeys.SKIN_PREVIEW_TITLE),
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize(),
+                        )
+                        if (localUri != null) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(4.dp)
+                                    .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                                    .padding(4.dp),
+                            ) {
+                                Icon(Icons.Filled.Image, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                } else if (skinModel != null && skinModel.isCached()) {
+                    // Show the fetched skin from the model URL (cached/offline).
+                    SkinAvatar(
+                        skinUrl = skinModel.skinUrl,
+                        capeUrl = skinModel.capeUrl ?: "",
+                        modifier = Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)),
+                    )
+                } else if (skinModel != null && !skinModel.isCached() && skinModel.skinUrl.isNotBlank()) {
+                    // Show the skin even if not yet cached (first load).
+                    SkinAvatar(
+                        skinUrl = skinModel.skinUrl,
+                        capeUrl = skinModel.capeUrl ?: "",
+                        modifier = Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)),
+                    )
+                } else {
+                    // No skin model — show the default mc-heads avatar.
+                    SkinAvatar(account.uuid, Modifier.size(160.dp).clip(RoundedCornerShape(12.dp)))
+                }
+
+                // Skin metadata row
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    KindBadge(account.kind)
                     Text(
-                        "令牌剩余：${formatDuration(account.remainingSecs)}",
+                        text = rcString(if (skinModel?.model == "slim") RcStringKeys.SKIN_MODEL_ALEX else RcStringKeys.SKIN_MODEL_STEVE),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    skinModel?.let { sm ->
+                        Text(
+                            text = rcString(if (sm.source == SkinSource.OFFICIAL) RcStringKeys.SKIN_SOURCE_OFFICIAL else RcStringKeys.SKIN_SOURCE_CUSTOM),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (sm.capeUrl != null && sm.capeUrl.isNotBlank()) {
+                            Text(
+                                text = rcString(RcStringKeys.SKIN_HAS_CAPE),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (sm.isCached()) {
+                            Text(
+                                text = rcString(RcStringKeys.SKIN_CACHED_OFFLINE),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    if (account is MicrosoftAccount) {
+                        TokenBadge(account.tokenStatus)
+                        Text(
+                            "令牌剩余：${formatDuration(account.remainingSecs)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                // Action buttons (only for Microsoft accounts)
+                if (account is MicrosoftAccount) {
+                    if (localBitmap != null) {
+                        val strings = LocalRcStrings.current
+                        val (valid, reason) = validateSkinBitmap(localBitmap!!, strings)
+                        OutlinedButton(
+                            onClick = {
+                                if (valid) {
+                                    showUploadDialog = true
+                                    uploadModel = skinModel?.model?.takeIf { it == "slim" } ?: "default"
+                                } else {
+                                    validationError = reason
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isUploading,
+                        ) {
+                            Icon(Icons.Filled.Upload, contentDescription = null)
+                            Text(if (isUploading) rcString(RcStringKeys.SKIN_UPLOADING_LABEL) else rcString(RcStringKeys.SKIN_UPLOAD))
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { pickLauncher.launch("image/png") },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isFetching && !isUploading,
+                        ) {
+                            Icon(Icons.Filled.Image, contentDescription = null)
+                            Text(rcString(RcStringKeys.SKIN_PICK_LOCAL))
+                        }
+                        OutlinedButton(
+                            onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(skinModel?.skinUrl ?: "https://mc-heads.net/avatar/${account.uuid}/64"))) },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = skinModel?.skinUrl?.isNotBlank() == true,
+                        ) {
+                            Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
+                            Text(rcString(RcStringKeys.SKIN_VIEW_IN_BROWSER))
+                        }
+                    }
+                } else {
+                    Text(
+                        rcString(RcStringKeys.SKIN_OFFLINE_ACCOUNT),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                val skinUrl = "https://mc-heads.net/avatar/${account.uuid}/256?overlay"
-                OutlinedButton(
-                    onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(skinUrl))) } },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Filled.OpenInBrowser, contentDescription = null)
-                    Text("在浏览器查看皮肤")
-                }
+
+                // Task 23: skin import tutorial section.
+                SkinTutorialSection(
+                    tutorialViewModel = tutorialViewModel,
+                    showTutorial = showSkinTutorial,
+                    onToggleTutorial = { showSkinTutorial = !showSkinTutorial },
+                    onPickImage = { pickLauncher.launch("image/png") },
+                    isFetching = isFetching,
+                    isUploading = isUploading,
+                    account = account,
+                )
             }
         },
     )
+
+    // Upload confirmation dialog
+    if (showUploadDialog) {
+        AlertDialog(
+            onDismissRequest = { showUploadDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUploadDialog = false
+                        localUri?.let { uri ->
+                            val pngBytes = runCatching {
+                                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            }.getOrNull()
+                            if (pngBytes != null) {
+                                val b64 = Base64.encodeToString(pngBytes, Base64.NO_WRAP)
+                                val modelParam = if (uploadModel == "slim") "slim" else "classic"
+                                viewModel.uploadSkin(account.uuid, modelParam, b64)
+                            } else {
+                                validationError = rcString(RcStringKeys.SKIN_READ_ERROR)
+                            }
+                        }
+                    },
+                    enabled = !isUploading,
+                ) { Text(rcString(RcStringKeys.SKIN_UPLOAD_CONFIRM)) }
+            },
+            dismissButton = { TextButton(onClick = { showUploadDialog = false }) { Text(rcString(RcStringKeys.COMMON_CANCEL)) } },
+            title = { Text(rcString(RcStringKeys.SKIN_PREVIEW_TITLE)) },
+            text = {
+                Column {
+                    Text(rcString(RcStringKeys.SKIN_SELECT_MODEL))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        RadioButton(
+                            selected = uploadModel == "classic",
+                            onClick = { uploadModel = "classic" },
+                            colors = RadioButtonDefaults.colors(),
+                        )
+                        Text(rcString(RcStringKeys.SKIN_MODEL_STEVE))
+                        RadioButton(
+                            selected = uploadModel == "slim",
+                            onClick = { uploadModel = "slim" },
+                        )
+                        Text(rcString(RcStringKeys.SKIN_MODEL_ALEX))
+                    }
+                    Text(
+                        rcString(RcStringKeys.SKIN_UPLOAD_NOTE),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+        )
+    }
+}
+
+/**
+ * Validate a skin PNG's dimensions against the known-good Minecraft sizes (task 23).
+ * Returns (true, null) when valid, (false, reason) otherwise. The reason string
+ * is localised via [rc] so the validation error respects the current language (task 20).
+ */
+private fun validateSkinBitmap(bitmap: ImageBitmap, rc: RcStrings): Pair<Boolean, String?> {
+    val width = bitmap.width
+    val height = bitmap.height
+    val validSizes = setOf(
+        64 to 64, 64 to 32, 128 to 128, 128 to 64,
+        128 to 192, 256 to 256, 256 to 128,
+    )
+    if (width to height !in validSizes) {
+        return Pair(
+            false,
+            rc.format(RcStringKeys.SKIN_INVALID_DIMENSIONS, "w" to width.toString(), "h" to height.toString()),
+        )
+    }
+    return Pair(true, null)
 }
 
 @Composable
@@ -620,7 +1031,7 @@ private fun ConfirmRemoveDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = { Button(onClick = onConfirm) { Text("删除") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(rcString(RcStringKeys.COMMON_CANCEL)) } },
         title = { Text("删除账户") },
         text = {
             Text(
@@ -645,7 +1056,7 @@ private fun AddOfflineDialog(
                 enabled = name.isNotBlank(),
             ) { Text("添加") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(rcString(RcStringKeys.COMMON_CANCEL)) } },
         title = { Text("添加离线账号") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -707,7 +1118,7 @@ private fun ThirdPartyLoginDialog(
                 }
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(rcString(RcStringKeys.COMMON_CANCEL)) } },
         title = { Text("第三方账号登录") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -774,6 +1185,201 @@ private fun ThirdPartyLoginDialog(
             }
         },
     )
+}
+
+
+
+/**
+ * Embedded skin-import tutorial (task 23).
+ *
+ * A collapsible, step-by-step walkthrough that is embedded in the [SkinPreviewDialog]
+ * on the Accounts screen. When the user taps "Start tutorial" the card expands to
+ * show one step at a time, with contextual hints (official / third-party notes,
+ * file-format validation, one-click file picker) that mirror the live controls
+ * below it.
+ *
+ * The step state lives in [TutorialState] / [TutorialViewModel] so it survives
+ * process death and is linked to the task-14 onboarding system. The tutorial
+ * auto-shows the file picker on the "Import" step via [onPickImage].
+ *
+ * **i18n (task 20).** Every visible string goes through [rcString] with a
+ * [RcStringKeys.SKIN_TUTORIAL_*] key, so the tutorial is fully localised and
+ * participates in the same i18n parity checks as the rest of the launcher.
+ */
+@Composable
+private fun SkinTutorialSection(
+    tutorialViewModel: TutorialViewModel,
+    showTutorial: Boolean,
+    onToggleTutorial: () -> Unit,
+    onPickImage: () -> Unit,
+    isFetching: Boolean,
+    isUploading: Boolean,
+    account: Account,
+) {
+    val tutorialState by tutorialViewModel.state.collectAsStateWithLifecycle()
+    val skinStep = tutorialState.currentSkinTutorialStep
+    val totalSteps = tutorialState.skinTutorialTotalSteps
+    val isLast = SkinTutorialStep.entries.indexOf(skinStep) == totalSteps - 1
+    val skinTutorialDone = tutorialState.skinTutorialCompleted
+
+    // Step metadata: (title key, body key, hint key).
+    val steps = listOf(
+        Triple(
+            RcStringKeys.SKIN_TUTORIAL_STEP_GET_TITLE,
+            RcStringKeys.SKIN_TUTORIAL_STEP_GET_BODY,
+            RcStringKeys.SKIN_TUTORIAL_OFFICIAL_NOTE,
+        ),
+        Triple(
+            RcStringKeys.SKIN_TUTORIAL_STEP_FORMAT_TITLE,
+            RcStringKeys.SKIN_TUTORIAL_STEP_FORMAT_BODY,
+            RcStringKeys.SKIN_TUTORIAL_FORMAT_NOTE,
+        ),
+        Triple(
+            RcStringKeys.SKIN_TUTORIAL_STEP_IMPORT_TITLE,
+            RcStringKeys.SKIN_TUTORIAL_STEP_IMPORT_BODY,
+            RcStringKeys.SKIN_TUTORIAL_PICK,
+        ),
+        Triple(
+            RcStringKeys.SKIN_TUTORIAL_STEP_APPLY_TITLE,
+            RcStringKeys.SKIN_TUTORIAL_STEP_APPLY_BODY,
+            RcStringKeys.SKIN_TUTORIAL_LINK_TASK14,
+        ),
+        Triple(
+            RcStringKeys.SKIN_TUTORIAL_STEP_DONE_TITLE,
+            RcStringKeys.SKIN_TUTORIAL_STEP_DONE_BODY,
+            null,
+        ),
+    )
+    val (titleKey, bodyKey, hintKey) = steps[skinStep.ordinal]
+
+    // Step indicator: "Step 2 of 5".
+    val indicator = rcString(
+        RcStringKeys.SKIN_TUTORIAL_STEP_INDICATOR,
+        "current" to (skinStep.ordinal + 1).toString(),
+        "total" to totalSteps.toString(),
+    )
+
+    // One-click file picker: when we reach the Import step and the user is on a
+    // Microsoft account, auto-open the picker (only once per visit).
+    var autoPicked by remember(skinStep, account.uuid) { mutableStateOf(false) }
+    if (skinStep == SkinTutorialStep.IMPORT && !autoPicked && account is MicrosoftAccount) {
+        LaunchedEffect(Unit) {
+            onPickImage()
+            autoPicked = true
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Toggle button: start / collapse. When re-watching a completed
+        // tutorial, reset to the first step so the user sees the full flow.
+        OutlinedButton(
+            onClick = {
+                if (!showTutorial && skinTutorialDone) {
+                    tutorialViewModel.skinStart()
+                }
+                onToggleTutorial()
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (showTutorial) {
+                Text("▲ " + rcString(RcStringKeys.SKIN_TUTORIAL_TITLE))
+            } else if (skinTutorialDone) {
+                Text(rcString(RcStringKeys.SKIN_TUTORIAL_REWATCH))
+            } else {
+                Text(rcString(RcStringKeys.SKIN_TUTORIAL_START))
+            }
+        }
+
+        if (showTutorial) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                tonalElevation = 1.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    // Step indicator.
+                    Text(
+                        text = indicator,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+
+                    // Step title.
+                    Text(
+                        text = rcString(titleKey),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    // Step body.
+                    Text(
+                        text = rcString(bodyKey),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    // Contextual hint (official note, format note, etc.).
+                    hintKey?.let { key ->
+                        val hintText = rcString(key)
+                        if (hintText.isNotBlank()) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(
+                                    text = hintText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    // Navigation buttons.
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        OutlinedButton(
+                            onClick = tutorialViewModel::skinPrevious,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(rcString(RcStringKeys.SKIN_TUTORIAL_PREVIOUS))
+                        }
+                        OutlinedButton(
+                            onClick = tutorialViewModel::skinSkip,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(rcString(RcStringKeys.SKIN_TUTORIAL_SKIP))
+                        }
+                        Button(
+                            onClick = {
+                                if (isLast) {
+                                    tutorialViewModel.skinFinish()
+                                    onToggleTutorial()
+                                } else {
+                                    tutorialViewModel.skinNext()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !isFetching && !isUploading,
+                        ) {
+                            Text(
+                                if (isLast) rcString(RcStringKeys.SKIN_TUTORIAL_FINISH)
+                                else rcString(RcStringKeys.SKIN_TUTORIAL_NEXT),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 

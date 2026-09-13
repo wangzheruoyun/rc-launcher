@@ -76,7 +76,13 @@ import com.rc.launcher.ui.rcWindowInfo
 import com.rc.launcher.ui.theme.ThemeData
 import com.rc.launcher.ui.theme.ThemeNightMode
 import com.rc.launcher.ui.theme.ThemeViewModel
+import com.rc.launcher.ui.component.FloatingHudConfig
+import com.rc.launcher.ui.component.InputMode
+import com.rc.launcher.ui.viewmodel.DashboardViewModel
 import com.rc.launcher.ui.viewmodel.SettingsViewModel
+import com.rc.launcher.ui.viewmodel.TutorialViewModel
+import com.rc.launcher.ui.navigation.AccountsRoute
+import com.rc.launcher.ui.navigation.OnboardingRoute
 import com.rc.launcher.ui.viewmodel.LocaleViewModel
 import com.rc.launcher.ui.i18n.AppLanguage
 import com.rc.launcher.ui.i18n.LocalRcStrings
@@ -108,10 +114,15 @@ fun SettingsScreen(
     settingsViewModel: SettingsViewModel = viewModel(),
     themeViewModel: ThemeViewModel = viewModel(),
     localeViewModel: LocaleViewModel = viewModel(),
+    tutorialViewModel: TutorialViewModel = viewModel(),
+    dashboard: DashboardViewModel = viewModel(),
     navController: NavHostController? = null,
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val mirrorProbe by settingsViewModel.mirrorProbe.collectAsStateWithLifecycle()
+    // Task 20: floating HUD config + input mode (Activity-scoped, shared with HomeScreen)
+    val hudConfig by dashboard.hudConfig.collectAsStateWithLifecycle()
+    val hudInputMode by dashboard.inputMode.collectAsStateWithLifecycle()
     val themes by themeViewModel.availableThemes.collectAsStateWithLifecycle()
     val currentTheme by themeViewModel.currentTheme.collectAsStateWithLifecycle()
     val nightMode by themeViewModel.nightMode.collectAsStateWithLifecycle()
@@ -562,6 +573,65 @@ fun SettingsScreen(
             )
         }
 
+        // ---- Game HUD settings (task 20) -----------------------------------
+        SettingsSection(strings[RcStringKeys.HUD_SETTING_TITLE]) {
+            Text(
+                "游戏内悬浮菜单的显示与行为。这些设置实时生效，无需重启。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // Opacity
+            Text(
+                text = strings[RcStringKeys.HUD_SETTING_OPACITY] + ": " +
+                    "${(hudConfig.opacity * 100).roundToInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(
+                value = hudConfig.opacity,
+                onValueChange = { dashboard.setHudConfig(hudConfig.copy(opacity = it)) },
+                valueRange = 0.1f..1.0f,
+                modifier = Modifier.testTag("settings_hud_opacity_slider"),
+            )
+
+            // Auto-hide
+            SwitchSetting(
+                title = strings[RcStringKeys.HUD_SETTING_AUTO_HIDE],
+                subtitle = strings[RcStringKeys.HUD_SETTING_AUTO_HIDE_SUMMARY],
+                checked = hudConfig.autoHide,
+                onCheckedChange = { dashboard.setHudConfig(hudConfig.copy(autoHide = it)) },
+            )
+
+            // Anti-misoperation zone
+            SwitchSetting(
+                title = strings[RcStringKeys.HUD_SETTING_ANTI_MISOPERATION],
+                subtitle = strings[RcStringKeys.HUD_SETTING_ANTI_MISOPERATION_SUMMARY],
+                checked = hudConfig.antiMisoperationZone,
+                onCheckedChange = { dashboard.setHudConfig(hudConfig.copy(antiMisoperationZone = it)) },
+            )
+
+            // Log touch-through (task 20)
+            SwitchSetting(
+                title = strings[RcStringKeys.HUD_LOG_PASSTHROUGH],
+                subtitle = strings[RcStringKeys.HUD_LOG_PASSTHROUGH_SUMMARY],
+                checked = hudConfig.logTouchThrough,
+                onCheckedChange = { dashboard.setHudConfig(hudConfig.copy(logTouchThrough = it)) },
+            )
+
+            // Current input mode
+            Text(
+                text = strings[RcStringKeys.HUD_ACTION_SWITCH_INPUT] + ": " +
+                    if (hudInputMode.isMouse) {
+                        strings[RcStringKeys.HUD_INPUT_MODE_MOUSE]
+                    } else {
+                        strings[RcStringKeys.HUD_INPUT_MODE_TOUCH]
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         // ---- Data & backup (task 14) --------------------------------------
         HorizontalDivider()
         SettingsSection("数据与备份") {
@@ -596,6 +666,34 @@ fun SettingsScreen(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("恢复设置") }
+        }
+
+        // ---- Help / tutorial replay (task 14) ----------------------------
+        HorizontalDivider()
+        SettingsSection(strings[RcStringKeys.TUTORIAL_TITLE]) {
+            Text(
+                strings[RcStringKeys.TUTORIAL_REPLAY_SUMMARY],
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Button(
+                onClick = {
+                    // Re-open the first page of the onboarding without clearing
+                    // the "completed" flag — the gate in [com.rc.launcher.ui.RcApp]
+                    // honours the flag, so this only navigates explicitly.
+                    tutorialViewModel.rewatch()
+                    navController?.navigate(OnboardingRoute)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(strings[RcStringKeys.TUTORIAL_REPLAY_BUTTON]) }
+            // Task 23: skin import tutorial replay, linked with task 14.
+            Button(
+                onClick = {
+                    tutorialViewModel.skinStart()
+                    navController?.navigate(AccountsRoute)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(strings[RcStringKeys.SKIN_TUTORIAL_REWATCH]) }
         }
 
         // ---- About + reset ------------------------------------------------

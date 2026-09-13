@@ -7,6 +7,8 @@ import com.rc.launcher.ui.model.json.JsonValue
 import com.rc.launcher.ui.model.json.parseJson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
 
 /**
  * Persistence / backend contract for the account-management UI (task 16).
@@ -25,8 +27,12 @@ interface AccountRepository {
     /** Add an offline account. Throws on empty input. */
     suspend fun addOffline(name: String): Account
 
-    /** Begin the Microsoft device-code flow; returns the challenge to display. */
-    suspend fun beginMicrosoft(): DeviceCodeChallenge
+    /**
+     * Begin the Microsoft device-code flow; returns the challenge to display.
+     * `redirectUri` (task 28) optionally specifies a custom callback address,
+     * e.g. pointing to the embedded `microsoft_auth.html` asset.
+     */
+    suspend fun beginMicrosoft(redirectUri: String? = null): DeviceCodeChallenge
 
     /** Complete the Microsoft device-code flow for [challenge]; returns the account. */
     suspend fun completeMicrosoft(challenge: DeviceCodeChallenge): Account
@@ -51,6 +57,17 @@ interface AccountRepository {
 
     /** Persist the active-account uuid. */
     fun setActiveId(id: String?)
+
+    // === Skin preview (task 22) ============================================
+
+    /** Fetch skin + cape metadata for [uuid] from Mojang's session API. */
+    suspend fun fetchSkin(uuid: String): SkinModel?
+
+    /**
+     * Upload a custom skin for [uuid]. `model` is "slim" or "classic".
+     * `skinBase64` is the PNG bytes base64-encoded.
+     */
+    suspend fun uploadSkin(uuid: String, model: String, skinBase64: String): Boolean
 }
 
 /**
@@ -75,13 +92,14 @@ class InMemoryAccountRepository(
         return acc
     }
 
-    override suspend fun beginMicrosoft(): DeviceCodeChallenge = DeviceCodeChallenge(
+    override suspend fun beginMicrosoft(redirectUri: String?): DeviceCodeChallenge = DeviceCodeChallenge(
         userCode = "ABCD-EFGH",
         deviceCode = "simulated-device-code",
         verificationUrl = "https://microsoft.com/devicelogin",
         expiresIn = 900,
         interval = 5,
-        message = "请在浏览器中打开 https://microsoft.com/devicelogin 并输入代码 ABCD-EFGH 完成登录。",
+        message = "请在浏览器中打开 https://microsoft.com/devicelogin 并输入验证码 ABCD-EFGH 完成登录。",
+        redirectUri = redirectUri,
     )
 
     override suspend fun completeMicrosoft(challenge: DeviceCodeChallenge): Account {
@@ -132,6 +150,28 @@ class InMemoryAccountRepository(
         return acc
     }
 
+    override suspend fun fetchSkin(uuid: String): SkinModel? {
+        val acc = store[uuid] ?: return null
+        if (acc !is MicrosoftAccount) return null
+        // Simulate a skin response for the in-memory test backend.
+        return SkinModel(
+            uuid = acc.uuid,
+            skinUrl = "https://textures.minecraft.net/texture/test",
+            capeUrl = null,
+            fetchedAt = nowSecs(),
+            cachedAt = nowSecs(),
+            source = SkinSource.OFFICIAL,
+            hash = null,
+            model = "default",
+        )
+    }
+
+    override suspend fun uploadSkin(uuid: String, model: String, skinBase64: String): Boolean {
+        // In-memory: just succeed if the account exists and is Microsoft.
+        val acc = store[uuid] ?: return false
+        return acc is MicrosoftAccount
+    }
+
     override fun getActiveId(): String? = activeId
     override fun setActiveId(id: String?) {
         activeId = id?.takeIf { store.containsKey(it) }
@@ -154,13 +194,54 @@ class RustAccountRepository(
         context.applicationContext.getSharedPreferences(NAME, Context.MODE_PRIVATE)
     private var activeId: String? = prefs.getString(KEY_ACTIVE, null)
 
+    /**
+     * The redirect URI for the Microsoft OAuth browser callback. Written into
+     * the cache directory at init time so the page is always properly translated
+     * and never shows raw template placeholders (task 28).
+     */
+    private val redirectUri: String
+
     init {
         // (Re)configure the global Rust account store. A real product build
         // passes a Keystore-backed `key_hex` + on-disk `path` here (task 5 /
         // FCL); we use the in-memory store so the bridge stays crash-free when
         // no encrypted vault is provisioned yet.
-        runCatching { RustBridge.authInit("{}") }
+        //
+        // Task 28: generate the callback page from the Rust core (which has the
+        // i18n template + current language) and write it to a writable cache
+        // file. The `file:///android_asset/microsoft_auth.html` asset is
+        // read-only and may contain unresolved template placeholders in stripped
+        // builds, so we prefer the cache copy. The cache file URI is then
+        // registered as the OAuth redirect_uri so Microsoft redirects back to a
+        // properly localised "you may close this page" page after sign-in.
+        // When a proxy is configured in Settings, pass it through so the
+        // Microsoft/Xbox/Mojang token-exchange calls can punch through the
+        // Great Firewall.
+        val defaultUri = runCatching { RustBridge.authDefaultRedirectUri() }
+            .getOrDefault("file:///android_asset/microsoft_auth.html")
+        val cacheFile = File(context.cacheDir, "microsoft_auth.html")
+        val cacheUri = runCatching { cacheFile.toURI().toString() }.getOrNull()
+        if (cacheUri != null) {
+            runCatching {
+                val html = RustBridge.authGetCallbackHtml()
+                if (html.isNotBlank()) {
+                    cacheFile.writeText(html)
+                }
+            }
+            redirectUri = cacheUri
+        } else {
+            redirectUri = defaultUri
+        }
+        val proxyUrl = context.applicationContext
+            .getSharedPreferences("rc_settings", Context.MODE_PRIVATE)
+            .getString("proxy_url", "")
+        val config = JSONObject().apply {
+            put("redirect_uri", redirectUri)
+            if (!proxyUrl.isNullOrBlank()) put("proxy", proxyUrl)
+        }.toString()
+        runCatching { RustBridge.authInit(config) }
     }
+
 
     override suspend fun list(): List<Account> = withContext(Dispatchers.IO) {
         runCatching { parseAccountList(RustBridge.authListAccounts()) }.getOrDefault(emptyList())
@@ -173,15 +254,19 @@ class RustAccountRepository(
         parseAccount(json) ?: throw IllegalStateException("malformed account from core: $json")
     }
 
-    override suspend fun beginMicrosoft(): DeviceCodeChallenge = withContext(Dispatchers.IO) {
+    override suspend fun beginMicrosoft(redirectUri: String?): DeviceCodeChallenge = withContext(Dispatchers.IO) {
         val json = runCatching { RustBridge.authBeginMicrosoft() }
-            .getOrElse { e -> throw IllegalStateException(e.message ?: "beginMicrosoft failed", e) }
+            .getOrElse { e -> throw IllegalStateException("beginMicrosoft failed", e) }
+        // Check for error JSON before parsing as a device code challenge.
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
         parseDeviceCode(json) ?: throw IllegalStateException("malformed device code from core: $json")
     }
 
     override suspend fun completeMicrosoft(challenge: DeviceCodeChallenge): Account = withContext(Dispatchers.IO) {
         val json = runCatching { RustBridge.authCompleteMicrosoft(challenge.toJsonString()) }
-            .getOrElse { e -> throw IllegalStateException(e.message ?: "completeMicrosoft failed", e) }
+            .getOrElse { e -> throw IllegalStateException("completeMicrosoft failed", e) }
+        // Check for error JSON (carries cn_fallback_hint on network failures — task 28).
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
         parseAccount(json) ?: throw IllegalStateException("malformed account from core: $json")
     }
 
@@ -194,29 +279,46 @@ class RustAccountRepository(
     }
 
     override suspend fun refresh(uuid: String): Account? = withContext(Dispatchers.IO) {
-        runCatching {
-            val json = RustBridge.authRefreshAccount(uuid)
-            if (json.contains("\"error\"")) null else parseAccount(json)
-        }.getOrNull()
+        val json = runCatching { RustBridge.authRefreshAccount(uuid) }
+            .getOrElse { e -> throw IllegalStateException("refresh failed", e) }
+        // Surface cn_fallback_hint on network failures (task 28).
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
+        if (json.contains("\"error\"")) null else parseAccount(json)
     }
 
     override suspend fun ensureFresh(uuid: String): Account? = withContext(Dispatchers.IO) {
-        runCatching {
-            val json = RustBridge.authEnsureFresh(uuid)
-            if (json.contains("\"error\"")) null else parseAccount(json)
-        }.getOrNull()
+        val json = runCatching { RustBridge.authEnsureFresh(uuid) }
+            .getOrElse { e -> throw IllegalStateException("ensureFresh failed", e) }
+        // Surface cn_fallback_hint on network failures (task 28).
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
+        if (json.contains("\"error\"")) null else parseAccount(json)
     }
 
     override suspend fun beginThirdParty(serverUrl: String): ThirdPartyServerInfo = withContext(Dispatchers.IO) {
         val json = runCatching { RustBridge.authBeginThirdParty(serverUrl) }
-            .getOrElse { e -> throw IllegalStateException(e.message ?: "beginThirdParty failed", e) }
+            .getOrElse { e -> throw IllegalStateException("beginThirdParty failed", e) }
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
         parseThirdPartyServerInfo(json) ?: throw IllegalStateException("malformed server info from core: $json")
     }
 
     override suspend fun completeThirdParty(login: ThirdPartyLogin): Account? = withContext(Dispatchers.IO) {
         val json = runCatching { RustBridge.authCompleteThirdParty(login.toJsonString()) }
-            .getOrElse { e -> throw IllegalStateException(e.message ?: "completeThirdParty failed", e) }
+            .getOrElse { e -> throw IllegalStateException("completeThirdParty failed", e) }
+        AuthLoginException.fromErrorJson(json)?.let { throw it }
         if (json.contains("\"error\"")) null else parseAccount(json)
+    }
+
+    override suspend fun fetchSkin(uuid: String): SkinModel? = withContext(Dispatchers.IO) {
+        val json = runCatching { RustBridge.authFetchSkin(uuid) }
+            .getOrElse { return@withContext null }
+        parseSkinModel(json)
+    }
+
+    override suspend fun uploadSkin(uuid: String, model: String, skinBase64: String): Boolean = withContext(Dispatchers.IO) {
+        val json = runCatching { RustBridge.authUploadSkin(uuid, model, skinBase64) }
+            .getOrElse { return@withContext false }
+        // Success is {"ok":true}; anything with "error" is a failure.
+        !json.contains("\"error\"")
     }
 
     override fun getActiveId(): String? = activeId

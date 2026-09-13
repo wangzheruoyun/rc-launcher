@@ -440,7 +440,8 @@ impl LaunchEngine {
     ///
     /// Must be called from within a Tokio runtime.
     pub fn spawn(&self, prepared: &PreparedLaunch) -> RcResult<GameProcess> {
-        let spec = SpawnSpec::from_command(&prepared.command, self.options.log_buffer_lines);
+        let mut spec = SpawnSpec::from_command(&prepared.command, self.options.log_buffer_lines);
+        spec.device_info = self.options.to_device_info();
         GameProcess::spawn(&spec)
     }
 
@@ -535,8 +536,12 @@ impl LaunchEngine {
         .with_context(serde_json::json!({
             "exit_code": exit.code,
             "signal": exit.signal,
+            "category": exit.crash.category.id(),
             "evidence": exit.crash.evidence,
             "exception": exit.crash.exception,
+            "device_info": exit.crash.device_info,
+            "actions": exit.crash.actions.iter().map(|a| a.id()).collect::<Vec<_>>(),
+            "recovery": exit.crash.recovery,
         }));
         let dir = self.options.data_root.join("crash");
         crate::robust::reporter::report_crash(&dir, &report)

@@ -35,3 +35,14 @@ __pycache__/
 
 # Local cache (not needed to build)
 /.cache/
+
+# Stray kotlinc build artifacts
+/META-INF/
+/androidx/
+/app/src/main/kotlin_module/
+
+
+# Prebuilt APKs (too large for GitHub; not required to build)
+/fcl_apk/
+/rc_apk/
+/mobile_gules_apk/
