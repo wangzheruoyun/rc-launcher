@@ -9,7 +9,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+  GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true -Dorg.gradle.configureondemand=true"
+  JAVA_OPTS: "-XX:+UseParallelGC -Xmx4g -XX:MaxMetaspaceSize=1g"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -39,6 +40,8 @@ jobs:
             ~/.cargo/git
             rust/target
           key: ${{ runner.os }}-cargo-core-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-core-
       - name: Build libcrc_launcher.so
         working-directory: rust
         run: cargo ndk -t aarch64-linux-android -o ../core/src/main/jniLibs build --release
@@ -63,6 +66,8 @@ jobs:
             ~/.cargo/git
             rust/target
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
       - name: Run cargo test
         working-directory: rust
         run: cargo test --workspace
@@ -88,14 +93,21 @@ jobs:
           java-version: 17
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          packages: "platform-tools"
-      - name: Install Android platform 36 + build-tools 36
-        run: echo "y" | sdkmanager "platforms;android-36" "build-tools;36.0.0"
-      - name: Set up Gradle
+
+      - name: Install Android platform 37 + build-tools 37
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0" "platform-tools"
+      - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.3.1
+          cache-encryption-key: ${{ secrets.GRADLE_ENCRYPTION_KEY }}
+          gradle-home-cache-includes: |
+            caches
+            wrapper
+            notifications
       - name: Ensure Gradle wrapper
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
@@ -114,7 +126,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --build-cache --parallel
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

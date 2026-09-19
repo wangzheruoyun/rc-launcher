@@ -11,13 +11,12 @@
 #   was compiled against. Shipping a Material 3 built against Compose UI 1.6.x
 #   together with Compose UI 1.5.x on the runtime classpath produced a runtime
 #   `java.lang.NoSuchMethodError` (see logcat/25_08-13-50-16_522.log). To make
-#   that class of bug impossible we (a) align every Compose artifact through the
-#   official Compose BOM and (b) hard-pin the whole Compose stack via
-#   resolutionStrategy.force in app/build.gradle.kts — both sourced from the
-#   `compose` / `material3` versions below.
-
+#   that class of bug impossible we align every Compose artifact through the
+#   official Compose BOM (2026.08.00) which guarantees mutual compatibility.
+#   compileSdk = 37 satisfies Compose UI 1.12.x minCompileSdk requirement.
+#   No force / resolutionStrategy needed — the BOM is the single alignment mechanism.
 [versions]
-agp = "9.1.1"
+agp = "9.1.2"
 # Kotlin 2.4.x — the Compose compiler is bundled into the Kotlin Gradle plugin
 # via `org.jetbrains.kotlin.plugin.compose` (no separate `composeCompiler` version).
 kotlin = "2.4.10"
@@ -32,7 +31,6 @@ compose = "1.12.0"
 material3 = "1.4.0"
 material3Adaptive = "1.3.0"
 materialIconsExtended = "1.7.8"
-
 coreKtx = "1.13.1"
 lifecycle = "2.8.3"
 activityCompose = "1.9.0"
@@ -40,14 +38,12 @@ navigationCompose = "2.9.8"
 # kotlinx-serialization backs Navigation Compose 2.9.x type-safe routes
 # (every @Serializable route class needs a generated serializer at compile time).
 kotlinxSerialization = "1.8.1"
-
 junit = "4.13.2"
 robolectric = "4.12.2"
 androidxTestExt = "1.2.1"
 espresso = "3.6.1"
 androidxTestRunner = "1.6.1"
 androidxTestRules = "1.6.1"
-
 detekt = "1.23.6"
 ktlint = "12.1.1"
 
@@ -60,11 +56,9 @@ activity-compose = { group = "androidx.activity", name = "activity-compose", ver
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 # Provides the @Serializable annotation + runtime used by type-safe nav routes.
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
-
 # Compose BOM: aligns ui / material3 / foundation / runtime / animation / ...
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-# Compose artifacts are versioned by the BOM (no explicit version here) and
-# additionally hard-pinned by app/build.gradle.kts -> resolutionStrategy.force.
+# Compose artifacts are versioned exclusively by the BOM (no explicit version here).
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
@@ -74,7 +68,6 @@ compose-material3-adaptive = { group = "androidx.compose.material3.adaptive", na
 compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconsExtended" }
 compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
-
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
 androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExt" }

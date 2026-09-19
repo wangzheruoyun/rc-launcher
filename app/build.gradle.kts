@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -9,20 +10,18 @@ plugins {
 
 android {
     namespace = "com.rc.launcher"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.rc.launcher"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         versionCode = 1
         versionName = "0.1.0"
-
         // Match the ABIs produced by the Rust core (cargo-ndk).
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
@@ -63,7 +62,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-
 
     buildFeatures {
         compose = true
@@ -118,86 +116,20 @@ kotlin {
     }
 }
 
-
 // ---------------------------------------------------------------------------
-// Compose stack coherence (Task 1 scaffolding hardening).
+// Compose dependency management
 //
-// Material 3's TypographyTokens calls `TextStyle.copy$default`, a Kotlin
-// synthetic method whose *signature* depends on the exact Compose UI version
-// it was compiled against. Shipping a Material 3 built against Compose UI
-// 1.6.x together with Compose UI 1.5.x on the runtime classpath produced a
-// runtime `java.lang.NoSuchMethodError` (see logcat/25_08-13-50-16_522.log).
-//
-// We prevent that whole class of bug two ways, both sourced from the version
-// catalog so the numbers can never silently drift apart:
-//   1. The Compose BOM (platform(libs.compose.bom)) aligns every Compose
-//      artifact to one mutually-compatible set.
-//   2. resolutionStrategy.force hard-pins the whole Compose stack to the
-//      single `compose` / `material3` versions below; `force` wins over the
-//      BOM constraints, guaranteeing the runtime classpath is coherent even if
-//      a transitive dependency ever tried to pull a newer Compose UI.
+// Compose BOM (platform(libs.compose.bom)) aligns every Compose artifact to
+// one mutually-compatible set. No force / resolutionStrategy needed — the BOM
+// already guarantees coherence. compileSdk = 37 satisfies Compose UI 1.12.x
+// minCompileSdk requirement.
 // ---------------------------------------------------------------------------
-val composeVersion = libs.versions.compose.get()
-val material3Version = libs.versions.material3.get()
-val materialIconsExtendedVersion = libs.versions.materialIconsExtended.get()
-val navigationComposeVersion = libs.versions.navigationCompose.get()
-
-configurations.all {
-    resolutionStrategy {
-        // Hard-pin the whole Compose stack to a single coherent set. `force`
-        // wins over transitive `strictly` constraints and over the BOM, so the
-        // version cannot float upward.
-        force(
-            "androidx.compose.ui:ui:$composeVersion",
-            "androidx.compose.ui:ui-graphics:$composeVersion",
-            "androidx.compose.ui:ui-tooling:$composeVersion",
-            "androidx.compose.ui:ui-tooling-preview:$composeVersion",
-            "androidx.compose.foundation:foundation:$composeVersion",
-            "androidx.compose.runtime:runtime:$composeVersion",
-            "androidx.compose.animation:animation:$composeVersion",
-            "androidx.compose.material3:material3:$material3Version",
-            "androidx.compose.material:material-icons-extended:$materialIconsExtendedVersion",
-            "androidx.navigation:navigation-compose:$navigationComposeVersion",
-        )
-        eachDependency {
-            // Pin every module of the Compose stack to the one coherent set so a
-            // transitive dependency can never silently pull a newer Material 3
-            // (or ui/foundation/runtime) whose `TextStyle.copy$default` signature
-            // diverges from the runtime Compose UI — the exact
-            // `java.lang.NoSuchMethodError` class seen in
-            // logcat/25_08-13-50-16_522.log. `force` above already wins over the
-            // BOM; `eachDependency` is the belt-and-suspenders guarantee for any
-            // dependency that requests a Compose artifact by a floating version.
-            when {
-                requested.group in setOf(
-                    "androidx.compose.ui",
-                    "androidx.compose.foundation",
-                    "androidx.compose.runtime",
-                    "androidx.compose.animation",
-                ) -> {
-                    useVersion(composeVersion)
-                    because("pin the Compose stack to a single coherent set")
-                }
-                requested.group == "androidx.compose.material3" -> {
-                    useVersion(material3Version)
-                    because("pin Material 3 to the version aligned with the Compose BOM / compose ui")
-                }
-                requested.group == "androidx.compose.material" &&
-                requested.name == "material-icons-extended" -> {
-                    useVersion(materialIconsExtendedVersion)
-                    because("material-icons-extended tracks its own 1.7.x line, not the 1.12.x ui line")
-                }
-            }
-        }
-    }
-}
 
 dependencies {
     // Project modules — clear dependency direction:
     //   :app -> :core (Rust/JNI bridge) -> :runtime (JRE/library mgmt)
     implementation(project(":core"))
     implementation(project(":runtime"))
-
     implementation(libs.androidx.core.ktx)
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.lifecycle.viewmodel.compose)
@@ -212,12 +144,12 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.navigation.compose)
+
     // Type-safe navigation routes (task 11): every @Serializable route class needs
     // the kotlinx-serialization runtime + the plugin applied above.
     implementation(libs.kotlinx.serialization.json)
 
     debugImplementation(libs.compose.ui.tooling)
-
     testImplementation(libs.junit)
     // --- Task 21: Compose UI tests (run on the JVM via Robolectric) ---
     testImplementation(libs.compose.ui.test.junit4)
@@ -225,18 +157,8 @@ dependencies {
     debugImplementation(libs.compose.ui.test.manifest)
 }
 
-// Skip AAR metadata check that requires compileSdk 37 (Compose 1.12.0 demands
-// it, but API 37 is not yet published in the Android SDK repository).
-// compileSdk = 36 is sufficient for the Kotlin compiler; the metadata check
-// is a Gradle-side gate, not a compilation requirement. The
-// `android.experimental.skipAarMetadataValidation` flag in gradle.properties
-// already handles this at the AGP level; the lines below are a belt-and-
-// suspenders fallback that only disables the task if it actually exists (AGP 9
-// may not create the check* tasks when no AAR metadata requires verification).
-gradle.projectsEvaluated {
-    tasks.findByName("checkReleaseAarMetadata")?.enabled = false
-    tasks.findByName("checkDebugAarMetadata")?.enabled = false
-}
+// AAR metadata validation removed: compileSdk = 37 satisfies Compose 1.12.x
+// minCompileSdk, no need to skip the check.
 
 // --- Task 26: unified Kotlin style checks (mirrors the Rust fmt/clippy gate) ---
 // detekt + ktlint read config/detekt/detekt.yml and .editorconfig respectively.
