@@ -244,7 +244,6 @@ object RcStringKeys {
         SHADER_PACK_EMPTY, SHADER_PACK_VALID, SHADER_PACK_INVALID,
         SHADER_PACK_DELETE_CONFIRM,
     )
-}
 
     // --- task 13: mod browser inline translation ---
     const val TRANSLATE_TITLE = "translate.title"
@@ -502,3 +501,4 @@ const val SKIN_TUTORIAL_REWATCH = "skin.tutorial.rewatch"
     const val WORLD_RENAME_DONE = "world.rename_done"
     const val WORLD_RENAME_FAILED = "world.rename_failed"
     const val WORLD_THUMBNAIL = "world.thumbnail"
+}
