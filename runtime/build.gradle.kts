@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.rc.launcher.runtime"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 24
