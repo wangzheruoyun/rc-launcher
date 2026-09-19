@@ -109,7 +109,6 @@ impl fmt::Display for TranslationLanguage {
     }
 }
 
-
 /// Allow "zh-CN".into() in API call sites and doctests (task 13). Unknown
 /// tags resolve to [TranslationLanguage::Auto], mirroring the lenient
 /// `from_tag` policy used for persisted preferences.

@@ -228,9 +228,15 @@ dependencies {
 // Skip AAR metadata check that requires compileSdk 37 (Compose 1.12.0 demands
 // it, but API 37 is not yet published in the Android SDK repository).
 // compileSdk = 36 is sufficient for the Kotlin compiler; the metadata check
-// is a Gradle-side gate, not a compilation requirement.
-tasks.named("checkReleaseAarMetadata") { enabled = false }
-tasks.named("checkDebugAarMetadata") { enabled = false }
+// is a Gradle-side gate, not a compilation requirement. The
+// `android.experimental.skipAarMetadataValidation` flag in gradle.properties
+// already handles this at the AGP level; the lines below are a belt-and-
+// suspenders fallback that only disables the task if it actually exists (AGP 9
+// may not create the check* tasks when no AAR metadata requires verification).
+gradle.projectsEvaluated {
+    tasks.findByName("checkReleaseAarMetadata")?.enabled = false
+    tasks.findByName("checkDebugAarMetadata")?.enabled = false
+}
 
 // --- Task 26: unified Kotlin style checks (mirrors the Rust fmt/clippy gate) ---
 // detekt + ktlint read config/detekt/detekt.yml and .editorconfig respectively.
