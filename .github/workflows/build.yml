@@ -91,16 +91,25 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Set up Android SDK
-        run: |
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          echo "$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-
       - name: Install Android platform 37 + build-tools 37
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "cmdline-tools;latest" "platforms;android-37" "build-tools;37.0.0" "platform-tools"
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          # Use the pre-installed cmdline-tools to bootstrap: install cmdline-tools;latest first
+          SDM=$(ls -d $ANDROID_HOME/cmdline-tools/*/bin 2>/dev/null | head -1)
+          if [ -z "$SDM" ]; then
+            echo "No cmdline-tools found, installing from scratch"
+            exit 1
+          fi
+          echo "Using sdkmanager from: $SDM"
+          yes | "$SDM/sdkmanager" --licenses > /dev/null 2>&1 || true
+          yes | "$SDM/sdkmanager" --install "cmdline-tools;latest" || true
+          # Re-point PATH at the freshly updated cmdline-tools/latest
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          # Now install the platform + build-tools with the updated index
+          sdkmanager --install "platforms;android-37" "build-tools;37.0.0" "platform-tools"
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
