@@ -1,6 +1,6 @@
 package com.rc.launcher
 
-import android.app.ActivityInfo
+import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.os.Bundle
 import androidx.activity.ComponentActivity

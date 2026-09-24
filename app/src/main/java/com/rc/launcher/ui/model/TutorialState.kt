@@ -204,5 +204,5 @@ enum class SkinTutorialStep {
 }
 
 /** Convenience: total number of skin-tutorial steps. */
-val SkinTutorialStep.Companion.totalSteps: Int
+val SkinTutorialStep.totalSteps: Int
     get() = SkinTutorialStep.entries.size

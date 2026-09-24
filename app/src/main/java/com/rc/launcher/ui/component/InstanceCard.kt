@@ -2,7 +2,7 @@ package com.rc.launcher.ui.component
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.animateFloatAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -108,7 +108,7 @@ fun InstanceCard(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.Vertical.spacedBy(0.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             // Cover area with progress ring + favorite + launch overlay.
             Box(
@@ -188,7 +188,7 @@ fun InstanceCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.Vertical.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
                     text = instance.name,
@@ -198,7 +198,7 @@ fun InstanceCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Row(
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     LoaderBadge(instance.modLoader.label, instance.modLoader.color)

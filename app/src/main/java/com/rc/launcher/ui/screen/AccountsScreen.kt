@@ -10,11 +10,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -948,6 +950,7 @@ private fun SkinPreviewDialog(
         },
     )
 
+    val skinReadError = rcString(RcStringKeys.SKIN_READ_ERROR)
     // Upload confirmation dialog
     if (showUploadDialog) {
         AlertDialog(
@@ -963,9 +966,11 @@ private fun SkinPreviewDialog(
                             if (pngBytes != null) {
                                 val b64 = Base64.encodeToString(pngBytes, Base64.NO_WRAP)
                                 val modelParam = if (uploadModel == "slim") "slim" else "classic"
-                                viewModel.uploadSkin(account.uuid, modelParam, b64)
+                                viewModel.viewModelScope.launch {
+                                    viewModel.uploadSkin(account.uuid, modelParam, b64)
+                                }
                             } else {
-                                validationError = rcString(RcStringKeys.SKIN_READ_ERROR)
+                                validationError = skinReadError
                             }
                         }
                     },

@@ -233,7 +233,7 @@ private fun SourceCard(
                 Column(Modifier.weight(1f)) {
                     Text(source.name, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        source.authorVersion(),
+                        "${source.author} ${source.version}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -1256,7 +1256,7 @@ object RustBridge {
             groups = obj.optJSONObject("groups") ?: JSONObject(),
             filtered = obj.optJSONArray("filtered") ?: org.json.JSONArray(),
             query = obj.optString("query", query),
-            group = obj.optString("group", group).takeIf { obj.has("group") && !obj.isNull("group") },
+            group = obj.optString("group", group ?: "").takeIf { obj.has("group") && !obj.isNull("group") },
         )
     }
 

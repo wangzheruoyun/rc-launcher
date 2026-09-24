@@ -227,12 +227,14 @@ data class ThirdPartyLogin(
     val serverUrl: String = "",
     val username: String = "",
     val password: String = "",
+    val serverName: String = "",
     val relayCode: String? = null,
 ) {
     fun toJsonString(): String = JsonValue.Obj(
         mapOf(
             "provider" to JsonValue.Str(provider),
             "serverUrl" to JsonValue.Str(serverUrl),
+            "serverName" to JsonValue.Str(serverName),
             "username" to JsonValue.Str(username),
             "password" to JsonValue.Str(password),
             "relayCode" to (relayCode?.let { JsonValue.Str(it) } ?: JsonValue.Null),

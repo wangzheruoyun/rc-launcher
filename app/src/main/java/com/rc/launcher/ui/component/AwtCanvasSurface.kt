@@ -46,6 +46,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.input.pointer.pointerInput
@@ -244,9 +245,9 @@ fun AwtCanvasSurface(
                         // [touchButton] (which a UI toggle can set to "right").
                         val button = when {
                             source == AwtPointerSource.TOUCH -> touchButton
-                            event.buttons.isSecondaryPressed -> AwtMouseButton.RIGHT
-                            event.buttons.isTertiaryPressed -> AwtMouseButton.MIDDLE
-                            event.buttons.isPrimaryPressed -> AwtMouseButton.LEFT
+                            event.buttons.isPressed(PointerButton.Secondary) -> AwtMouseButton.RIGHT
+                            event.buttons.isPressed(PointerButton.Tertiary) -> AwtMouseButton.MIDDLE
+                            event.buttons.isPressed(PointerButton.Primary) -> AwtMouseButton.LEFT
                             else -> touchButton
                         }
                         val phase = when {

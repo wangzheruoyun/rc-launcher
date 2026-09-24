@@ -141,7 +141,7 @@ fun InstanceDetailScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.Vertical.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         // Modern hero header (task 18): cover with gradient + version watermark
         // + favourite star, name, loader chip, and a primary launch button.
@@ -164,10 +164,10 @@ fun InstanceDetailScreen(
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.Vertical.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Row(
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Icon(
@@ -195,7 +195,7 @@ fun InstanceDetailScreen(
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.Vertical.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 SectionHeader("\u7248\u672c\u4fe1\u606f")
                 InfoRow("\u6e38\u620f\u7248\u672c", inst.version)
@@ -215,7 +215,7 @@ fun InstanceDetailScreen(
         ) {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.Vertical.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 SectionHeader("\u8bbe\u7f6e")
 
@@ -282,7 +282,7 @@ fun InstanceDetailScreen(
                 }
 
                 Text("\u7248\u672c\u9694\u79bb", style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.Vertical.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     for (type in GameDirectoryType.entries) {
                         val selected = inst.gameDirectoryType == type
                         Surface(
@@ -295,7 +295,7 @@ fun InstanceDetailScreen(
                         ) {
                             Column(
                                 modifier = Modifier.fillMaxWidth().padding(14.dp),
-                                verticalArrangement = Arrangement.Vertical.spacedBy(2.dp),
+                                verticalArrangement = Arrangement.spacedBy(2.dp),
                             ) {
                                 Text(type.label, style = MaterialTheme.typography.titleMedium)
                                 Text(
@@ -323,7 +323,7 @@ fun InstanceDetailScreen(
         // Primary actions row: a prominent launch button + secondary actions
         // (duplicate / delete) so the user does not have to scroll back up
         // for the actual entry point.
-        Column(verticalArrangement = Arrangement.Vertical.spacedBy(10.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(
                 onClick = { dashboard.launch(inst.id) },
                 enabled = !launching,
@@ -381,7 +381,7 @@ fun InstanceDetailScreen(
 private fun NotFoundState(onBack: () -> Unit) {
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Vertical.spacedBy(12.dp, Alignment.Vertical.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
     ) {
         Text("\u672a\u627e\u5230\u5b9e\u4f8b", style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -464,7 +464,7 @@ private fun DetailHero(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(14.dp),
-            verticalArrangement = Arrangement.Vertical.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
                 text = inst.name,
@@ -472,7 +472,7 @@ private fun DetailHero(
                 fontWeight = FontWeight.SemiBold,
             )
             Row(
-                verticalAlignment = Alignment.Vertical.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Surface(
@@ -576,7 +576,7 @@ private fun FpsBadge(fps: Int) {
         shape = RoundedCornerShape(50),
     ) {
         Row(
-            verticalAlignment = Alignment.Vertical.CenterVertically,
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
         ) {

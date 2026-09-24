@@ -77,6 +77,7 @@ import com.rc.launcher.ui.model.GameInstance
 import com.rc.launcher.ui.model.InstanceRepository
 import com.rc.launcher.ui.rcWindowInfo
 import com.rc.launcher.ui.viewmodel.FileManagerViewModel
+import com.rc.launcher.ui.viewmodel.FileManagerDialogState
 import com.rc.launcher.ui.viewmodel.FsEntry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

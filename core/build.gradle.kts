@@ -34,7 +34,7 @@ android {
     // into the consuming APK automatically via the AAR.
     sourceSets {
         getByName("main") {
-            jniLibs.srcDirs("src/main/jniLibs")
+            jniLibs.directories += setOf("src/main/jniLibs")
         }
     }
 

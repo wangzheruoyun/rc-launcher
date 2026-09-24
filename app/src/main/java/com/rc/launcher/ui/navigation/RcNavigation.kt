@@ -27,6 +27,7 @@ import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import com.rc.launcher.ui.screen.DownloadsScreen
 import com.rc.launcher.ui.screen.ModBrowserScreen
+import com.rc.launcher.ui.screen.ModpackImportScreen
 import com.rc.launcher.ui.screen.TranslationSettingsScreen
 import com.rc.launcher.ui.screen.HomeScreen
 import com.rc.launcher.ui.screen.InstanceDetailScreen

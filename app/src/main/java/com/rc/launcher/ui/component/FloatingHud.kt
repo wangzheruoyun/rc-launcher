@@ -22,7 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.border
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,8 +37,7 @@ import androidx.compose.material.icons.filled.Mouse
 import androidx.compose.material.icons.filled.Screenshot
 import androidx.compose.material.icons.filled.Swipe
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.Export
-import androidx.compose.material.icons.filled.Snapshot
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.FilterList
@@ -53,9 +53,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonGroup
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipSet
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,11 +68,11 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.consumeAll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -486,8 +484,9 @@ fun GameFloatingHud(
     }
 
     // --- Screen dimensions (for drag clamping) -----------------------------
-    val screenWidthPx = with(density) { viewConfiguration.screenWidth }
-    val screenHeightPx = with(density) { viewConfiguration.screenHeight }
+    val configuration = LocalConfiguration.current
+    val screenWidthPx = with(density) { configuration.screenWidthDp.dp.roundToPx() }
+    val screenHeightPx = with(density) { configuration.screenHeightDp.dp.roundToPx() }
 
     val hudWidthDp = 200.dp
     val hudWidthPx = with(density) { hudWidthDp.roundToPx() }
@@ -586,9 +585,9 @@ fun GameFloatingHud(
                                     onDragEnd = { },
                                     onDragCancel = { },
                                     onDrag = { change, _ ->
-                                        change.consumeAll()
-                                        offsetX += change.delta.x
-                                        offsetY += change.delta.y
+                                        change.consume()
+                                        offsetX += (change.position.x - change.previousPosition.x)
+                                        offsetY += (change.position.y - change.previousPosition.y)
                                         offsetX = offsetX.coerceIn(
                                             0f, (screenWidthPx - hudWidthPx).toFloat()
                                         )
@@ -725,7 +724,7 @@ fun GameFloatingHud(
 
                         // Menu button: Export log (task 21)
                         HudMenuButton(
-                            icon = Icons.Default.Export,
+                            icon = Icons.Default.Share,
                             label = rcString(RcStringKeys.HUD_LOG_EXPORT),
                             onClick = {
                                 onAction(FloatingHudAction.ExportLog)
@@ -735,7 +734,7 @@ fun GameFloatingHud(
 
                         // Menu button: Take snapshot (task 21)
                         HudMenuButton(
-                            icon = Icons.Default.Snapshot,
+                            icon = Icons.Default.Screenshot,
                             label = rcString(RcStringKeys.HUD_LOG_SNAPSHOT),
                             onClick = {
                                 onAction(FloatingHudAction.TakeSnapshot)
@@ -1390,7 +1389,7 @@ private fun HudExportBar(
                 .testTag("hud_log_export_button"),
         ) {
             Icon(
-                imageVector = Icons.Default.Export,
+                imageVector = Icons.Default.Share,
                 contentDescription = rcString(RcStringKeys.HUD_LOG_EXPORT),
                 tint = if (canExport) {
                     MaterialTheme.colorScheme.primary
@@ -1421,7 +1420,7 @@ private fun HudCrashSnapshotBanner(
     Column(
         modifier = modifier
             .background(bannerBg, RoundedCornerShape(8.dp))
-            .border(1.dp, bannerBorder, RoundedCornerShape(8.dp))
+            .border(BorderStroke(1.dp, bannerBorder), RoundedCornerShape(8.dp))
             .padding(8.dp),
     ) {
         Row(

@@ -116,15 +116,15 @@ fun HomeScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(window.contentPaddingDp.dp),
-            verticalArrangement = Arrangement.Vertical.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             // Header (+ the resource panel beside it once the window is wide).
             val header: @Composable () -> Unit = {
                 Row(
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.Vertical.spacedBy(2.dp)) {
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text("主页", style = MaterialTheme.typography.headlineSmall)
                         val coreStateVal = coreState
                         Text(
@@ -152,7 +152,7 @@ fun HomeScreen(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.Vertical.CenterVertically,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Box(modifier = Modifier.weight(1f)) { header() }
                     Box(modifier = Modifier.weight(1f)) { ResourceSummary(usage) }
@@ -184,7 +184,7 @@ fun HomeScreen(
             }
 
             SectionTitle("游戏实例 (${instances.size})")
-            Column(verticalArrangement = Arrangement.Vertical.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // Chunked rows rather than a nested lazy grid: this screen is
                 // already inside a vertical scroller, so a lazy grid here would be
                 // measured with an infinite height.
@@ -313,7 +313,7 @@ private fun LaunchBanner(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(12.dp),
-                verticalAlignment = Alignment.Vertical.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 if (showProgress) {

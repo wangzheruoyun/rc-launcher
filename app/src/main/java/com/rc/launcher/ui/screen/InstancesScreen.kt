@@ -65,12 +65,12 @@ fun InstancesScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().padding(pad),
-        verticalArrangement = Arrangement.Vertical.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column(
             // Keep the copy readable on a wide tablet instead of stretching it.
             modifier = Modifier.widthIn(max = window.maxContentWidthDp.dp),
-            verticalArrangement = Arrangement.Vertical.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text("游戏实例", style = MaterialTheme.typography.headlineSmall)
             // A short landscape window spends its little height on cards, not prose.
@@ -102,7 +102,7 @@ fun InstancesScreen(
         LazyVerticalGrid(
             columns = GridCells.Fixed(window.instanceColumns),
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.Vertical.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         ) {
