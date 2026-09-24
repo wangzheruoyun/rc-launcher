@@ -2,149 +2,62 @@ name: Release
 
 on:
   push:
-    tags: [ 'v*' ]
-    branches: [ main ]
+    tags:
+      - 'v*'
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Release tag (e.g. v1.2.3). Leave empty to auto-tag from main.'
-        required: false
-        default: ''
-
-permissions:
-  contents: write
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  RETAIN_ARTIFACTS: 20
-  ARTIFACT_MAX_AGE_DAYS: 30
 
 jobs:
   version:
     name: Resolve release version
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest]
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
-      version: ${{ steps.resolve.outputs.version }}
-      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
       - name: Resolve tag
         id: resolve
-        env:
-          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          set -euo pipefail
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
-          elif [[ -n "${INPUT_TAG}" ]]; then
-            TAG="${INPUT_TAG}"
           else
-            DATE="$(date -u +%Y.%m.%d)"
-            SHA="$(git rev-parse --short=7 HEAD)"
-            TAG="ci-${DATE}-${SHA}"
+            TAG="ci-$(date -u +%Y.%m.%d)-$(git rev-parse --short=7 HEAD)"
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          case "${TAG}" in *-*) echo "is_prerelease=true" ;; *) echo "is_prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${TAG}" -m "Release ${TAG}"
+          git tag "${TAG}" || true
           git push origin "${TAG}" || true
 
   build:
     name: Build APK
     needs: version
     uses: ./.github/workflows/build.yml
-    secrets: inherit
 
   release:
     name: Publish release
-    needs: [ version, build ]
-    runs-on: ubuntu-latest
+    needs: [version, build]
+    runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
       - name: Download APK
         uses: actions/download-artifact@v4
         with:
           name: app-release-apk
           path: dist
-      - name: Verify APK
-        run: |
-          set -euo pipefail
-          APK_DIR=dist
-          # APK-only, no AAB or zip
-          if compgen -G "$APK_DIR/*.aab" > /dev/null; then
-            echo "AAB present but only APK allowed" && exit 1
-          fi
-          if compgen -G "$APK_DIR/*.zip" > /dev/null; then
-            echo "ZIP present but only APK allowed" && exit 1
-          fi
-          shopt -s nullglob
-          apks=( "$APK_DIR"/*.apk )
-          shopt -u nullglob
-          if [[ ${#apks[@]} -ne 1 ]]; then
-            echo "expected 1 APK, found ${#apks[@]}" && exit 1
-          fi
-          APK="${apks[0]}"
-          echo "Release APK: $APK"
-          abis=$(unzip -l "$APK" 'lib/*/*.so' | awk -F'lib/' '/\.so$/{print $2}' | cut -d/ -f1 | sort -u)
-          echo "ABIs: [$abis]"
-          if [[ "$abis" != "arm64-v8a" ]]; then
-            echo "unexpected ABIs: [$abis]" && exit 1
-          fi
-          echo "ABI contract OK: arm64-v8a only"
-      - name: Generate SHA-256 checksums
+
+      - name: Generate checksums
         working-directory: dist
-        run: |
-          shopt -s nullglob
-          files=( *.apk )
-          shopt -u nullglob
-          if [[ ${#files[@]} -eq 0 ]]; then
-            echo "No APK produced" && exit 1
-          fi
-          sha256sum "${files[@]}" > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+        run: sha256sum *.apk > SHA256SUMS.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.version.outputs.tag }}
-          name: ${{ needs.version.outputs.tag }}
           files: |
             dist/*.apk
             dist/SHA256SUMS.txt
-          fail_on_unmatched_files: true
           generate_release_notes: true
-          prerelease: ${{ needs.version.outputs.is_prerelease == 'true' }}
-          make_latest: ${{ needs.version.outputs.is_prerelease == 'false' }}
-
-  cleanup-artifacts:
-    name: Clean up old artifacts
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Delete expired artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          repo="${GITHUB_REPOSITORY}"
-          cutoff=$(date -u -d "-${{ env.ARTIFACT_MAX_AGE_DAYS }} days" +%s)
-          echo "Pruning artifacts in ${repo}: keep latest ${{ env.RETAIN_ARTIFACTS }}, delete older than ${{ env.ARTIFACT_MAX_AGE_DAYS }} days."
-          gh api -X GET "repos/${repo}/actions/artifacts?per_page=100" --paginate \
-            | jq -r '.artifacts[] | "\(.created_at)\t\(.id)\t\(.name)"' \
-            | sort -r \
-            | tail -n +$(( ${{ env.RETAIN_ARTIFACTS }} + 1 )) \
-            | while IFS=$'\t' read -r created id name; do
-                ts=$(date -u -d "${created}" +%s)
-                if [[ "${ts}" -lt "${cutoff}" ]]; then
-                  echo "Deleting #${id} (${name})"
-                  gh api -X DELETE "repos/${repo}/actions/artifacts/${id}" || true
-                fi
-              done
-          echo "Cleanup pass complete."

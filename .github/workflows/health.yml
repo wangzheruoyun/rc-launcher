@@ -4,56 +4,29 @@ on:
   schedule:
     - cron: '17 3 * * *'
   workflow_dispatch:
-    inputs:
-      skip_mirrors:
-        description: 'Skip the network mirror speed test (offline audit).'
-        type: boolean
-        default: false
-
-concurrency:
-  group: health-${{ github.ref }}
-  cancel-in-progress: false
-
-permissions:
-  contents: read
-  issues: write
-
-env:
-  PYTHON_VERSION: "3.12"
 
 jobs:
   audit:
     name: Mirror / manifest / license audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
-      - name: Cache Cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: ${{ runner.os }}-cargo-health-${{ hashFiles('rust/**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-health-
-      - name: Set up Python
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-      - name: Set up Rust
+          python-version: "3.12"
+
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+
       - name: Run health audit
-        env:
-          GITHUB_STEP_SUMMARY: ${{ env.GITHUB_STEP_SUMMARY }}
-        run: |
-          python3 scripts/health_audit.py \
-            ${{ github.event.inputs.skip_mirrors == 'true' && '--skip-mirrors' || '' }} \
-            --out build/reports
+        run: python3 scripts/health_audit.py --out build/reports
+
       - name: Upload health report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: health-report
           path: build/reports
-          if-no-files-found: warn
