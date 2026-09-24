@@ -201,7 +201,7 @@ class ResourcePackManagerViewModel(
                 val entry = zf.getEntry("pack.mcmeta") ?: return null
                 val tmp = File(zip.parentFile, ".pack_mcmeta_tmp")
                 tmp.outputStream().use { fos ->
-                    zf.getInputStream(entry).use { it.copyToFile(fos) }
+                    zf.getInputStream(entry).use { it.copyTo(fos) }
                 }
                 return tmp
             }

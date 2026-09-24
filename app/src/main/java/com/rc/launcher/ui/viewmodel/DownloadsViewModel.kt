@@ -7,7 +7,7 @@ import com.rc.launcher.core.RcEventBus
 import com.rc.launcher.core.RcEventKind
 import com.rc.launcher.core.RcEventListener
 import com.rc.launcher.core.RcDownloadJobSpec
-import com.rc.launcher.core.startDownload
+import com.rc.launcher.core.startDownload as startDownloadJob
 import com.rc.launcher.core.cancelDownload
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,7 +67,7 @@ class DownloadsViewModel : ViewModel() {
     fun startDownload(spec: RcDownloadJobSpec) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val handle = startDownload(spec)
+                val handle = startDownloadJob(spec)
                 if (!handle.ok) {
                     _entries.update { list ->
                         list + DownloadEntry(

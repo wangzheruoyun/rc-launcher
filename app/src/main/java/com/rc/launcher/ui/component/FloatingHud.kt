@@ -84,6 +84,7 @@ import com.rc.launcher.ui.i18n.rcString
 import com.rc.launcher.ui.resource.ResourceUsage
 import kotlinx.coroutines.delay
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -525,7 +526,7 @@ fun GameFloatingHud(
             val zoneSizePx = (zoneHalf * 2).roundToInt()
             Box(
                 Modifier
-                    .size(zoneSizePx, zoneSizePx)
+                    .size(zoneSizePx.dp, zoneSizePx.dp)
                     .offset {
                         IntOffset(
                             ((clampedX + hudWidthPx / 2) - zoneHalf).roundToInt(),
@@ -1055,7 +1056,7 @@ private fun HudLogOverlay(
             .filter { filterMode.matches(it) }
             .filter { sl ->
                 val q = searchQuery.text
-                q.isEmpty() || it.text.contains(q, ignoreCase = true)
+                q.isEmpty() || sl.text.contains(q, ignoreCase = true)
             }
             .toList()
     }
@@ -1142,7 +1143,7 @@ private fun HudLogOverlay(
                 .fillMaxWidth()
                 .testTag("hud_log_search"),
             maxLines = 1,
-            keyboardOptions = androidx.compose.ui.text.input.KeyboardOptions(keyboardType = KeyboardType.Text),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
         )
 
         Spacer(Modifier.height(4.dp))

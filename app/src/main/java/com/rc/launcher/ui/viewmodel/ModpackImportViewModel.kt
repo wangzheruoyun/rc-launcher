@@ -252,7 +252,7 @@ class ModpackImportViewModel(application: Application) : AndroidViewModel(applic
         //  through reflection so the ViewModel compiles without a
         // hard dependency on  (and stays unit-test
         // friendly).
-        val ctx = getApplication()
+        val ctx: Application = getApplication()
         val dir = ctx::class.java.getMethod("getFilesDir").invoke(ctx) as java.io.File
         return java.io.File(dir, "instances").absolutePath
     }

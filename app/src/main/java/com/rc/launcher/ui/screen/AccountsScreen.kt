@@ -12,11 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -59,6 +59,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import com.rc.launcher.ui.model.Account
 import com.rc.launcher.ui.model.AccountKind
 import com.rc.launcher.ui.model.InMemoryAccountRepository
@@ -528,7 +529,7 @@ private fun SkinAvatar(
     val decorated = if (onClick != null) modifier.clickable { onClick() } else modifier
     if (bmp != null) {
         Box(modifier = decorated) {
-            Image(bitmap = bmp, contentDescription = null, modifier = Modifier.matchParentSize())
+            Image(bitmap = bmp, contentDescription = null, modifier = Modifier.fillMaxSize())
             if (capeBmp != null) {
                 // Overlay the cape as a small badge in the top-right corner.
                 Image(
@@ -543,7 +544,7 @@ private fun SkinAvatar(
         }
     } else if (loadError) {
         Surface(modifier = decorated, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-            Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     text = "!",
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -553,7 +554,7 @@ private fun SkinAvatar(
         }
     } else {
         Surface(modifier = decorated, shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.primaryContainer) {
-            Box(modifier = Modifier.matchParentSize(), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
             }
         }
@@ -818,7 +819,7 @@ private fun SkinPreviewDialog(
                             bitmap = localBitmap!!,
                             contentDescription = rcString(RcStringKeys.SKIN_PREVIEW_TITLE),
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.matchParentSize(),
+                            modifier = Modifier.fillMaxSize(),
                         )
                         if (localUri != null) {
                             Box(

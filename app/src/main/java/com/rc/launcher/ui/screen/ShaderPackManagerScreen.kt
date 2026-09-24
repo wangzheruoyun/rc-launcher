@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
@@ -224,7 +225,7 @@ private fun ShaderPackRow(pack: ShaderPackData, vm: ShaderPackManagerViewModel) 
                     text = pack.name,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (!pack.valid) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else null,
+                    color = if (!pack.valid) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 )
 

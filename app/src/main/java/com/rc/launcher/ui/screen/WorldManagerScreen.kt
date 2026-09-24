@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Export
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ImportExport
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Restore
@@ -275,7 +275,7 @@ private fun WorldRow(world: WorldData, vm: WorldManagerViewModel) {
                     onClick = { confirmDelete = true },
                 )
                 ActionRow(
-                    icon = Icons.Default.Export,
+                    icon = Icons.Default.Share,
                     label = rcString(RcStringKeys.WORLD_EXPORT),
                     onClick = { vm.export(world, java.io.File("/tmp/export_${world.name}.zip")) },
                 )

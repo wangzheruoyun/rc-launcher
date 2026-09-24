@@ -161,7 +161,7 @@ class WorldManagerViewModel(
     fun importWorld(archive: File) {
         scope.launch {
             try {
-                unzipWorld(archive, state.value.savesDir)
+                unzipWorld(archive, state.value.savesDir ?: return@launch)
                 _state.value = _state.value.copy(lastError = null, lastSuccess = "Imported")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(lastError = e.message ?: "Import failed", lastSuccess = null)
@@ -295,7 +295,7 @@ class WorldManagerViewModel(
                 } else f.name
                 zos.putNextEntry(java.util.zip.ZipEntry(entryName))
                 if (!f.isDirectory) {
-                    java.io.FileInputStream(f).use { it.copyToFile(zos) }
+                    java.io.FileInputStream(f).use { it.copyTo(zos) }
                 }
                 zos.closeEntry()
             }
@@ -312,7 +312,7 @@ class WorldManagerViewModel(
                 } else {
                     out.parentFile?.mkdirs()
                     java.io.FileOutputStream(out).use { fos ->
-                        zf.getInputStream(entry).use { it.copyToFile(fos) }
+                        zf.getInputStream(entry).use { it.copyTo(fos) }
                     }
                 }
             }
