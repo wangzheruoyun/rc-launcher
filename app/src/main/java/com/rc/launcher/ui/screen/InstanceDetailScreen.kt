@@ -151,6 +151,7 @@ fun InstanceDetailScreen(
             onLaunch = { dashboard.launch(inst.id) },
             onToggleFavorite = { vm.toggleFavorite() },
             onRename = { vm.setName(it) },
+            navController = navController,
         )
 
         // Live resource usage overview (task 18 "resource usage overview
@@ -399,6 +400,7 @@ private fun DetailHero(
     onLaunch: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRename: (String) -> Unit,
+    navController: NavHostController? = null,
 ) {
     val cover = remember(inst.iconColor) {
         Brush.linearGradient(
